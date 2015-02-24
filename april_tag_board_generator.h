@@ -31,6 +31,10 @@ namespace cv {
                          _tagSpacing * (arraySize().height+1) ); }
      float boardAspectRatio( void ) const
           { return boardSize().height * 1.0 / boardSize().width; }
+     size_t length() const { return _arraySize.area(); }
+
+     float tagSpacing( void ) const { return _tagSpacing; }
+     float tagSize( void ) const { return _tagSize; }
 
     private:
 

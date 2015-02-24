@@ -87,8 +87,6 @@ vector<Point> AprilTagBoardGenerator::generateContour( const vector<Point3f> &wo
   vector<Point2f> edges2d_reduced;
   approxPolyDP(Mat(edges2d), edges2d_reduced, 1.0, true);
 
-  cout << edges2d_reduced << endl;
-
   vector< Point > renderEdges;
   std::transform(edges2d_reduced.begin(), edges2d_reduced.end(),
       back_inserter(renderEdges),
@@ -132,8 +130,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     const Size2f &boardSize, 
     vector<Point2f>& corners) const
 {
-  //    vector< vector<Point> > squares_black;
-  //    for(int i = 0; i < _board.arraySize().width; ++i)
+  //    vector< vector<Point> > squares_black; //    for(int i = 0; i < _board.arraySize().width; ++i)
   //        for(int j = 0; j < _board.arraySize().height; ++j)
   //            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
   //            {
@@ -165,6 +162,28 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   //    corners.clear();
   //    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
 
+  // Identify the April code centers
+  Point2f scale( boardSize.width / _board.boardSize().width,
+      boardSize.height / _board.boardSize().height );
+
+  vector< Point3f > tagCentersWorld;
+  for( int i = 0; i < _board.arraySize().width; ++i ) {
+    for( int j = 0; j < _board.arraySize().height; ++j ) {
+      Point2f offset( (i+1) * _board.tagSpacing(), (j+1) * _board.tagSpacing() );
+
+      Point2f scaled( offset.x * scale.x, offset.y * scale.y );
+      Point3f world( origin + (pb1*scaled.x) + (pb2 * scaled.y) );
+
+      cout << "Offset: " << offset << endl;
+      cout << "Scaled: " << scaled << endl;
+      cout << "World: " << world << endl;
+
+      tagCentersWorld.push_back( world );
+    }
+  }
+
+  vector< Point2f > tagCentersImage;
+  projectPoints( Mat(tagCentersWorld), rvec, tvec, camMat, distCoeffs, tagCentersImage );
 
   // -- Draw the outline of the board --
   vector <Point3f> boardCorners(4);
@@ -178,10 +197,10 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   //  cout << "pb2: " << pb2 << endl;
   //  cout << "boardSize: " << boardSize << endl;
   //
-  //  cout << boardCorners[0] << endl;
-  //  cout << boardCorners[1] << endl;
-  //  cout << boardCorners[2] << endl;
-  //  cout << boardCorners[3] << endl;
+  cout << "Board corner 0: " << boardCorners[0] << endl;
+  cout << "Board corner 1: " << boardCorners[1] << endl;
+  cout << "Board corner 2: " << boardCorners[2] << endl;
+  cout << "Board corner 3: " << boardCorners[3] << endl;
 
   vector< vector<Point > > outlineContour;
   outlineContour.push_back( generateContour( boardCorners, camMat, distCoeffs ) );
@@ -193,6 +212,11 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     result = bg.clone();
     drawContours(result, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
     //        drawContours(result, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
+    
+    for( vector< Point2f >::iterator itr = tagCentersImage.begin(); 
+         itr != tagCentersImage.end(); ++itr ) {
+      cv::circle( result, (*itr), 5, Scalar( 255,0,255 ), -1 );
+    }
   }
   else
   {
@@ -200,6 +224,14 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     resize(bg, tmp, bg.size() * _rendererResolutionMultiplier);
     drawContours(tmp, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
     //        drawContours(tmp, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
+
+    for( vector< Point2f >::iterator itr = tagCentersImage.begin(); 
+         itr != tagCentersImage.end(); ++itr ) {
+      cv::circle( tmp, (*itr)*_rendererResolutionMultiplier, 5*_rendererResolutionMultiplier,
+          Scalar( 255,0,255 ), -1 );
+    }
+
+
     resize(tmp, result, bg.size(), 0, 0, INTER_AREA);
   }
 

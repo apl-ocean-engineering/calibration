@@ -59,6 +59,11 @@ int main( int argc, char **argv )
   const char *mainWindow = "Current image";
 
   help();
+
+  // Initialize the RNG
+  cv::theRNG().state = cv::getTickCount();
+
+
   Mat background( generateBackground() );
 
   AprilTags::TagCodes tagCodes = AprilTags::tagCodes16h5;
