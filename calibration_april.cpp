@@ -30,7 +30,7 @@ static void help()
 
 const Size imgSize(800, 600);
 const Size brdSize(3,2);
-const size_t brds_num = 2;
+const size_t brds_num = 1;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
@@ -96,7 +96,7 @@ int main( int argc, char **argv )
     cout << "Board " << i << ": ";
     namedWindow( mainWindow); 
     imshow(mainWindow, boards[i]);
-    waitKey(100);
+    waitKey(0);
 
     vector<AprilTags::TagDetection> detections = tagDetector.extractTags(boards[i]);
 
@@ -136,6 +136,8 @@ int main( int argc, char **argv )
   }
   cout << "Done" << endl;
   cvDestroyAllWindows();
+
+  return 0;
 
   Mat camMat_est;
   Mat distCoeffs_est;
