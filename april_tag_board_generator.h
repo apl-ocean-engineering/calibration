@@ -17,44 +17,74 @@ using AprilTags::TagFamily;
 
 namespace cv {
 
+
+  class AprilTagBoard
+  {
+    public:
+
+      AprilTagBoard( const Size &arraySize = Size(8,6), const double tagSize = 1, 
+          const double tagSpacing = 3 );
+
+      Size arraySize( void ) const { return _arraySize; }
+      Size boardSize( void ) const 
+          { return Size( _tagSpacing * (arraySize().width+1),
+                         _tagSpacing * (arraySize().height+1) ); }
+     double boardAspectRatio( void ) const
+          { return boardSize().height / boardSize().width; }
+
+    private:
+
+    Size _arraySize;
+    double _tagSize;
+    double _tagSpacing;
+
+    TagFamily _tagFamily;
+    Mat _tags;
+
+  };
+
+
 class AprilTagBoardGenerator 
 {
 public:
     double sensorWidth;
     double sensorHeight;
     size_t squareEdgePointsNum;
-    double min_cos;
-    mutable double cov;
 
-    Size _patternSize;
-    double _tagSize;
-    double _tagSpacing;
 
-    int rendererResolutionMultiplier;
+    AprilTagBoardGenerator(const AprilTagBoard &board );
 
-    AprilTagBoardGenerator(const Size& patternSize = Size(8, 6), const double tagSize = 1, const double tagSpacing = 1 );
-
-    Mat generate(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const;
-
-    vector<Point3f> worldPoints( void );
+    // Generates a randomized pose for the board then renders an image
+    // of the board against the background bg.
+    //
+    // Returns the rendered image.
+    //
+    Mat generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const;
 
 private:
 
     // Calculate the field of view given the camera matrix, image size
     // and the sensor size (which is fixed)
-    Point2d fieldOfView( const Mat &camMat, const Size &imgSize );;;;
+    Point2f fieldOfView( const Mat &camMat, const Size &imgSize ) const;
 
-    void generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const;
+//    void generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const;
 
-    Mat generateBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
+    Mat drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
         const Point3f& zero, const Point3f& pb1, const Point3f& pb2,
-        float sqWidth, float sqHeight, const vector<Point3f>& whole, vector<Point2f>& corners) const;
+        const Vec2f &boardSize,
+        const vector<Point3f>& whole, vector<Point2f>& corners) const;
+
     void generateBasis(Point3f& pb1, Point3f& pb2) const;
 
-    Point3f generateChessBoardCenter(const Mat& camMat, const Size& imgSize) const;
+//    Point3f generateChessBoardCenter(const Mat& camMat, const Size& imgSize) const;
 
-    TagFamily _tagFamily;
-    Mat _tags;
+
+    const AprilTagBoard &_board;
+
+    // Parameters for the randomized board generation
+    static const double _minCos;
+    static const double _cov;
+    static const int _rendererResolutionMultiplier;
 
     Mat rvec, tvec;
 };

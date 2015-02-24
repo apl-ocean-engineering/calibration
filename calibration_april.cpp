@@ -19,30 +19,39 @@ using namespace std;
 
 static void help()
 {
-    printf( "\nThis code generates an artificial camera and artificial chessboard images,\n"
-            "and then calibrates. It is basically test code for calibration that shows\n"
-            "how to package calibration points and then calibrate the camera.\n"
-            "Usage:\n"
-            "./calibration_artificial\n\n");
+  printf( "\nThis code generates an artificial camera and artificial chessboard images,\n"
+      "and then calibrates. It is basically test code for calibration that shows\n"
+      "how to package calibration points and then calibrate the camera.\n"
+      "Usage:\n"
+      "./calibration_artificial\n\n");
 }
-namespace cv
-{
 
 
 
 const Size imgSize(800, 600);
-const Size brdSize(8, 7);
-const size_t brds_num = 20;
+const Size brdSize(3,2);
+const size_t brds_num = 2;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
-    for(int j = 0; j < mat.rows; ++j)
-        for(int i = 0; i < mat.cols; ++i)
-            out << mat(j, i) << " ";
-    return out;
+  for(int j = 0; j < mat.rows; ++j)
+    for(int i = 0; i < mat.cols; ++i)
+      out << mat(j, i) << " ";
+  return out;
 }
 
+
+Mat generateBackground( void )
+{
+  cout << "Initializing background...";
+  Mat background(imgSize, CV_8UC3);
+  randu(background, Scalar::all(32), Scalar::all(255));
+  GaussianBlur(background, background, Size(5, 5), 2);
+  cout << "Done" << endl;
+
+  return background;
 }
+
 
 
 int main( int argc, char **argv )
@@ -50,21 +59,18 @@ int main( int argc, char **argv )
   const char *mainWindow = "Current image";
 
   help();
-  cout << "Initializing background...";
-  Mat background(imgSize, CV_8UC3);
-  randu(background, Scalar::all(32), Scalar::all(255));
-  GaussianBlur(background, background, Size(5, 5), 2);
-  cout << "Done" << endl;
+  Mat background( generateBackground() );
 
   AprilTags::TagCodes tagCodes = AprilTags::tagCodes16h5;
   AprilTags::TagDetector tagDetector( tagCodes );
 
-  cout << "Initializing chess board generator...";
-  AprilTagBoardGenerator cbg(brdSize);
-  cbg.rendererResolutionMultiplier = 4;
+  cout << "Initializing April board..." << endl;
+  AprilTagBoard apb( brdSize );
+
+  AprilTagBoardGenerator apbGen( apb );
   cout << "Done" << endl;
 
-  /* camera params */
+  // Initialize camera parameters
   Mat_<double> camMat(3, 3);
   camMat << 300., 0., background.cols/2., 0, 300., background.rows/2., 0., 0., 1.;
 
@@ -75,10 +81,10 @@ int main( int argc, char **argv )
   vector<Mat> boards(brds_num);
   vector<Point2f> tmp;
   for(size_t i = 0; i < brds_num; ++i)
-    cout << (boards[i] = cbg.generate(background, camMat, distCoeffs, tmp), i) << " ";
+    cout << (boards[i] = apbGen.generateImageOfBoard(background, camMat, distCoeffs, tmp), i) << " ";
   cout << "Done" << endl;
 
-  vector<Point3f> chessboard3D = cbg.worldPoints();
+  //vector<Point3f> chessboard3D = apbGen.worldPoints();
 
   /* init points */
   vector< vector<Point3f> > objectPoints;
@@ -113,41 +119,41 @@ int main( int argc, char **argv )
 
       //            objectPoints.push_back(chessboard3D);
       //
-  } else {
-    cout<< " not enough.";
+    } else {
+      cout<< " not enough.";
+    }
+
+    cout << endl;
+
+    //        if (found)
+    //        {
+    //            imagePoints.push_back(tmp);
+    //            objectPoints.push_back(chessboard3D);
+    //            cout<< "-found ";
+    //        }
+
+    //        drawChessboardCorners(boards[i], apbGen.cornersSize(), Mat(tmp), found);
   }
+  cout << "Done" << endl;
+  cvDestroyAllWindows();
 
-  cout << endl;
+  Mat camMat_est;
+  Mat distCoeffs_est;
+  vector<Mat> rvecs, tvecs;
 
-  //        if (found)
-  //        {
-  //            imagePoints.push_back(tmp);
-  //            objectPoints.push_back(chessboard3D);
-  //            cout<< "-found ";
-  //        }
+  cout << "Calibrating...";
+  double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, camMat_est, distCoeffs_est, rvecs, tvecs);
+  cout << "Done" << endl;
 
-  //        drawChessboardCorners(boards[i], cbg.cornersSize(), Mat(tmp), found);
-}
-cout << "Done" << endl;
-cvDestroyAllWindows();
+  //cout << endl << "Average Reprojection error: " << rep_err/brds_num/apbGen.cornersSize().area() << endl;
+  cout << "==================================" << endl;
+  cout << "Original camera matrix:\n" << camMat << endl;
+  cout << "Original distCoeffs:\n" << distCoeffs << endl;
+  cout << "==================================" << endl;
+  cout << "Estimated camera matrix:\n" << (Mat_<double>&)camMat_est << endl;
+  cout << "Estimated distCoeffs:\n" << (Mat_<double>&)distCoeffs_est << endl;
 
-Mat camMat_est;
-Mat distCoeffs_est;
-vector<Mat> rvecs, tvecs;
-
-cout << "Calibrating...";
-double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, camMat_est, distCoeffs_est, rvecs, tvecs);
-cout << "Done" << endl;
-
-//cout << endl << "Average Reprojection error: " << rep_err/brds_num/cbg.cornersSize().area() << endl;
-cout << "==================================" << endl;
-cout << "Original camera matrix:\n" << camMat << endl;
-cout << "Original distCoeffs:\n" << distCoeffs << endl;
-cout << "==================================" << endl;
-    cout << "Estimated camera matrix:\n" << (Mat_<double>&)camMat_est << endl;
-    cout << "Estimated distCoeffs:\n" << (Mat_<double>&)distCoeffs_est << endl;
-
-    return 0;
+  return 0;
 }
 
 

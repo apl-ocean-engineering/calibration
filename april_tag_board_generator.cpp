@@ -11,36 +11,49 @@ using namespace cv;
 using namespace std;
 
 
-
-AprilTagBoardGenerator::AprilTagBoardGenerator(const Size& patternSize, 
-    double tagSize, double tagSpacing ) : 
-    squareEdgePointsNum(200), min_cos(sqrt(2.f)*0.5f), cov(0.5),
-    _patternSize( patternSize ), 
+AprilTagBoard::AprilTagBoard(const Size& _arraySize, 
+    double tagSize, double tagSpacing )  
+    : _arraySize( _arraySize ), 
     _tagSize( tagSize ),
     _tagSpacing( tagSpacing ),
-    rendererResolutionMultiplier(4), tvec(Mat::zeros(1, 3, CV_32F)),
     _tagFamily( AprilTags::tagCodes16h5 ), 
-    _tags( _size, cv::CV_16U );
+    _tags( _arraySize, CV_16U )
 {
-    Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
-
     cv::randu( _tags, 0, _tagFamily.codes.size() );
 }
 
-vector<Point3f> worldPoints( void )
+//vector<Point3f> worldPoints( void )
+//{
+//  vector<Point3f> worldPts;
+//  for(int j = 0; j < _patternSize.height; ++j)
+//    for(int i = 0; i < _patternSize.width; ++i)
+//      chessboard3D.push_back(Point3f(i*_tagSpacing, j*_tagSpacing, 0));
+//}
+
+
+
+//===========================================================================
+//===========================================================================
+
+const double AprilTagBoardGenerator::_minCos = 0.707;
+const double AprilTagBoardGenerator::_cov = 0.5;
+
+const int AprilTagBoardGenerator::_rendererResolutionMultiplier = 4;
+
+AprilTagBoardGenerator::AprilTagBoardGenerator( const AprilTagBoard &board )
+    : squareEdgePointsNum(200), 
+    tvec(Mat::zeros(1, 3, CV_32F)),
+    _board( board )
 {
-  vector<Point3f> worldPts;
-  for(int j = 0; j < _size.height; ++j)
-    for(int i = 0; i < _size.width; ++i)
-      chessboard3D.push_back(Point3f(i*_tagSpacing, j*_tagSpacing, 0));
+    Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
 }
 
-void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const
-{
-    Point3f step = (p2 - p1) * (1.f/squareEdgePointsNum);
-    for(size_t n = 0; n < squareEdgePointsNum; ++n)
-        out.push_back( p1 + step * (float)n);
-}
+//void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const
+//{
+//    Point3f step = (p2 - p1) * (1.f/squareEdgePointsNum);
+//    for(size_t n = 0; n < squareEdgePointsNum; ++n)
+//        out.push_back( p1 + step * (float)n);
+//}
 
 struct Mult
 {
@@ -64,7 +77,7 @@ void cv::AprilTagBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
         n[1]/=len;
         n[2]/=len;
 
-        if (fabs(n[2]) > min_cos)
+        if (fabs(n[2]) > _minCos)
             break;
     }
 
@@ -78,140 +91,150 @@ void cv::AprilTagBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
     pb2 = Point3f(b2[0]/len_b1, b2[1]/len_b2, b2[2]/len_b2);
 }
 
-Mat cv::AprilTagBoardGenerator::generageAprilTagBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
+Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
                                                 const Point3f& zero, const Point3f& pb1, const Point3f& pb2,
-                                                float sqWidth, float sqHeight, const vector<Point3f>& whole,
+                                                const Vec2f &boardSize, const vector<Point3f>& whole,
                                                 vector<Point2f>& corners) const
 {
-    vector< vector<Point> > squares_black;
-    for(int i = 0; i < patternSize.width; ++i)
-        for(int j = 0; j < patternSize.height; ++j)
-            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
-            {
-                vector<Point3f> pts_square3d;
-                vector<Point2f> pts_square2d;
+//    vector< vector<Point> > squares_black;
+//    for(int i = 0; i < _board.arraySize().width; ++i)
+//        for(int j = 0; j < _board.arraySize().height; ++j)
+//            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
+//            {
+//                vector<Point3f> pts_square3d;
+//                vector<Point2f> pts_square2d;
+//
+//                Point3f p1 = zero + (i + 0) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
+//                Point3f p2 = zero + (i + 1) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
+//                Point3f p3 = zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
+//                Point3f p4 = zero + (i + 0) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
+//                generateEdge(p1, p2, pts_square3d);
+//                generateEdge(p2, p3, pts_square3d);
+//                generateEdge(p3, p4, pts_square3d);
+//                generateEdge(p4, p1, pts_square3d);
+//
+//                projectPoints( Mat(pts_square3d), rvec, tvec, camMat, distCoeffs, pts_square2d);
+//                squares_black.resize(squares_black.size() + 1);
+//                vector<Point2f> temp;
+//                approxPolyDP(Mat(pts_square2d), temp, 1.0, true);
+//                transform(temp.begin(), temp.end(), back_inserter(squares_black.back()), Mult(rendererResolutionMultiplier));
+//            }
 
-                Point3f p1 = zero + (i + 0) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-                Point3f p2 = zero + (i + 1) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-                Point3f p3 = zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-                Point3f p4 = zero + (i + 0) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-                generateEdge(p1, p2, pts_square3d);
-                generateEdge(p2, p3, pts_square3d);
-                generateEdge(p3, p4, pts_square3d);
-                generateEdge(p4, p1, pts_square3d);
-
-                projectPoints( Mat(pts_square3d), rvec, tvec, camMat, distCoeffs, pts_square2d);
-                squares_black.resize(squares_black.size() + 1);
-                vector<Point2f> temp;
-                approxPolyDP(Mat(pts_square2d), temp, 1.0, true);
-                transform(temp.begin(), temp.end(), back_inserter(squares_black.back()), Mult(rendererResolutionMultiplier));
-            }
-
-    /* calculate corners */
-    vector<Point3f> corners3d;
-    for(int j = 0; j < patternSize.height - 1; ++j)
-        for(int i = 0; i < patternSize.width - 1; ++i)
-            corners3d.push_back(zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2);
-    corners.clear();
-    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
-
-    vector<Point3f> whole3d;
-    vector<Point2f> whole2d;
-    generateEdge(whole[0], whole[1], whole3d);
-    generateEdge(whole[1], whole[2], whole3d);
-    generateEdge(whole[2], whole[3], whole3d);
-    generateEdge(whole[3], whole[0], whole3d);
-    projectPoints( Mat(whole3d), rvec, tvec, camMat, distCoeffs, whole2d);
-    vector<Point2f> temp_whole2d;
-    approxPolyDP(Mat(whole2d), temp_whole2d, 1.0, true);
-
-    vector< vector<Point > > whole_contour(1);
-    transform(temp_whole2d.begin(), temp_whole2d.end(),
-        back_inserter(whole_contour.front()), Mult(rendererResolutionMultiplier));
-
+//    /* calculate corners */
+//    vector<Point3f> corners3d;
+//    for(int j = 0; j < _board.arraySize().height - 1; ++j)
+//        for(int i = 0; i < _board.arraySize().width - 1; ++i)
+//            corners3d.push_back(zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2);
+//
+//    corners.clear();
+//    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
+//
+//    vector<Point3f> whole3d;
+//    vector<Point2f> whole2d;
+//    generateEdge(whole[0], whole[1], whole3d);
+//    generateEdge(whole[1], whole[2], whole3d);
+//    generateEdge(whole[2], whole[3], whole3d);
+//    generateEdge(whole[3], whole[0], whole3d);
+//    projectPoints( Mat(whole3d), rvec, tvec, camMat, distCoeffs, whole2d);
+//    vector<Point2f> temp_whole2d;
+//    approxPolyDP(Mat(whole2d), temp_whole2d, 1.0, true);
+//
+//    vector< vector<Point > > whole_contour(1);
+//    transform(temp_whole2d.begin(), temp_whole2d.end(),
+//        back_inserter(whole_contour.front()), Mult(rendererResolutionMultiplier));
+//
     Mat result;
-    if (rendererResolutionMultiplier == 1)
+    if( _rendererResolutionMultiplier == 1 )
     {
         result = bg.clone();
-        drawContours(result, whole_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
-        drawContours(result, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
+//        drawContours(result, whole_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
+//        drawContours(result, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
     }
     else
     {
         Mat tmp;
-        resize(bg, tmp, bg.size() * rendererResolutionMultiplier);
-        drawContours(tmp, whole_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
-        drawContours(tmp, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
+        resize(bg, tmp, bg.size() * _rendererResolutionMultiplier);
+//        drawContours(tmp, whole_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
+//        drawContours(tmp, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
         resize(tmp, result, bg.size(), 0, 0, INTER_AREA);
     }
+
     return result;
 }
 
-Point2d cv::AprilTagBoardGenerator::fieldOfView( const Mat &camMat, const Size &imgSize )
+Point2f cv::AprilTagBoardGenerator::fieldOfView( const Mat &camMat, const Size &imgSize ) const
 {
-  const double sensorWidth = 32,
-        double sensorHeight = 24;
+  const double sensorWidth = 32;
+  const double sensorHeight = 24;
   double fovx, fovy, focalLen;
   Point2d principalPoint;
   double aspect;
-  calibrationMatrixValues( camMat, bg.size(), sensorWidth, sensorHeight,
+
+  calibrationMatrixValues( camMat, imgSize, sensorWidth, sensorHeight,
       fovx, fovy, focalLen, principalPoint, aspect);
 
-  return Point2d( fovx, fovy );
+  return Point2f( fovx, fovy );
 }
 
-Mat cv::AprilTagBoardGenerator::generator(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const
+Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const
 {
-    cov = min(cov, 0.8);
-    Point2d fov = fieldOfView( camMat, bg.size() );
+  Point2f fov = fieldOfView( camMat, bg.size() );
 
-    RNG& rng = theRNG();
+  RNG& rng = theRNG();
 
-    float d1 = static_cast<float>(rng.uniform(0.1, 10.0));
-    float ah = static_cast<float>(rng.uniform(-fov.x/2 * cov, fovx/2 * cov) * CV_PI / 180);
-    float av = static_cast<float>(rng.uniform(-fov.y/2 * cov, fovy/2 * cov) * CV_PI / 180);
+  // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
+  // and "elevation" (angle in the verical axis)
+  float d1 = static_cast<float>(rng.uniform(0.1, 10.0));
+  float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
+  float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 
-    Point3f p;
-    p.z = cos(ah) * d1;
-    p.x = sin(ah) * d1;
-    p.y = p.z * tan(av);
+  // Generate point for center of board.
+  Point3f p;
+  p.z = cos(ah) * d1;
+  p.x = sin(ah) * d1;
+  p.y = p.z * tan(av);
 
-    Point3f pb1, pb2;
-    generateBasis(pb1, pb2);
+  // Generate basis vectors for the board
+  Point3f pb1, pb2;
+  generateBasis(pb1, pb2);
 
-    float cbHalfWidth = static_cast<float>(norm(p) * sin( min(fovx, fovy) * 0.5 * CV_PI / 180));
-    float cbHalfHeight = cbHalfWidth * patternSize.height / patternSize.width;
+  // Apparent half width/height
+  // At unit distance (norm(p)=1), the board is half the FOV wide
+  // Then the height is set by aspect ratio
+  float cbHalfWidth = static_cast<float>(norm(p) * sin( min(fov.x, fov.y) * 0.5 * CV_PI / 180));
+  float cbHalfHeight = cbHalfWidth * _board.boardAspectRatio();
 
-    vector<Point3f> pts3d(4);
-    vector<Point2f> pts2d(4);
-    for(;;)
-    {
-        pts3d[0] = p + pb1 * cbHalfWidth + cbHalfHeight * pb2;
-        pts3d[1] = p + pb1 * cbHalfWidth - cbHalfHeight * pb2;
-        pts3d[2] = p - pb1 * cbHalfWidth - cbHalfHeight * pb2;
-        pts3d[3] = p - pb1 * cbHalfWidth + cbHalfHeight * pb2;
+  vector<Point3f> pts3d(4);
+  vector<Point2f> pts2d(4);
+  for(;;)
+  {
+    // Project corners of the board in 3D
+    pts3d[0] = p + pb1 * cbHalfWidth + cbHalfHeight * pb2;
+    pts3d[1] = p + pb1 * cbHalfWidth - cbHalfHeight * pb2;
+    pts3d[2] = p - pb1 * cbHalfWidth - cbHalfHeight * pb2;
+    pts3d[3] = p - pb1 * cbHalfWidth + cbHalfHeight * pb2;
 
-        /* can remake with better perf */
-        projectPoints( Mat(pts3d), rvec, tvec, camMat, distCoeffs, pts2d);
+    /* can remake with better perf */
+    projectPoints( Mat(pts3d), rvec, tvec, camMat, distCoeffs, pts2d);
 
-        bool inrect1 = pts2d[0].x < bg.cols && pts2d[0].y < bg.rows && pts2d[0].x > 0 && pts2d[0].y > 0;
-        bool inrect2 = pts2d[1].x < bg.cols && pts2d[1].y < bg.rows && pts2d[1].x > 0 && pts2d[1].y > 0;
-        bool inrect3 = pts2d[2].x < bg.cols && pts2d[2].y < bg.rows && pts2d[2].x > 0 && pts2d[2].y > 0;
-        bool inrect4 = pts2d[3].x < bg.cols && pts2d[3].y < bg.rows && pts2d[3].x > 0 && pts2d[3].y > 0;
+    // Only accept if all four corners are visible?
+    bool inrect1 = pts2d[0].x < bg.cols && pts2d[0].y < bg.rows && pts2d[0].x > 0 && pts2d[0].y > 0;
+    bool inrect2 = pts2d[1].x < bg.cols && pts2d[1].y < bg.rows && pts2d[1].x > 0 && pts2d[1].y > 0;
+    bool inrect3 = pts2d[2].x < bg.cols && pts2d[2].y < bg.rows && pts2d[2].x > 0 && pts2d[2].y > 0;
+    bool inrect4 = pts2d[3].x < bg.cols && pts2d[3].y < bg.rows && pts2d[3].x > 0 && pts2d[3].y > 0;
 
-        if ( inrect1 && inrect2 && inrect3 && inrect4)
-            break;
+    if ( inrect1 && inrect2 && inrect3 && inrect4)
+      break;
 
-        cbHalfWidth*=0.8f;
-        cbHalfHeight = cbHalfWidth * patternSize.height / patternSize.width;
-    }
+    // Otherwise shrink, maintaining aspect ratio
+    cbHalfWidth*=0.8f;
+    cbHalfHeight = cbHalfWidth * _board.boardAspectRatio();
+  }
 
-    cbHalfWidth  *= static_cast<float>(patternSize.width)/(patternSize.width + 1);
-    cbHalfHeight *= static_cast<float>(patternSize.height)/(patternSize.height + 1);
+  // Define the board origin as one of the corners
+  Point3f origin = p - (pb1 * cbHalfWidth) - (cbHalfHeight * pb2);
+  Vec2f   boardSize( 2 * cbHalfWidth, 2 * cbHalfHeight );
 
-    Point3f zero = p - pb1 * cbHalfWidth - cbHalfHeight * pb2;
-    float sqWidth  = 2 * cbHalfWidth/patternSize.width;
-    float sqHeight = 2 * cbHalfHeight/patternSize.height;
-
-    return generateAprilTagBoard(bg, camMat, distCoeffs, zero, pb1, pb2, sqWidth, sqHeight,  pts3d, corners);
+  return drawBoard(bg, camMat, distCoeffs, origin, pb1, pb2, boardSize,  pts3d, corners);
 }
+
