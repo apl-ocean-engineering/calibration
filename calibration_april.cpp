@@ -8,6 +8,10 @@
 #include <iterator>
 #include <stdio.h>
 
+#include <AprilTags/TagFamily.h>
+#include <AprilTags/Tag16h5.h>
+#include <AprilTags/TagDetector.h>
+
 #include "april_tag_board_generator.h"
 
 using namespace cv;
@@ -43,72 +47,103 @@ template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 
 int main( int argc, char **argv )
 {
-    help();
-    cout << "Initializing background...";
-    Mat background(imgSize, CV_8UC3);
-    randu(background, Scalar::all(32), Scalar::all(255));
-    GaussianBlur(background, background, Size(5, 5), 2);
-    cout << "Done" << endl;
+  const char *mainWindow = "Current image";
 
-    cout << "Initializing chess board generator...";
-    AprilTagBoardGenerator cbg(brdSize);
-    cbg.rendererResolutionMultiplier = 4;
-    cout << "Done" << endl;
+  help();
+  cout << "Initializing background...";
+  Mat background(imgSize, CV_8UC3);
+  randu(background, Scalar::all(32), Scalar::all(255));
+  GaussianBlur(background, background, Size(5, 5), 2);
+  cout << "Done" << endl;
 
-    /* camera params */
-    Mat_<double> camMat(3, 3);
-    camMat << 300., 0., background.cols/2., 0, 300., background.rows/2., 0., 0., 1.;
+  AprilTags::TagCodes tagCodes = AprilTags::tagCodes16h5;
+  AprilTags::TagDetector tagDetector( tagCodes );
 
-    Mat_<double> distCoeffs(1, 5);
-    distCoeffs << 1.2, 0.2, 0., 0., 0.;
+  cout << "Initializing chess board generator...";
+  AprilTagBoardGenerator cbg(brdSize);
+  cbg.rendererResolutionMultiplier = 4;
+  cout << "Done" << endl;
 
-    cout << "Generating chessboards...";
-    vector<Mat> boards(brds_num);
-    vector<Point2f> tmp;
-    for(size_t i = 0; i < brds_num; ++i)
-        cout << (boards[i] = cbg.generate(background, camMat, distCoeffs, tmp), i) << " ";
-    cout << "Done" << endl;
+  /* camera params */
+  Mat_<double> camMat(3, 3);
+  camMat << 300., 0., background.cols/2., 0, 300., background.rows/2., 0., 0., 1.;
 
-    vector<Point3f> chessboard3D = cbg.worldPoints();
+  Mat_<double> distCoeffs(1, 5);
+  distCoeffs << 1.2, 0.2, 0., 0., 0.;
 
-    /* init points */
-    vector< vector<Point3f> > objectPoints;
-    vector< vector<Point2f> > imagePoints;
+  cout << "Generating chessboards...";
+  vector<Mat> boards(brds_num);
+  vector<Point2f> tmp;
+  for(size_t i = 0; i < brds_num; ++i)
+    cout << (boards[i] = cbg.generate(background, camMat, distCoeffs, tmp), i) << " ";
+  cout << "Done" << endl;
 
-    cout << endl << "Finding chessboards' corners...";
-    for(size_t i = 0; i < brds_num; ++i)
-    {
-        cout << i;
-        namedWindow("Current chessboard"); imshow("Current chessboard", boards[i]); waitKey(100);
-        bool found = findChessboardCorners(boards[i], cbg.cornersSize(), tmp);
-        if (found)
-        {
-            imagePoints.push_back(tmp);
-            objectPoints.push_back(chessboard3D);
-            cout<< "-found ";
-        }
-        else
-            cout<< "-not-found ";
+  vector<Point3f> chessboard3D = cbg.worldPoints();
 
-        drawChessboardCorners(boards[i], cbg.cornersSize(), Mat(tmp), found);
-        imshow("Current chessboard", boards[i]); waitKey(1000);
+  /* init points */
+  vector< vector<Point3f> > objectPoints;
+  vector< vector<Point2f> > imagePoints;
+
+  cout << endl << "Finding chessboards' corners...";
+  for(size_t i = 0; i < brds_num; ++i)
+  {
+    cout << "Board " << i << ": ";
+    namedWindow( mainWindow); 
+    imshow(mainWindow, boards[i]);
+    waitKey(100);
+
+    vector<AprilTags::TagDetection> detections = tagDetector.extractTags(boards[i]);
+
+    cout << "found " << detections.size();
+
+    // Draw the current image with detections
+    for (int i=0; i<detections.size(); i++) {
+      detections[i].draw(boards[i]);
     }
-    cout << "Done" << endl;
-    cvDestroyAllWindows();
+    imshow(mainWindow, boards[i]); 
+    waitKey(1000);
 
-    Mat camMat_est;
-    Mat distCoeffs_est;
-    vector<Mat> rvecs, tvecs;
+    if( detections.size() > 5 ) {
+      // print out each detection
+      cout << detections.size() << " tags detected:" << endl;
+      //for (int i=0; i<detections.size(); i++) {
+      //  print_detection(detections[i]);
+      //}
 
-    cout << "Calibrating...";
-    double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, camMat_est, distCoeffs_est, rvecs, tvecs);
-    cout << "Done" << endl;
 
-    cout << endl << "Average Reprojection error: " << rep_err/brds_num/cbg.cornersSize().area() << endl;
-    cout << "==================================" << endl;
-    cout << "Original camera matrix:\n" << camMat << endl;
-    cout << "Original distCoeffs:\n" << distCoeffs << endl;
-    cout << "==================================" << endl;
+      //            objectPoints.push_back(chessboard3D);
+      //
+  } else {
+    cout<< " not enough.";
+  }
+
+  cout << endl;
+
+  //        if (found)
+  //        {
+  //            imagePoints.push_back(tmp);
+  //            objectPoints.push_back(chessboard3D);
+  //            cout<< "-found ";
+  //        }
+
+  //        drawChessboardCorners(boards[i], cbg.cornersSize(), Mat(tmp), found);
+}
+cout << "Done" << endl;
+cvDestroyAllWindows();
+
+Mat camMat_est;
+Mat distCoeffs_est;
+vector<Mat> rvecs, tvecs;
+
+cout << "Calibrating...";
+double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, camMat_est, distCoeffs_est, rvecs, tvecs);
+cout << "Done" << endl;
+
+//cout << endl << "Average Reprojection error: " << rep_err/brds_num/cbg.cornersSize().area() << endl;
+cout << "==================================" << endl;
+cout << "Original camera matrix:\n" << camMat << endl;
+cout << "Original distCoeffs:\n" << distCoeffs << endl;
+cout << "==================================" << endl;
     cout << "Estimated camera matrix:\n" << (Mat_<double>&)camMat_est << endl;
     cout << "Estimated distCoeffs:\n" << (Mat_<double>&)distCoeffs_est << endl;
 

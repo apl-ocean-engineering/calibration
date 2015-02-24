@@ -2,23 +2,40 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-#include "chess_board_generator.h"
+#include <AprilTags/TagFamily.h>
+#include <AprilTags/Tag16h5.h>
+
+#include "april_tag_board_generator.h"
 
 using namespace cv;
 using namespace std;
 
 
-// Copy of  tests/cv/src/chessboardgenerator code. Just do not want to add dependency.
-//
 
-ChessBoardGenerator::ChessBoardGenerator(const Size& _patternSize) : sensorWidth(32), sensorHeight(24),
+AprilTagBoardGenerator::AprilTagBoardGenerator(const Size& patternSize, 
+    double tagSize, double tagSpacing ) : 
     squareEdgePointsNum(200), min_cos(sqrt(2.f)*0.5f), cov(0.5),
-    patternSize(_patternSize), rendererResolutionMultiplier(4), tvec(Mat::zeros(1, 3, CV_32F))
+    _patternSize( patternSize ), 
+    _tagSize( tagSize ),
+    _tagSpacing( tagSpacing ),
+    rendererResolutionMultiplier(4), tvec(Mat::zeros(1, 3, CV_32F)),
+    _tagFamily( AprilTags::tagCodes16h5 ), 
+    _tags( _size, cv::CV_16U );
 {
     Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
+
+    cv::randu( _tags, 0, _tagFamily.codes.size() );
 }
 
-void cv::ChessBoardGenerator::generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const
+vector<Point3f> worldPoints( void )
+{
+  vector<Point3f> worldPts;
+  for(int j = 0; j < _size.height; ++j)
+    for(int i = 0; i < _size.width; ++i)
+      chessboard3D.push_back(Point3f(i*_tagSpacing, j*_tagSpacing, 0));
+}
+
+void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const
 {
     Point3f step = (p2 - p1) * (1.f/squareEdgePointsNum);
     for(size_t n = 0; n < squareEdgePointsNum; ++n)
@@ -32,7 +49,7 @@ struct Mult
     Point2f operator()(const Point2f& p)const { return p * m; }
 };
 
-void cv::ChessBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
+void cv::AprilTagBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
 {
     RNG& rng = theRNG();
 
@@ -61,7 +78,7 @@ void cv::ChessBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
     pb2 = Point3f(b2[0]/len_b1, b2[1]/len_b2, b2[2]/len_b2);
 }
 
-Mat cv::ChessBoardGenerator::generageChessBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
+Mat cv::AprilTagBoardGenerator::generageAprilTagBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
                                                 const Point3f& zero, const Point3f& pb1, const Point3f& pb2,
                                                 float sqWidth, float sqHeight, const vector<Point3f>& whole,
                                                 vector<Point2f>& corners) const
@@ -130,20 +147,29 @@ Mat cv::ChessBoardGenerator::generageChessBoard(const Mat& bg, const Mat& camMat
     return result;
 }
 
-Mat cv::ChessBoardGenerator::operator ()(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const
+Point2d cv::AprilTagBoardGenerator::fieldOfView( const Mat &camMat, const Size &imgSize )
+{
+  const double sensorWidth = 32,
+        double sensorHeight = 24;
+  double fovx, fovy, focalLen;
+  Point2d principalPoint;
+  double aspect;
+  calibrationMatrixValues( camMat, bg.size(), sensorWidth, sensorHeight,
+      fovx, fovy, focalLen, principalPoint, aspect);
+
+  return Point2d( fovx, fovy );
+}
+
+Mat cv::AprilTagBoardGenerator::generator(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const
 {
     cov = min(cov, 0.8);
-    double fovx, fovy, focalLen;
-    Point2d principalPoint;
-    double aspect;
-    calibrationMatrixValues( camMat, bg.size(), sensorWidth, sensorHeight,
-        fovx, fovy, focalLen, principalPoint, aspect);
+    Point2d fov = fieldOfView( camMat, bg.size() );
 
     RNG& rng = theRNG();
 
     float d1 = static_cast<float>(rng.uniform(0.1, 10.0));
-    float ah = static_cast<float>(rng.uniform(-fovx/2 * cov, fovx/2 * cov) * CV_PI / 180);
-    float av = static_cast<float>(rng.uniform(-fovy/2 * cov, fovy/2 * cov) * CV_PI / 180);
+    float ah = static_cast<float>(rng.uniform(-fov.x/2 * cov, fovx/2 * cov) * CV_PI / 180);
+    float av = static_cast<float>(rng.uniform(-fov.y/2 * cov, fovy/2 * cov) * CV_PI / 180);
 
     Point3f p;
     p.z = cos(ah) * d1;
@@ -187,5 +213,5 @@ Mat cv::ChessBoardGenerator::operator ()(const Mat& bg, const Mat& camMat, const
     float sqWidth  = 2 * cbHalfWidth/patternSize.width;
     float sqHeight = 2 * cbHalfHeight/patternSize.height;
 
-    return generageChessBoard(bg, camMat, distCoeffs, zero, pb1, pb2, sqWidth, sqHeight,  pts3d, corners);
+    return generateAprilTagBoard(bg, camMat, distCoeffs, zero, pb1, pb2, sqWidth, sqHeight,  pts3d, corners);
 }
