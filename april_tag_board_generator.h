@@ -69,6 +69,9 @@ private:
     // Breaks a line segment into _segmentsPerEdge sub-segments
     void generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const;
 
+    vector<Point> generateContour( const vector<Point3f> &worldPts, 
+        const Mat& camMat, const Mat& distCoeffs)  const;
+
     Mat drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
         const Point3f& origin, const Point3f& pb1, const Point3f& pb2,
         const Size2f &boardSize,

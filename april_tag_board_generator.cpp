@@ -13,13 +13,13 @@ using namespace std;
 
 AprilTagBoard::AprilTagBoard(const Size& _arraySize, 
     double tagSize, double tagSpacing )  
-    : _arraySize( _arraySize ), 
-    _tagSize( tagSize ),
-    _tagSpacing( tagSpacing ),
-    _tagFamily( AprilTags::tagCodes16h5 ), 
-    _tags( _arraySize, CV_16U )
+: _arraySize( _arraySize ), 
+  _tagSize( tagSize ),
+  _tagSpacing( tagSpacing ),
+  _tagFamily( AprilTags::tagCodes16h5 ), 
+  _tags( _arraySize, CV_16U )
 {
-    cv::randu( _tags, 0, _tagFamily.codes.size() );
+  cv::randu( _tags, 0, _tagFamily.codes.size() );
 }
 
 //vector<Point3f> worldPoints( void )
@@ -42,18 +42,18 @@ const int AprilTagBoardGenerator::_rendererResolutionMultiplier = 4;
 const size_t AprilTagBoardGenerator::_segmentsPerEdge = 200;
 
 AprilTagBoardGenerator::AprilTagBoardGenerator( const AprilTagBoard &board )
-    : 
+  : 
     tvec(Mat::zeros(1, 3, CV_32F)),
     _board( board )
 {
-    Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
+  Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
 }
 
 void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& p2, vector<Point3f>& out) const
 {
-    Point3f step = (p2 - p1) * (1.f/_segmentsPerEdge);
-    for(size_t n = 0; n < _segmentsPerEdge; ++n)
-        out.push_back( p1 + step * (float)n);
+  Point3f step = (p2 - p1) * (1.f/_segmentsPerEdge);
+  for(size_t n = 0; n < _segmentsPerEdge; ++n)
+    out.push_back( p1 + step * (float)n);
 }
 
 struct Mult
@@ -67,72 +67,103 @@ struct Mult
   { return p * m; }
 };
 
+vector<Point> AprilTagBoardGenerator::generateContour( const vector<Point3f> &worldPts, 
+    const Mat& camMat, const Mat& distCoeffs)  const
+{
+  vector<Point3f> edges3d;
+
+  // worldPts is assumed to be a set of corners describing a closed contour
+  if( worldPts.size() < 2 ) return vector<Point>();
+
+  int i;
+  for( i = 0; i < worldPts.size()-1; ++i ) {
+    generateEdge(worldPts[i], worldPts[i+1], edges3d);
+  }
+  generateEdge(worldPts[i], worldPts[0], edges3d);
+
+  vector<Point2f> edges2d;
+  projectPoints( Mat(edges3d), rvec, tvec, camMat, distCoeffs, edges2d);
+
+  vector<Point2f> edges2d_reduced;
+  approxPolyDP(Mat(edges2d), edges2d_reduced, 1.0, true);
+
+  cout << edges2d_reduced << endl;
+
+  vector< Point > renderEdges;
+  std::transform(edges2d_reduced.begin(), edges2d_reduced.end(),
+      back_inserter(renderEdges),
+      Mult(_rendererResolutionMultiplier));
+
+  return renderEdges;
+}
+
+
 void cv::AprilTagBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
 {
-    RNG& rng = theRNG();
+  RNG& rng = theRNG();
 
-    Vec3f n;
-    for(;;)
-    {
-        n[0] = rng.uniform(-1.f, 1.f);
-        n[1] = rng.uniform(-1.f, 1.f);
-        n[2] = rng.uniform(-1.f, 1.f);
-        float len = (float)norm(n);
-        n[0]/=len;
-        n[1]/=len;
-        n[2]/=len;
+  Vec3f n;
+  for(;;)
+  {
+    n[0] = rng.uniform(-1.f, 1.f);
+    n[1] = rng.uniform(-1.f, 1.f);
+    n[2] = rng.uniform(-1.f, 1.f);
+    float len = (float)norm(n);
+    n[0]/=len;
+    n[1]/=len;
+    n[2]/=len;
 
-        if (fabs(n[2]) > _minCos)
-            break;
-    }
+    if (fabs(n[2]) > _minCos)
+      break;
+  }
 
-    Vec3f n_temp = n; n_temp[0] += 100;
-    Vec3f b1 = n.cross(n_temp);
-    Vec3f b2 = n.cross(b1);
-    float len_b1 = (float)norm(b1);
-    float len_b2 = (float)norm(b2);
+  Vec3f n_temp = n; n_temp[0] += 100;
+  Vec3f b1 = n.cross(n_temp);
+  Vec3f b2 = n.cross(b1);
+  float len_b1 = (float)norm(b1);
+  float len_b2 = (float)norm(b2);
 
-    pb1 = Point3f(b1[0]/len_b1, b1[1]/len_b1, b1[2]/len_b1);
-    pb2 = Point3f(b2[0]/len_b1, b2[1]/len_b2, b2[2]/len_b2);
+  pb1 = Point3f(b1[0]/len_b1, b1[1]/len_b1, b1[2]/len_b1);
+  pb2 = Point3f(b2[0]/len_b1, b2[1]/len_b2, b2[2]/len_b2);
 }
 
 Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
-                                                const Point3f& origin, const Point3f& pb1, const Point3f& pb2,
-                                                const Size2f &boardSize, 
-                                                vector<Point2f>& corners) const
+    const Point3f& origin, const Point3f& pb1, const Point3f& pb2,
+    const Size2f &boardSize, 
+    vector<Point2f>& corners) const
 {
-//    vector< vector<Point> > squares_black;
-//    for(int i = 0; i < _board.arraySize().width; ++i)
-//        for(int j = 0; j < _board.arraySize().height; ++j)
-//            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
-//            {
-//                vector<Point3f> pts_square3d;
-//                vector<Point2f> pts_square2d;
-//
-//                Point3f p1 = zero + (i + 0) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-//                Point3f p2 = zero + (i + 1) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-//                Point3f p3 = zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-//                Point3f p4 = zero + (i + 0) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-//                generateEdge(p1, p2, pts_square3d);
-//                generateEdge(p2, p3, pts_square3d);
-//                generateEdge(p3, p4, pts_square3d);
-//                generateEdge(p4, p1, pts_square3d);
-//
-//                projectPoints( Mat(pts_square3d), rvec, tvec, camMat, distCoeffs, pts_square2d);
-//                squares_black.resize(squares_black.size() + 1);
-//                vector<Point2f> temp;
-//                approxPolyDP(Mat(pts_square2d), temp, 1.0, true);
-//                transform(temp.begin(), temp.end(), back_inserter(squares_black.back()), Mult(rendererResolutionMultiplier));
-//            }
+  //    vector< vector<Point> > squares_black;
+  //    for(int i = 0; i < _board.arraySize().width; ++i)
+  //        for(int j = 0; j < _board.arraySize().height; ++j)
+  //            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
+  //            {
+  //                vector<Point3f> pts_square3d;
+  //                vector<Point2f> pts_square2d;
+  //
+  //                Point3f p1 = zero + (i + 0) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
+  //                Point3f p2 = zero + (i + 1) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
+  //                Point3f p3 = zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
+  //                Point3f p4 = zero + (i + 0) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
+  //                generateEdge(p1, p2, pts_square3d);
+  //                generateEdge(p2, p3, pts_square3d);
+  //                generateEdge(p3, p4, pts_square3d);
+  //                generateEdge(p4, p1, pts_square3d);
+  //
+  //                projectPoints( Mat(pts_square3d), rvec, tvec, camMat, distCoeffs, pts_square2d);
+  //                squares_black.resize(squares_black.size() + 1);
+  //                vector<Point2f> temp;
+  //                approxPolyDP(Mat(pts_square2d), temp, 1.0, true);
+  //                transform(temp.begin(), temp.end(), back_inserter(squares_black.back()), Mult(rendererResolutionMultiplier));
+  //            }
 
-//    /* calculate corners */
-//    vector<Point3f> corners3d;
-//    for(int j = 0; j < _board.arraySize().height - 1; ++j)
-//        for(int i = 0; i < _board.arraySize().width - 1; ++i)
-//            corners3d.push_back(zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2);
-//
-//    corners.clear();
-//    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
+  //    /* calculate corners */
+  //    vector<Point3f> corners3d;
+  //    for(int j = 0; j < _board.arraySize().height - 1; ++j)
+  //        for(int i = 0; i < _board.arraySize().width - 1; ++i)
+  //            corners3d.push_back(zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2);
+  //
+  //    corners.clear();
+  //    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
 
 
   // -- Draw the outline of the board --
@@ -142,45 +173,32 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   boardCorners[2] = origin + (pb1 * boardSize.width) + (pb2 * boardSize.height);
   boardCorners[3] = origin + (pb2 * boardSize.height);
 
-//  cout << "origin: " << origin << endl;
-//  cout << "pb1: " << pb1 << endl;
-//  cout << "pb2: " << pb2 << endl;
-//  cout << "boardSize: " << boardSize << endl;
-//
-//  cout << boardCorners[0] << endl;
-//  cout << boardCorners[1] << endl;
-//  cout << boardCorners[2] << endl;
-//  cout << boardCorners[3] << endl;
+  //  cout << "origin: " << origin << endl;
+  //  cout << "pb1: " << pb1 << endl;
+  //  cout << "pb2: " << pb2 << endl;
+  //  cout << "boardSize: " << boardSize << endl;
+  //
+  //  cout << boardCorners[0] << endl;
+  //  cout << boardCorners[1] << endl;
+  //  cout << boardCorners[2] << endl;
+  //  cout << boardCorners[3] << endl;
 
-  vector<Point3f> outline3d;
-  generateEdge(boardCorners[0], boardCorners[1], outline3d);
-  generateEdge(boardCorners[1], boardCorners[2], outline3d);
-  generateEdge(boardCorners[2], boardCorners[3], outline3d);
-  generateEdge(boardCorners[3], boardCorners[0], outline3d);
+  vector< vector<Point > > outlineContour;
+  outlineContour.push_back( generateContour( boardCorners, camMat, distCoeffs ) );
 
-  vector<Point2f> outline2d;
-  projectPoints( Mat(outline3d), rvec, tvec, camMat, distCoeffs, outline2d);
-
-  vector<Point2f> outline2d_reduced;
-  approxPolyDP(Mat(outline2d), outline2d_reduced, 1.0, true);
-
-  vector< vector<Point > > outline_contour(1);
-  std::transform(outline2d_reduced.begin(), outline2d_reduced.end(),
-      back_inserter(outline_contour.front()), 
-      Mult(_rendererResolutionMultiplier));
-
+  // Draw everything to the canvas
   Mat result;
   if( _rendererResolutionMultiplier == 1 )
   {
     result = bg.clone();
-    drawContours(result, outline_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
+    drawContours(result, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
     //        drawContours(result, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
   }
   else
   {
     Mat tmp;
     resize(bg, tmp, bg.size() * _rendererResolutionMultiplier);
-    drawContours(tmp, outline_contour, -1, Scalar::all(255), CV_FILLED, CV_AA);
+    drawContours(tmp, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
     //        drawContours(tmp, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
     resize(tmp, result, bg.size(), 0, 0, INTER_AREA);
   }
