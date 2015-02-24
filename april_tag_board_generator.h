@@ -22,20 +22,22 @@ namespace cv {
   {
     public:
 
-      AprilTagBoard( const Size &arraySize, const double tagSize = 1, 
-          const double tagSpacing = 1.5 );
+      AprilTagBoard( const Size &arraySize, const float tagSize = 1, 
+          const float tagSpacing = 1.5 );
 
       Size arraySize( void ) const { return _arraySize; }
       size_t length() const { return _arraySize.area(); }
 
-      // These are in "virtual units" 
+      // These are all in "virtual units" which are scaled to world units
+      // when the board is rendered...
       float tagSpacing( void ) const { return _tagSpacing; }
+      float margin( void ) const { return _tagSize; }
       float tagSize( void ) const { return _tagSize; }
       float pixelSize( void ) const  { return _tagSize / tagSizePixels(); }
 
-      Size boardSize( void ) const 
-      { return Size( _tagSpacing * (arraySize().width+1),
-          _tagSpacing * (arraySize().height+1) ); }
+      Size2f boardSize( void ) const 
+      { return Size2f( _tagSpacing * (arraySize().width-1) +  (2*margin()),
+                       _tagSpacing * (arraySize().height-1)  + (2*margin()) ); }
 
       float boardAspectRatio( void ) const
       { return boardSize().height * 1.0 / boardSize().width; }
@@ -54,8 +56,8 @@ namespace cv {
     private:
 
     Size _arraySize;
-    double _tagSize;
-    double _tagSpacing;
+    float _tagSize;
+    float _tagSpacing;
 
     TagFamily _tagFamily;
     Mat _tags;

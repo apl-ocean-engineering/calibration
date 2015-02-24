@@ -29,7 +29,7 @@ static void help()
 
 
 const Size imgSize(800, 600);
-const Size brdSize(3,2);
+const Size brdSize(2,1);
 const size_t brds_num = 1;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)

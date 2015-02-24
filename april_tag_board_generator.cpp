@@ -12,7 +12,7 @@ using namespace std;
 
 
 AprilTagBoard::AprilTagBoard(const Size& _arraySize, 
-    double tagSize, double tagSpacing )  
+    float tagSize, float tagSpacing )  
 : _arraySize( _arraySize ), 
   _tagSize( tagSize ),
   _tagSpacing( tagSpacing ),
@@ -170,37 +170,6 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     const Size2f &boardSize, 
     vector<Point2f>& corners) const
 {
-  //    vector< vector<Point> > squares_black; //    for(int i = 0; i < _board.arraySize().width; ++i)
-  //        for(int j = 0; j < _board.arraySize().height; ++j)
-  //            if ( (i % 2 == 0 && j % 2 == 0) || (i % 2 != 0 && j % 2 != 0) )
-  //            {
-  //                vector<Point3f> pts_square3d;
-  //                vector<Point2f> pts_square2d;
-  //
-  //                Point3f p1 = zero + (i + 0) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-  //                Point3f p2 = zero + (i + 1) * sqWidth * pb1 + (j + 0) * sqHeight * pb2;
-  //                Point3f p3 = zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-  //                Point3f p4 = zero + (i + 0) * sqWidth * pb1 + (j + 1) * sqHeight * pb2;
-  //                generateEdge(p1, p2, pts_square3d);
-  //                generateEdge(p2, p3, pts_square3d);
-  //                generateEdge(p3, p4, pts_square3d);
-  //                generateEdge(p4, p1, pts_square3d);
-  //
-  //                projectPoints( Mat(pts_square3d), rvec, tvec, camMat, distCoeffs, pts_square2d);
-  //                squares_black.resize(squares_black.size() + 1);
-  //                vector<Point2f> temp;
-  //                approxPolyDP(Mat(pts_square2d), temp, 1.0, true);
-  //                transform(temp.begin(), temp.end(), back_inserter(squares_black.back()), Mult(rendererResolutionMultiplier));
-  //            }
-
-  //    /* calculate corners */
-  //    vector<Point3f> corners3d;
-  //    for(int j = 0; j < _board.arraySize().height - 1; ++j)
-  //        for(int i = 0; i < _board.arraySize().width - 1; ++i)
-  //            corners3d.push_back(zero + (i + 1) * sqWidth * pb1 + (j + 1) * sqHeight * pb2);
-  //
-  //    corners.clear();
-  //    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
 
   // Identify the April tag origins
   Point2f scale( boardSize.width / _board.boardSize().width,
@@ -211,8 +180,8 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   vector< Point2f > tagOrigins;
   for( int i = 0; i < _board.arraySize().width; ++i ) {
     for( int j = 0; j < _board.arraySize().height; ++j ) {
-      Point2f tagOrigin( (i+1) * _board.tagSpacing() - (0.5 * _board.tagSize()), 
-          (j+1) * _board.tagSpacing() - (0.5 * _board.tagSize()) );
+      Point2f tagOrigin( _board.margin() + i * _board.tagSpacing() - (0.5 * _board.tagSize()), 
+                         _board.margin() + j * _board.tagSpacing() - (0.5 * _board.tagSize()) );
 
       tagOrigins.push_back( tagOrigin );
 
@@ -241,13 +210,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
         }
       }
 
-
-
-
-
       cout << "Finished: " << endl << bitmap << endl;
-
-
     }
   }
 
@@ -275,13 +238,15 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   boardCorners[0] = origin;
   boardCorners[1] = origin + (pb1 * boardSize.width);
   boardCorners[2] = origin + (pb1 * boardSize.width) + (pb2 * boardSize.height);
-  boardCorners[3] = origin + (pb2 * boardSize.height);
+  boardCorners[3] = origin                           + (pb2 * boardSize.height);
 
   //  cout << "origin: " << origin << endl;
   //  cout << "pb1: " << pb1 << endl;
   //  cout << "pb2: " << pb2 << endl;
-  //  cout << "boardSize: " << boardSize << endl;
-  //
+  cout << "boardSize: " << boardSize << endl;
+  cout << "board.boardSize: " << _board.boardSize() << endl;
+  cout << "board.boardAspectRatio: " << _board.boardAspectRatio() << endl;
+
   cout << "Board corner 0: " << boardCorners[0] << endl;
   cout << "Board corner 1: " << boardCorners[1] << endl;
   cout << "Board corner 2: " << boardCorners[2] << endl;
