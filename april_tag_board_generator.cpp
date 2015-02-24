@@ -31,6 +31,57 @@ AprilTagBoard::AprilTagBoard(const Size& _arraySize,
 //}
 
 
+unsigned long long AprilTagBoard::codeAt( int i, int j ) const
+{
+  assert( i >= 0 && i < arraySize().width &&
+      j >= 0 && j < arraySize().height );
+  return _tagFamily.codes[ j*arraySize().width + i ];
+}
+
+
+//===========================================================================
+// Operators for std::transform
+//===========================================================================
+
+struct BoardToWorld
+{
+  const Point3f &_origin, &_pb1, &_pb2; 
+  const Point2f &_scale;
+
+  BoardToWorld( const Point3f &origin, const Point3f &pb1, const Point3f &pb2, const Point2f &scale = Point2f(1,1) )
+    : _origin(origin), _pb1(pb1), _pb2(pb2), _scale(scale)
+  {;}
+
+  Point3f operator()( const Point2f &p ) const
+  {
+    Point2f scaled( p.x * _scale.x, p.y * _scale.y );
+    return _origin + (scaled.x * _pb1) + (scaled.y * _pb2);
+  }
+};
+
+
+struct Mult
+{
+  float m;
+
+  Mult(int mult) 
+    : m((float)mult) {}
+
+  Point2f operator()(const Point2f& p) const 
+  { return p * m; }
+};
+
+
+static vector<Point2f> generateCorners( const Point2f &origin, const Point2f &dxdy )
+{
+  vector<Point2f> c;
+  c.push_back( origin );
+  c.push_back( origin + Point2f( dxdy.x, 0 ) );
+  c.push_back( origin + Point2f( dxdy.x, dxdy.y ) );
+  c.push_back( origin + Point2f( 0, dxdy.y ) );
+  return c;
+}
+
 
 //===========================================================================
 //===========================================================================
@@ -56,18 +107,7 @@ void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& 
     out.push_back( p1 + step * (float)n);
 }
 
-struct Mult
-{
-  float m;
-
-  Mult(int mult) 
-    : m((float)mult) {}
-
-  Point2f operator()(const Point2f& p) const 
-  { return p * m; }
-};
-
-vector<Point> AprilTagBoardGenerator::generateContour( const vector<Point3f> &worldPts, 
+vector<Point> AprilTagBoardGenerator::worldToImage( const vector<Point3f> &worldPts, 
     const Mat& camMat, const Mat& distCoeffs)  const
 {
   vector<Point3f> edges3d;
@@ -162,28 +202,73 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   //    corners.clear();
   //    projectPoints( Mat(corners3d), rvec, tvec, camMat, distCoeffs, corners);
 
-  // Identify the April code centers
+  // Identify the April tag origins
   Point2f scale( boardSize.width / _board.boardSize().width,
-      boardSize.height / _board.boardSize().height );
+                 boardSize.height / _board.boardSize().height );
 
-  vector< Point3f > tagCentersWorld;
+
+  vector< vector<Point2f> > tagPixels;
+  vector< Point2f > tagOrigins;
   for( int i = 0; i < _board.arraySize().width; ++i ) {
     for( int j = 0; j < _board.arraySize().height; ++j ) {
-      Point2f offset( (i+1) * _board.tagSpacing(), (j+1) * _board.tagSpacing() );
+      Point2f tagOrigin( (i+1) * _board.tagSpacing() - (0.5 * _board.tagSize()), 
+          (j+1) * _board.tagSpacing() - (0.5 * _board.tagSize()) );
 
-      Point2f scaled( offset.x * scale.x, offset.y * scale.y );
-      Point3f world( origin + (pb1*scaled.x) + (pb2 * scaled.y) );
+      tagOrigins.push_back( tagOrigin );
 
-      cout << "Offset: " << offset << endl;
-      cout << "Scaled: " << scaled << endl;
-      cout << "World: " << world << endl;
+      unsigned long long code = _board.codeAt( i, j );
 
-      tagCentersWorld.push_back( world );
+      // First, build a bitmap of each tag 
+      Mat bitmap( Mat::ones( Size( _board.tagSizePixels(), _board.tagSizePixels() ), CV_8U ) );
+      Mat roi( bitmap, Rect( 1,1, _board.tagDimension(), _board.tagDimension() ) );
+      roi.setTo( 0 );
+
+      for( int x = 0; x < _board.tagDimension(); ++x ) {
+        for( int y = 0; y < _board.tagDimension(); ++y ) {
+          if( code & (1 << (y*_board.tagDimension() + x)) )
+            roi.at<uint8_t>(x,y) = 1;
+        }
+      }
+
+
+      for( int x = 0; x < _board.tagSizePixels(); ++x ) {
+        for( int y = 0; y < _board.tagSizePixels(); ++y ) {
+          if( bitmap.at<uint8_t>(x,y) != 0 ) {
+            vector<Point2f> corners;
+            Point2f bitOrigin = tagOrigin + Point2f( x * _board.pixelSize(), y * _board.pixelSize() );
+            tagPixels.push_back( generateCorners( bitOrigin, Point2f(_board.pixelSize(), _board.pixelSize() ) ) );
+          }
+        }
+      }
+
+
+
+
+
+      cout << "Finished: " << endl << bitmap << endl;
+
+
     }
   }
 
-  vector< Point2f > tagCentersImage;
-  projectPoints( Mat(tagCentersWorld), rvec, tvec, camMat, distCoeffs, tagCentersImage );
+  // Process all of the board-frame contours into world-frame contours
+  vector< vector<Point > > tagContours;
+  for( vector< vector<Point2f> >::iterator itr = tagPixels.begin(); itr != tagPixels.end(); ++itr ) {
+
+    vector< Point3f > tagContourWorld;
+    std::transform( (*itr).begin(), (*itr).end(),
+        back_inserter(tagContourWorld),
+        BoardToWorld(origin, pb1, pb2, scale) );
+
+    tagContours.push_back( worldToImage( tagContourWorld, camMat, distCoeffs ) );
+  }
+
+
+  vector< Point3f > tagOriginsWorld;
+  std::transform( tagOrigins.begin(), tagOrigins.end(), back_inserter(tagOriginsWorld),
+      BoardToWorld( origin, pb1, pb2, scale ) );
+  vector< Point2f > tagOriginsImage;
+  projectPoints( Mat(tagOriginsWorld), rvec, tvec, camMat, distCoeffs, tagOriginsImage );
 
   // -- Draw the outline of the board --
   vector <Point3f> boardCorners(4);
@@ -203,7 +288,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   cout << "Board corner 3: " << boardCorners[3] << endl;
 
   vector< vector<Point > > outlineContour;
-  outlineContour.push_back( generateContour( boardCorners, camMat, distCoeffs ) );
+  outlineContour.push_back( worldToImage( boardCorners, camMat, distCoeffs ) );
 
   // Draw everything to the canvas
   Mat result;
@@ -211,25 +296,25 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
   {
     result = bg.clone();
     drawContours(result, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
-    //        drawContours(result, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
-    
-    for( vector< Point2f >::iterator itr = tagCentersImage.begin(); 
-         itr != tagCentersImage.end(); ++itr ) {
-      cv::circle( result, (*itr), 5, Scalar( 255,0,255 ), -1 );
-    }
+    drawContours(result, tagContours, -1, Scalar::all(0), CV_FILLED, CV_AA);
+
+    ///for( vector< Point2f >::iterator itr = tagOriginsImage.begin(); 
+    ///    itr != tagOriginsImage.end(); ++itr ) {
+    ///  cv::circle( result, (*itr), 5, Scalar( 255,0,255 ), -1 );
+    ///}
   }
   else
   {
     Mat tmp;
     resize(bg, tmp, bg.size() * _rendererResolutionMultiplier);
     drawContours(tmp, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
-    //        drawContours(tmp, squares_black, -1, Scalar::all(0), CV_FILLED, CV_AA);
+    drawContours(tmp, tagContours, -1, Scalar::all(0), CV_FILLED, CV_AA);
 
-    for( vector< Point2f >::iterator itr = tagCentersImage.begin(); 
-         itr != tagCentersImage.end(); ++itr ) {
-      cv::circle( tmp, (*itr)*_rendererResolutionMultiplier, 5*_rendererResolutionMultiplier,
-          Scalar( 255,0,255 ), -1 );
-    }
+    //for( vector< Point2f >::iterator itr = tagOriginsImage.begin(); 
+    //    itr != tagOriginsImage.end(); ++itr ) {
+    //  cv::circle( tmp, (*itr)*_rendererResolutionMultiplier, 5*_rendererResolutionMultiplier,
+    //      Scalar( 255,0,255 ), -1 );
+    //}
 
 
     resize(tmp, result, bg.size(), 0, 0, INTER_AREA);

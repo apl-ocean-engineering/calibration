@@ -12,13 +12,13 @@ LD = g++
 
 
 calibration: calibration.o
-	$(LD) -o $@ $(LDFLAGS) $< $(LIBS)
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
 
 calibration_artificial: calibration_artificial.o chess_board_generator.o
-	$(LD) -o $@ $(LDFLAGS) $? $(LIBS)
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
 
 calibration_april: calibration_april.o april_tag_board_generator.o
-	$(LD) -o $@ $(LDFLAGS) $? $(LIBS)
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
 
 
 .cpp.o:
