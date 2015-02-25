@@ -40,14 +40,10 @@ namespace cv {
       { return Size2f( _tagSpacing * (arraySize().width-1) +  (2*margin()),
                        _tagSpacing * (arraySize().height-1)  + (2*margin()) ); }
 
-      float boardAspectRatio( void ) const
-      { return boardSize().height * 1.0 / boardSize().width; }
 
       unsigned int tagSizePixels( void ) const {
-       unsigned int edgeLength = _tagFamily.dimension + 2*_tagFamily.blackBorder;
-       return edgeLength;
+        return _tagFamily.dimension + 2*_tagFamily.blackBorder;
      }
-
 
      unsigned int tagBits( void ) const { return _tagFamily.bits; }
      unsigned int tagDimension( void ) const { return _tagFamily.dimension; }
@@ -81,7 +77,7 @@ public:
     //
     // Returns the rendered image.
     //
-    Mat generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const;
+    Mat generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const;
 
 private:
 
@@ -96,9 +92,7 @@ private:
         const Mat& camMat, const Mat& distCoeffs)  const;
 
     Mat drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
-        const Point3f& origin, const Point3f& pb1, const Point3f& pb2,
-        const Size2f &boardSize,
-        vector<Point2f>& corners) const;
+        const Point3f& origin, const Point3f& pb1, const Point3f& pb2 ) const;
 
     void generateBasis(Point3f& pb1, Point3f& pb2) const;
 

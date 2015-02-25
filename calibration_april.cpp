@@ -29,7 +29,7 @@ static void help()
 
 
 const Size imgSize(800, 600);
-const Size brdSize(2,1);
+const Size brdSize(5,4);
 const size_t brds_num = 10;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
@@ -85,9 +85,8 @@ int main( int argc, char **argv )
 
   cout << "Generating chessboards...";
   vector<Mat> boards(brds_num);
-  vector<Point2f> tmp;
   for(size_t i = 0; i < brds_num; ++i)
-    cout << (boards[i] = apbGen.generateImageOfBoard(background, camMat, distCoeffs, tmp), i) << " ";
+    cout << (boards[i] = apbGen.generateImageOfBoard(background, camMat, distCoeffs), i) << " ";
   cout << " Done" << endl;
 
   //vector<Point3f> chessboard3D = apbGen.worldPoints();

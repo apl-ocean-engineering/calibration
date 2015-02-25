@@ -39,7 +39,7 @@ unsigned int AprilTagBoard::codeIdxAt( int i, int j ) const
 {
   assert( i >= 0 && i < arraySize().width &&
       j >= 0 && j < arraySize().height );
-  return _tags.at<uint16_t>(i,j);
+  return _tags.at<uint16_t>(j,i);
 }
 
 unsigned long long AprilTagBoard::codeAt( int i, int j ) const
@@ -178,21 +178,14 @@ void cv::AprilTagBoardGenerator::generateBasis(Point3f& pb1, Point3f& pb2) const
 }
 
 Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs,
-    const Point3f& origin, const Point3f& pb1, const Point3f& pb2,
-    const Size2f &boardSize, 
-    vector<Point2f>& corners) const
+    const Point3f& origin, const Point3f& pb1, const Point3f& pb2 ) const
 {
 
     // origin is 3D point for the center of the board in world coords
     // boardOrigin is the location of the upper left corner
     // of the board.
-    const Point3f boardOrigin( origin - pb1 * (boardSize.width/2.0) + pb2 * (boardSize.height/2.0) );
+    const Point3f boardOrigin( origin - pb1 * (_board.boardSize().width/2.0) + pb2 * (_board.boardSize().height/2.0) );
     cout << boardOrigin << endl;
-
-  // Identify the April tag origins
-  Point2f scale( boardSize.width / _board.boardSize().width,
-                 boardSize.height / _board.boardSize().height );
-
 
   vector< vector<Point2f> > tagPixels;
   vector< Point2f > tagOrigins;
@@ -240,7 +233,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     vector< Point3f > tagContourWorld;
     std::transform( (*itr).begin(), (*itr).end(),
         back_inserter(tagContourWorld),
-        BoardToWorld(boardOrigin, pb1, pb2, scale) );
+        BoardToWorld(boardOrigin, pb1, pb2) );
 
     tagContours.push_back( worldToImage( tagContourWorld, camMat, distCoeffs ) );
   }
@@ -248,7 +241,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
 
   vector< Point3f > tagOriginsWorld;
   std::transform( tagOrigins.begin(), tagOrigins.end(), back_inserter(tagOriginsWorld),
-      BoardToWorld( boardOrigin, pb1, pb2, scale ) );
+      BoardToWorld( boardOrigin, pb1, pb2) );
   vector< Point2f > tagOriginsImage;
   projectPoints( Mat(tagOriginsWorld), rvec, tvec, camMat, distCoeffs, tagOriginsImage );
 
@@ -261,7 +254,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
 
   vector <Point3f> boardCornersWorld;
   std::transform( boardCorners.begin(), boardCorners.end(), back_inserter( boardCornersWorld ),
-      BoardToWorld( boardOrigin, pb1, pb2, scale ) );
+      BoardToWorld( boardOrigin, pb1, pb2) );
 
   vector< vector<Point > > outlineContour;
   outlineContour.push_back( worldToImage( boardCornersWorld, camMat, distCoeffs ) );
@@ -299,6 +292,8 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     drawContours(tmp, tagContours, -1, Scalar::all(0), CV_FILLED, CV_AA);
 
 
+#ifdef DRAW_COORDINATE_SYSTEM
+    // Draw the coordinate system
     vector< Point3f > worldOrigins(3);
     const float axisLength = 1;
     worldOrigins[0] = origin;
@@ -310,12 +305,12 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     for( int i = 0; i < 3; ++i ) 
       imageOrigins[i] *= _rendererResolutionMultiplier;
 
-    // Draw the coordinate system
     cv::circle( tmp, imageOrigins[0], 4*_rendererResolutionMultiplier, Scalar(0,0,255 ), -1 );
     cv::line( tmp, imageOrigins[0], imageOrigins[1],
         Scalar(255,0,0), 4*_rendererResolutionMultiplier );
     cv::line( tmp, imageOrigins[0], imageOrigins[2],
         Scalar(0,255,0), 4*_rendererResolutionMultiplier );
+#endif
 
     //for( vector< Point2f >::iterator itr = tagOriginsImage.begin(); 
     //    itr != tagOriginsImage.end(); ++itr ) {
@@ -344,7 +339,7 @@ Point2f cv::AprilTagBoardGenerator::fieldOfView( const Mat &camMat, const Size &
   return Point2f( fovx, fovy );
 }
 
-Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs, vector<Point2f>& corners) const
+Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const
 {
   Point2f fov = fieldOfView( camMat, bg.size() );
 
@@ -365,7 +360,7 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
   for(;;) {
     // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
     // and "elevation" (angle in the verical axis)
-    float d1 = static_cast<float>(rng.uniform(1.0, 2.0));
+    float d1 = static_cast<float>(rng.uniform(1.0, 8.0));
     float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
     float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 
@@ -406,9 +401,6 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
       break;
   }
 
-  // Define the board origin as its center
-  Size2f boardSize(1,1);
-
-  return drawBoard(bg, camMat, distCoeffs, p, pb1, pb2, boardSize,  corners);
+  return drawBoard(bg, camMat, distCoeffs, p, pb1, pb2 );
 }
 
