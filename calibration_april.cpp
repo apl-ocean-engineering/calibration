@@ -30,7 +30,7 @@ static void help()
 
 const Size imgSize(800, 600);
 const Size brdSize(5,4);
-const size_t brds_num = 10;
+const size_t brds_num = 5;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
@@ -128,6 +128,23 @@ int main( int argc, char **argv )
     waitKey(0);
 
     if( detections.size() > 5 ) {
+      
+      vector<Point3f> worldPts;
+      vector<Point2f> imagePts;
+
+      for (int i=0; i < detections.size(); i++) {
+        if( apb.hasId( detections[i].id ) ) {
+          Point3f detectionWorld;
+          apb.idLocation( detections[i].id, detectionWorld );
+
+        imagePts.push_back( Point2f( detections[i].cxy.first, detections[i].cxy.second ) );
+        worldPts.push_back( detectionWorld );
+      }
+      }
+
+        objectPoints.push_back( worldPts );
+        imagePoints.push_back( imagePts );
+
       // print out each detection
       //for (int i=0; i<detections.size(); i++) {
       //  print_detection(detections[i]);
@@ -142,19 +159,9 @@ int main( int argc, char **argv )
 
     cout << endl;
 
-    //        if (found)
-    //        {
-    //            imagePoints.push_back(tmp);
-    //            objectPoints.push_back(chessboard3D);
-    //            cout<< "-found ";
-    //        }
-
-    //        drawChessboardCorners(boards[i], apbGen.cornersSize(), Mat(tmp), found);
   }
   cout << "Done" << endl;
   cvDestroyAllWindows();
-
-  return 0;
 
   Mat camMat_est;
   Mat distCoeffs_est;

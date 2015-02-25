@@ -48,8 +48,12 @@ namespace cv {
      unsigned int tagBits( void ) const { return _tagFamily.bits; }
      unsigned int tagDimension( void ) const { return _tagFamily.dimension; }
 
-     unsigned int codeIdxAt( int i, int j ) const;
+     unsigned int codeIdAt( int i, int j ) const;
      unsigned long long codeAt( int i, int j ) const;
+
+
+     bool hasId( unsigned int id ) const;
+     bool idLocation( unsigned int id, Point3f &pt  ) const;
 
     private:
 

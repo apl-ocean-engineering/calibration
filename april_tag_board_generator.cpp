@@ -24,7 +24,7 @@ AprilTagBoard::AprilTagBoard( const AprilTags::TagCodes &tagCode,
 
   for( int i = 0; i < arraySize().width; ++i )
     for( int j = 0; j < arraySize().height; ++j )
-      cout << i << ' ' << j << ": " << codeIdxAt(i,j) << ' ' << std::hex << codeAt(i,j) << std::dec << endl;
+      cout << i << ' ' << j << ": " << codeIdAt(i,j) << ' ' << std::hex << codeAt(i,j) << std::dec << endl;
 }
 
 //vector<Point3f> worldPoints( void )
@@ -35,7 +35,7 @@ AprilTagBoard::AprilTagBoard( const AprilTags::TagCodes &tagCode,
 //      chessboard3D.push_back(Point3f(i*_tagSpacing, j*_tagSpacing, 0));
 //}
 
-unsigned int AprilTagBoard::codeIdxAt( int i, int j ) const
+unsigned int AprilTagBoard::codeIdAt( int i, int j ) const
 {
   assert( i >= 0 && i < arraySize().width &&
       j >= 0 && j < arraySize().height );
@@ -46,7 +46,29 @@ unsigned long long AprilTagBoard::codeAt( int i, int j ) const
 {
   assert( i >= 0 && i < arraySize().width &&
       j >= 0 && j < arraySize().height );
-  return _tagFamily.codes[ codeIdxAt(i,j) ];
+  return _tagFamily.codes[ codeIdAt(i,j) ];
+}
+
+bool AprilTagBoard::hasId( unsigned int id ) const
+{
+  for( int i = 0; i < arraySize().width; ++i )
+    for( int j = 0; j < arraySize().height; ++j )
+    if( codeIdAt(i,j) == id ) return true;
+
+  return false;
+}
+
+bool AprilTagBoard::idLocation( unsigned int id, Point3f &pt ) const
+{
+  for( int i = 0; i < arraySize().width; ++i )
+    for( int j = 0; j < arraySize().height; ++j )
+      if( codeIdAt(i,j) == id ) {
+        pt = Point3f( margin() + tagSpacing()*i,
+                     -( margin() + tagSpacing()*j ), 0 );
+      }
+
+
+  return false;
 }
 
 
