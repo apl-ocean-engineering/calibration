@@ -89,7 +89,7 @@ struct BoardToWorld
   {
 
     Point2f scaled( p.x * _scale.x, p.y * _scale.y );
-    return _origin + (scaled.x * _pb1) - (scaled.y * _pb2);
+    return _origin + (scaled.x * _pb1) + (scaled.y * _pb2);
   }
 };
 
@@ -120,8 +120,8 @@ static vector<Point2f> generateCorners( const Point2f &origin, const Point2f &dx
 //===========================================================================
 //===========================================================================
 
-const double AprilTagBoardGenerator::_minCos = 0.707;
-const double AprilTagBoardGenerator::_cov = 0.5;
+const double AprilTagBoardGenerator::_minCos = 0.85; // 0.707;
+const double AprilTagBoardGenerator::_cov = 0.8;
 const int AprilTagBoardGenerator::_rendererResolutionMultiplier = 4;
 
 const size_t AprilTagBoardGenerator::_segmentsPerEdge = 200;
@@ -206,15 +206,18 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     // origin is 3D point for the center of the board in world coords
     // boardOrigin is the location of the upper left corner
     // of the board.
-    const Point3f boardOrigin( origin - pb1 * (_board.boardSize().width/2.0) + pb2 * (_board.boardSize().height/2.0) );
-    cout << boardOrigin << endl;
+    //const Point3f boardOrigin( origin - pb1 * (_board.boardSize().width/2.0) + pb2 * (_board.boardSize().height/2.0) );
+    //cout << boardOrigin << endl;
+    const Point3f boardOrigin( origin );
 
   vector< vector<Point2f> > tagPixels;
   vector< Point2f > tagOrigins;
   for( int i = 0; i < _board.arraySize().width; ++i ) {
     for( int j = 0; j < _board.arraySize().height; ++j ) {
-      Point2f tagOrigin( _board.margin() + i * _board.tagSpacing() - (0.5 * _board.tagSize()), 
-                         _board.margin() + j * _board.tagSpacing() - (0.5 * _board.tagSize()) );
+      //Point2f tagOrigin( _board.margin() + i * _board.tagSpacing() - (0.5 * _board.tagSize()), 
+      //                   _board.margin() + j * _board.tagSpacing() - (0.5 * _board.tagSize()) );
+      Point2f tagOrigin( _board.margin() + i * _board.tagSpacing(),
+                         _board.margin() + j * _board.tagSpacing() );
 
       tagOrigins.push_back( tagOrigin );
 
@@ -313,7 +316,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
     drawContours(tmp, outlineContour, -1, Scalar::all(255), CV_FILLED, CV_AA);
     drawContours(tmp, tagContours, -1, Scalar::all(0), CV_FILLED, CV_AA);
 
-
+#define DRAW_COORDINATE_SYSTEM
 #ifdef DRAW_COORDINATE_SYSTEM
     // Draw the coordinate system
     vector< Point3f > worldOrigins(3);
@@ -391,14 +394,14 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
     p.x = sin(ah) * d1;
     p.y = p.z * tan(av);
 
-
     generateBasis(pb1, pb2);
 
     Point3f pb3( pb1.cross(pb2) );
 
-    // Front of calibration image must be pointing at camera
-    // (that is, if +Z of image plane is pointing away from camera, try again...
-    if( pb3.z > 0 ) continue;
+    // The coordinate system of the image must point in the same direction
+    // as the system of the camera
+    // (that is, if +Z of image plane is pointing towards the camera, try again...
+    if( pb3.z < 0 ) continue;
 
 
     vector<Point3f> pts3d(4);
@@ -423,6 +426,9 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
       break;
   }
 
-  return drawBoard(bg, camMat, distCoeffs, p, pb1, pb2 );
+  // Define an origin in the upper left of the calibration image
+    Point3f origin( p - pb1 * cbHalfWidth - cbHalfHeight * pb2 );
+
+  return drawBoard(bg, camMat, distCoeffs, origin, pb1, pb2 );
 }
 

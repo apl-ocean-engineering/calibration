@@ -32,13 +32,13 @@ namespace cv {
       // These are now in "real units"
       // when the board is rendered...
       float tagSpacing( void ) const { return _tagSpacing; }
-      float margin( void ) const { return _tagSize; }
+      float margin( void ) const { return _tagSize * 0.5; }
       float tagSize( void ) const { return _tagSize; }
       float pixelSize( void ) const  { return _tagSize / tagSizePixels(); }
 
       Size2f boardSize( void ) const 
-      { return Size2f( _tagSpacing * (arraySize().width-1) +  (2*margin()),
-                       _tagSpacing * (arraySize().height-1)  + (2*margin()) ); }
+      { return Size2f( _tagSpacing * (arraySize().width-1) + _tagSize + (2*margin()),
+                       _tagSpacing * (arraySize().height-1)  + _tagSize + (2*margin()) ); }
 
 
       unsigned int tagSizePixels( void ) const {
