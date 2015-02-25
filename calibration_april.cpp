@@ -30,7 +30,7 @@ static void help()
 
 const Size imgSize(800, 600);
 const Size brdSize(2,1);
-const size_t brds_num = 1;
+const size_t brds_num = 10;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
@@ -69,25 +69,26 @@ int main( int argc, char **argv )
   AprilTags::TagCodes tagCodes = AprilTags::tagCodes16h5;
   AprilTags::TagDetector tagDetector( tagCodes );
 
-  cout << "Initializing April board..." << endl;
-  AprilTagBoard apb( brdSize );
+  cout << "Initializing April board...";
+  AprilTagBoard apb( tagCodes, brdSize );
 
   AprilTagBoardGenerator apbGen( apb );
-  cout << "Done" << endl;
+  cout << " Done" << endl;
 
   // Initialize camera parameters
   Mat_<double> camMat(3, 3);
   camMat << 300., 0., background.cols/2., 0, 300., background.rows/2., 0., 0., 1.;
 
   Mat_<double> distCoeffs(1, 5);
-  distCoeffs << 1.2, 0.2, 0., 0., 0.;
+  //distCoeffs << 1.2, 0.2, 0., 0., 0.;
+  distCoeffs << 0.0, 0.0, 0., 0., 0.;
 
   cout << "Generating chessboards...";
   vector<Mat> boards(brds_num);
   vector<Point2f> tmp;
   for(size_t i = 0; i < brds_num; ++i)
     cout << (boards[i] = apbGen.generateImageOfBoard(background, camMat, distCoeffs, tmp), i) << " ";
-  cout << "Done" << endl;
+  cout << " Done" << endl;
 
   //vector<Point3f> chessboard3D = apbGen.worldPoints();
 
@@ -95,28 +96,40 @@ int main( int argc, char **argv )
   vector< vector<Point3f> > objectPoints;
   vector< vector<Point2f> > imagePoints;
 
-  cout << endl << "Finding chessboards' corners...";
+  cout << "Finding April tags..." << endl;
   for(size_t i = 0; i < brds_num; ++i)
   {
     cout << "Board " << i << ": ";
     namedWindow( mainWindow); 
     imshow(mainWindow, boards[i]);
-    waitKey(0);
+    //waitKey(10);
 
-    vector<AprilTags::TagDetection> detections = tagDetector.extractTags(boards[i]);
+    Mat greyscale( boards[i].size(), CV_8UC1 );
+    cvtColor( boards[i], greyscale, CV_BGR2GRAY );
 
-    cout << "found " << detections.size();
+    vector<AprilTags::TagDetection> detections = tagDetector.extractTags(greyscale);
 
+    cout << "found " << detections.size() << " tags:" << endl;
+
+    // Convert detections to contours to draw
     // Draw the current image with detections
-    for (int i=0; i<detections.size(); i++) {
-      detections[i].draw(boards[i]);
+    vector< vector<Point > > detectionOutlines;
+    for (int i=0; i < detections.size(); i++) {
+      cout << "Id " << detections[i].id << ": " << std::hex << detections[i].code << std::dec << endl;
+
+      vector<Point> detectionCorners(4);
+      for( int j = 0; j < 4; ++j ) {
+        detectionCorners[j] = Point( detections[i].p[j].first, detections[i].p[j].second );
+      }
+      detectionOutlines.push_back( detectionCorners );
     }
+    drawContours(boards[i], detectionOutlines, -1, Scalar(0,0,255), 4, CV_AA);
+
     imshow(mainWindow, boards[i]); 
-    waitKey(1000);
+    waitKey(0);
 
     if( detections.size() > 5 ) {
       // print out each detection
-      cout << detections.size() << " tags detected:" << endl;
       //for (int i=0; i<detections.size(); i++) {
       //  print_detection(detections[i]);
       //}

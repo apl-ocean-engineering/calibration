@@ -22,7 +22,8 @@ namespace cv {
   {
     public:
 
-      AprilTagBoard( const Size &arraySize, const float tagSize = 1, 
+      AprilTagBoard( const AprilTags::TagCodes &tagCode,
+          const Size &arraySize, const float tagSize = 1, 
           const float tagSpacing = 1.5 );
 
       Size arraySize( void ) const { return _arraySize; }
@@ -51,6 +52,7 @@ namespace cv {
      unsigned int tagBits( void ) const { return _tagFamily.bits; }
      unsigned int tagDimension( void ) const { return _tagFamily.dimension; }
 
+     unsigned int codeIdxAt( int i, int j ) const;
      unsigned long long codeAt( int i, int j ) const;
 
     private:
