@@ -29,7 +29,7 @@ namespace cv {
       Size arraySize( void ) const { return _arraySize; }
       size_t length() const { return _arraySize.area(); }
 
-      // These are all in "virtual units" which are scaled to world units
+      // These are now in "real units"
       // when the board is rendered...
       float tagSpacing( void ) const { return _tagSpacing; }
       float margin( void ) const { return _tagSize; }

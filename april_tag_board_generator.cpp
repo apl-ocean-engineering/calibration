@@ -300,7 +300,7 @@ Mat cv::AprilTagBoardGenerator::drawBoard(const Mat& bg, const Mat& camMat, cons
 
 
     vector< Point3f > worldOrigins(3);
-    const float axisLength = 2;
+    const float axisLength = 1;
     worldOrigins[0] = origin;
     worldOrigins[1] = origin + pb1 * axisLength;
     worldOrigins[2] = origin + pb2 * axisLength;
@@ -350,38 +350,43 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
 
   RNG& rng = theRNG();
 
-  // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
-  // and "elevation" (angle in the verical axis)
-  float d1 = static_cast<float>(rng.uniform(0.1, 10.0));
-  float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
-  float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
-
-  // Generate point for center of board.
-  Point3f p;
-  p.z = cos(ah) * d1;
-  p.x = sin(ah) * d1;
-  p.y = p.z * tan(av);
+  // Apparent half width/height
+  // At unit distance (norm(p)=1), the board is half the FOV wide
+  // Then the height is set by aspect ratio
+  //float cbHalfWidth = static_cast<float>(norm(p) * sin( min(fov.x, fov.y) * 0.5 * CV_PI / 180));
+  //float cbHalfHeight = cbHalfWidth * _board.boardAspectRatio();
+  float cbHalfWidth = _board.boardSize().width / 2.0;
+  float cbHalfHeight = _board.boardSize().height / 2.0;
 
   // Generate basis vectors for the board
+    Point3f p;
   Point3f pb1, pb2;
+
   for(;;) {
+    // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
+    // and "elevation" (angle in the verical axis)
+    float d1 = static_cast<float>(rng.uniform(1.0, 2.0));
+    float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
+    float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
+
+    // Generate point for center of board.
+    p.z = cos(ah) * d1;
+    p.x = sin(ah) * d1;
+    p.y = p.z * tan(av);
+
+
     generateBasis(pb1, pb2);
 
     Point3f pb3( pb1.cross(pb2) );
 
-    if( pb3.z < 0 ) break;
-  }
+    // Front of calibration image must be pointing at camera
+    // (that is, if +Z of image plane is pointing away from camera, try again...
+    if( pb3.z > 0 ) continue;
 
-  // Apparent half width/height
-  // At unit distance (norm(p)=1), the board is half the FOV wide
-  // Then the height is set by aspect ratio
-  float cbHalfWidth = static_cast<float>(norm(p) * sin( min(fov.x, fov.y) * 0.5 * CV_PI / 180));
-  float cbHalfHeight = cbHalfWidth * _board.boardAspectRatio();
 
-  vector<Point3f> pts3d(4);
-  vector<Point2f> pts2d(4);
-  for(;;)
-  {
+    vector<Point3f> pts3d(4);
+    vector<Point2f> pts2d(4);
+
     // Project corners of the board in 3D
     pts3d[0] = p + pb1 * cbHalfWidth - cbHalfHeight * pb2;
     pts3d[1] = p + pb1 * cbHalfWidth + cbHalfHeight * pb2;
@@ -399,16 +404,11 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
 
     if ( inrect1 && inrect2 && inrect3 && inrect4)
       break;
-
-    // Otherwise shrink, maintaining aspect ratio
-    cbHalfWidth*=0.8f;
-    cbHalfHeight = cbHalfWidth * _board.boardAspectRatio();
   }
 
   // Define the board origin as its center
-  Point3f origin(p);
-  Size2f   boardSize( 2 * cbHalfWidth, 2 * cbHalfHeight );
+  Size2f boardSize(1,1);
 
-  return drawBoard(bg, camMat, distCoeffs, origin, pb1, pb2, boardSize,  corners);
+  return drawBoard(bg, camMat, distCoeffs, p, pb1, pb2, boardSize,  corners);
 }
 
