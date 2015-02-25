@@ -63,8 +63,8 @@ bool AprilTagBoard::idLocation( unsigned int id, Point3f &pt ) const
   for( int i = 0; i < arraySize().width; ++i )
     for( int j = 0; j < arraySize().height; ++j )
       if( codeIdAt(i,j) == id ) {
-        pt = Point3f( margin() + tagSpacing()*i,
-                     -( margin() + tagSpacing()*j ), 0 );
+        pt = Point3f( margin() + tagSpacing()*i + 0.5 * tagSize(),
+                    ( margin() + tagSpacing()*j ) + 0.5 * tagSize(), 0 );
       }
 
 
@@ -87,9 +87,13 @@ struct BoardToWorld
 
   Point3f operator()( const Point2f &p ) const
   {
-
     Point2f scaled( p.x * _scale.x, p.y * _scale.y );
-    return _origin + (scaled.x * _pb1) + (scaled.y * _pb2);
+    Point3f out(_origin + (scaled.x * _pb1) + (scaled.y * _pb2));
+
+    //cout << "p: " << p << endl;
+    //cout << "out: " << out << endl;
+
+    return out;
   }
 };
 
@@ -105,6 +109,12 @@ struct Mult
   { return p * m; }
 };
 
+struct StripZAxis
+{
+  Point2f operator()(const Point3f &p ) const
+  { return Point2f( p.x, p.y ); }
+};
+
 
 static vector<Point2f> generateCorners( const Point2f &origin, const Point2f &dxdy )
 {
@@ -118,6 +128,27 @@ static vector<Point2f> generateCorners( const Point2f &origin, const Point2f &dx
 
 
 //===========================================================================
+
+vector<Point2f> SimulatedImage::boardToImage( const vector<Point3f> &boardPts, const Mat &camMat, const Mat &distCoeffs ) const
+{
+  Mat tvec(Mat::zeros(1, 3, CV_32F)), rvec;
+  Rodrigues(Mat::eye(3, 3, CV_32F), rvec);
+
+  vector <Point2f> boardPts2d;
+  std::transform( boardPts.begin(), boardPts.end(), back_inserter( boardPts2d ),
+      StripZAxis() );
+
+  vector <Point3f> worldPts;
+  vector <Point2f> imagePts;
+
+    std::transform( boardPts2d.begin(), boardPts2d.end(),
+        back_inserter( worldPts ), BoardToWorld( _origin, _pb1, _pb2 ) );
+  projectPoints( Mat(worldPts), rvec, tvec, camMat, distCoeffs, imagePts);
+
+  return imagePts;
+}
+
+
 //===========================================================================
 
 const double AprilTagBoardGenerator::_minCos = 0.85; // 0.707;
@@ -140,6 +171,7 @@ void cv::AprilTagBoardGenerator::generateEdge(const Point3f& p1, const Point3f& 
   for(size_t n = 0; n < _segmentsPerEdge; ++n)
     out.push_back( p1 + step * (float)n);
 }
+
 
 vector<Point> AprilTagBoardGenerator::worldToImage( const vector<Point3f> &worldPts, 
     const Mat& camMat, const Mat& distCoeffs)  const
@@ -364,7 +396,7 @@ Point2f cv::AprilTagBoardGenerator::fieldOfView( const Mat &camMat, const Size &
   return Point2f( fovx, fovy );
 }
 
-Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const
+SimulatedImage cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const
 {
   Point2f fov = fieldOfView( camMat, bg.size() );
 
@@ -385,7 +417,7 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
   for(;;) {
     // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
     // and "elevation" (angle in the verical axis)
-    float d1 = static_cast<float>(rng.uniform(1.0, 8.0));
+    float d1 = static_cast<float>(rng.uniform(1.0, 10.0));
     float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
     float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 
@@ -429,6 +461,7 @@ Mat cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, const Mat& c
   // Define an origin in the upper left of the calibration image
     Point3f origin( p - pb1 * cbHalfWidth - cbHalfHeight * pb2 );
 
-  return drawBoard(bg, camMat, distCoeffs, origin, pb1, pb2 );
+  return SimulatedImage( drawBoard(bg, camMat, distCoeffs, origin, pb1, pb2 ), 
+      origin, pb1, pb2 );
 }
 

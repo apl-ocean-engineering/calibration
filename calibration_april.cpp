@@ -30,7 +30,7 @@ static void help()
 
 const Size imgSize(800, 600);
 const Size brdSize(5,4);
-const size_t brds_num = 5;
+const size_t brds_num = 20;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
@@ -84,9 +84,11 @@ int main( int argc, char **argv )
   distCoeffs << 0.0, 0.0, 0., 0., 0.;
 
   cout << "Generating chessboards...";
-  vector<Mat> boards(brds_num);
-  for(size_t i = 0; i < brds_num; ++i)
-    cout << (boards[i] = apbGen.generateImageOfBoard(background, camMat, distCoeffs), i) << " ";
+  vector<SimulatedImage> boards;
+  for(size_t i = 0; i < brds_num; ++i) {
+    cout << i << " ";
+boards.push_back( apbGen.generateImageOfBoard(background, camMat, distCoeffs) );
+  }
   cout << " Done" << endl;
 
   //vector<Point3f> chessboard3D = apbGen.worldPoints();
@@ -100,11 +102,11 @@ int main( int argc, char **argv )
   {
     cout << "Board " << i << ": ";
     namedWindow( mainWindow); 
-    imshow(mainWindow, boards[i]);
+    imshow(mainWindow, boards[i].image);
     //waitKey(10);
 
-    Mat greyscale( boards[i].size(), CV_8UC1 );
-    cvtColor( boards[i], greyscale, CV_BGR2GRAY );
+    Mat greyscale( boards[i].image.size(), CV_8UC1 );
+    cvtColor( boards[i].image, greyscale, CV_BGR2GRAY );
 
     vector<AprilTags::TagDetection> detections = tagDetector.extractTags(greyscale);
 
@@ -113,37 +115,41 @@ int main( int argc, char **argv )
     // Convert detections to contours to draw
     // Draw the current image with detections
     vector< vector<Point > > detectionOutlines;
-    for (int i=0; i < detections.size(); i++) {
-      cout << "Id " << detections[i].id << ": " << std::hex << detections[i].code << std::dec << endl;
+    for (int d=0; d < detections.size(); d++) {
+    //  cout << "Id " << detections[i].id << ": " << std::hex << detections[i].code << std::dec << endl;
 
       vector<Point> detectionCorners(4);
       for( int j = 0; j < 4; ++j ) {
-        detectionCorners[j] = Point( detections[i].p[j].first, detections[i].p[j].second );
+        detectionCorners[j] = Point( detections[d].p[j].first, detections[d].p[j].second );
       }
       detectionOutlines.push_back( detectionCorners );
     }
-    drawContours(boards[i], detectionOutlines, -1, Scalar(0,0,255), 4, CV_AA);
-
-    imshow(mainWindow, boards[i]); 
-    waitKey(0);
+    drawContours(boards[i].image, detectionOutlines, -1, Scalar(0,0,255), 4, CV_AA);
+    
 
     if( detections.size() > 5 ) {
       
       vector<Point3f> worldPts;
       vector<Point2f> imagePts;
 
-      for (int i=0; i < detections.size(); i++) {
-        if( apb.hasId( detections[i].id ) ) {
+      for (int d=0; d < detections.size(); d++) {
+        if( apb.hasId( detections[d].id ) ) {
           Point3f detectionWorld;
-          apb.idLocation( detections[i].id, detectionWorld );
+          apb.idLocation( detections[d].id, detectionWorld );
 
-        imagePts.push_back( Point2f( detections[i].cxy.first, detections[i].cxy.second ) );
+        imagePts.push_back( Point2f( detections[d].cxy.first, detections[d].cxy.second ) );
         worldPts.push_back( detectionWorld );
       }
       }
 
         objectPoints.push_back( worldPts );
         imagePoints.push_back( imagePts );
+
+        vector<Point2f> inImage = boards[i].boardToImage( worldPts, camMat, distCoeffs );
+
+        for( int j = 0; j < inImage.size(); ++j ) {
+          cv::circle( boards[i].image, inImage[j], 5, Scalar(255,255,0), -1 );
+        }
 
       // print out each detection
       //for (int i=0; i<detections.size(); i++) {
@@ -156,6 +162,9 @@ int main( int argc, char **argv )
     } else {
       cout<< " not enough.";
     }
+
+    imshow(mainWindow, boards[i].image); 
+    waitKey(0);
 
     cout << endl;
 

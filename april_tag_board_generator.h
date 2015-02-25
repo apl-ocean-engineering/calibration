@@ -67,6 +67,22 @@ namespace cv {
   };
 
 
+
+  class SimulatedImage 
+  {
+    public:
+      Mat image;
+
+      SimulatedImage( const Mat &img, const Point3f &origin, const Point3f &pb1, const Point3f &pb2 )
+        : image(img), _origin(origin), _pb1(pb1), _pb2(pb2) {;}
+
+vector<Point2f> boardToImage( const vector<Point3f> &boardPts, const Mat &camMat, const Mat &distCoeffs ) const;
+
+    private:
+
+      Point3f _origin, _pb1, _pb2;
+  };
+
 class AprilTagBoardGenerator 
 {
 public:
@@ -81,7 +97,8 @@ public:
     //
     // Returns the rendered image.
     //
-    Mat generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const;
+    SimulatedImage generateImageOfBoard(const Mat& bg, const Mat& camMat, const Mat& distCoeffs ) const;
+
 
 private:
 
