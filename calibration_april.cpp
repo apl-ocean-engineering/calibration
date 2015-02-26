@@ -13,6 +13,7 @@
 #include <AprilTags/TagDetector.h>
 
 #include "april_tag_board_generator.h"
+#include "april_tag_detection_set.h"
 
 using namespace cv;
 using namespace std;
@@ -87,7 +88,7 @@ int main( int argc, char **argv )
   vector<SimulatedImage> boards;
   for(size_t i = 0; i < brds_num; ++i) {
     cout << i << " ";
-boards.push_back( apbGen.generateImageOfBoard(background, camMat, distCoeffs) );
+    boards.push_back( apbGen.generateImageOfBoard(background, camMat, distCoeffs) );
   }
   cout << " Done" << endl;
 
@@ -109,6 +110,9 @@ boards.push_back( apbGen.generateImageOfBoard(background, camMat, distCoeffs) );
     cvtColor( boards[i].image, greyscale, CV_BGR2GRAY );
 
     vector<AprilTags::TagDetection> detections = tagDetector.extractTags(greyscale);
+
+    AprilTagDetectionSet set( detections );
+    set.filterByHomography();
 
     cout << "found " << detections.size() << " tags:" << endl;
 

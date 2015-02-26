@@ -2,6 +2,8 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#include <iomanip>
+
 #include <AprilTags/TagFamily.h>
 #include <AprilTags/Tag16h5.h>
 
@@ -22,9 +24,14 @@ AprilTagBoard::AprilTagBoard( const AprilTags::TagCodes &tagCode,
 {
   cv::randu( _tags, 0, _tagFamily.codes.size() );
 
-  for( int i = 0; i < arraySize().width; ++i )
-    for( int j = 0; j < arraySize().height; ++j )
-      cout << i << ' ' << j << ": " << codeIdAt(i,j) << ' ' << std::hex << codeAt(i,j) << std::dec << endl;
+  cout << endl;
+  for( int j = 0; j < arraySize().height; ++j ) {
+    for( int i = 0; i < arraySize().width; ++i )
+      cout << std::setw(4) << codeIdAt(i,j);
+    cout << endl;
+  }
+
+      //cout << i << ' ' << j << ": " << codeIdAt(i,j) << ' ' << std::hex << codeAt(i,j) << std::dec << endl;
 }
 
 //vector<Point3f> worldPoints( void )

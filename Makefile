@@ -5,7 +5,7 @@ all: $(APPS)
 
 APRILTAGS = ../apriltags/build
 
-CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3
+CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3 
 LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib
 LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc 
 LD = g++
@@ -17,7 +17,7 @@ calibration: calibration.o
 calibration_artificial: calibration_artificial.o chess_board_generator.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
 
-calibration_april: calibration_april.o april_tag_board_generator.o
+calibration_april: calibration_april.o april_tag_board_generator.o april_tag_detection_set.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
 
 
