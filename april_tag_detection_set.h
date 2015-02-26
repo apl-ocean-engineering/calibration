@@ -15,7 +15,7 @@ class AprilTagDetectionSet {
 
     AprilTagDetectionSet( const vector<TagDetection> detections );
 
-    void filterByHomography( void );
+    cv::Mat filterByHomography( void );
 
 
   private:

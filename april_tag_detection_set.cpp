@@ -48,7 +48,7 @@ DetectionNode *nearestNode( const vector< pair< Vector2d, DetectionNode *> > &ce
     double along = vector.dot( centers[i].first );
     double cos = along / (vector.norm() * centers[i].first.norm() );
 
-    cout << "To " << centers[i].second->detection.id << " is " << along << " cos " << cos << endl;
+    //cout << "To " << centers[i].second->detection.id << " is " << along << " cos " << cos << endl;
 
     if( (cos > cosLimit ) and (along > 0) ) 
       candidates[ along ] = centers[i].second;
@@ -61,29 +61,36 @@ DetectionNode *nearestNode( const vector< pair< Vector2d, DetectionNode *> > &ce
   return candidates.begin()->second;
 }
 
-void assignToGraph( const DetectionNode *node, Mat &graph, const int x, const int y )
+void assignToGraph( const DetectionNode *node, Mat &graph, const int x, const int y, int *limits )
 {
   assert( graph.at<int16_t>(y,x) == -1 || graph.at<int16_t>(y,x) == node->detection.id );
 
+  if( graph.at<int16_t>(y,x) != -1 ) return;
+
+  //cout << "Assign " << node->detection.id << endl;
+
   graph.at<int16_t>(y,x) = node->detection.id;
 
-  if( node->left ) assignToGraph( node->left, graph, x-1, y );
-  if( node->right ) assignToGraph( node->right, graph, x+1, y );
-  if( node->up )   assignToGraph( node->up, graph, x, y+1 );
-  if( node->down ) assignToGraph( node->down, graph, x, y-1 );
+  limits[0] = std::min( x, limits[0] );
+  limits[1] = std::max( x, limits[1] );
+  limits[2] = std::min( y, limits[2] );
+  limits[3] = std::max( y, limits[3] );
+
+  if( node->left ) assignToGraph( node->left, graph, x-1, y, limits );
+  if( node->right ) assignToGraph( node->right, graph, x+1, y, limits );
+  if( node->up )   assignToGraph( node->up, graph, x, y+1, limits );
+  if( node->down ) assignToGraph( node->down, graph, x, y-1, limits );
 }
 
-void AprilTagDetectionSet::filterByHomography( void )
+Mat AprilTagDetectionSet::filterByHomography( void )
 {
   // Identify the four corners of the 
   vector< DetectionNode * > nodes( _detections.size() );
 
-  //for( int select = 0; select < _detections.size(); ++select )
  for( int select = 0; select < _detections.size(); ++select )
     nodes[select] = new DetectionNode( _detections[select] );
 
-  //for( int select = 0; select < nodes.size(); ++select ) {
-  for( int select = 0; select < 1; ++select ) {
+  for( int select = 0; select < nodes.size(); ++select ) {
     // Warp all other tag centers to my tag space
 
     vector< pair< Vector2d, DetectionNode * >  > centers;
@@ -102,7 +109,7 @@ void AprilTagDetectionSet::filterByHomography( void )
     // pair<float,float> pt = nodes[select]->detection.interpolate( nodes[other]->detection.cxy.first, nodes[other]->detection.cxy.second );
     // Vector2d c( pt.first, pt.second );
 
-      cout << "Relative to " << nodes[select]->detection.id << " the center of " << nodes[other]->detection.id << " is at " << c.x() << "   " << c.y() << endl;
+      //cout << "Relative to " << nodes[select]->detection.id << " the center of " << nodes[other]->detection.id << " is at " << c.x() << "   " << c.y() << endl;
 
       centers.push_back(  make_pair(c,nodes[other] ) );
     }
@@ -111,10 +118,10 @@ void AprilTagDetectionSet::filterByHomography( void )
     // How about smallest along-axis which is larger than the cross-axis
 
     if( !nodes[select]->right ) {
-    cout << "Evaluate right " << endl;
+    //cout << "Evaluate right " << endl;
       DetectionNode *plusX = nearestNode( centers, Vector2d( 1, 0 ) );
       if( plusX ) {
-        cout << "Right of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
+        //cout << "Right of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
         nodes[select]->right = plusX;
         //assert( !plusX->left );
         plusX->left = nodes[select];
@@ -122,10 +129,10 @@ void AprilTagDetectionSet::filterByHomography( void )
     }
 
     if( !nodes[select]->left ) {
-      cout << "Evaluate left " << endl;
+      //cout << "Evaluate left " << endl;
       DetectionNode *plusX = nearestNode( centers, Vector2d( -1, 0 ) );
       if( plusX ) {
-        cout << "Left of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
+        //cout << "Left of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
         nodes[select]->left = plusX;
         //assert( !plusX->right );
         plusX->right = nodes[select];
@@ -133,10 +140,10 @@ void AprilTagDetectionSet::filterByHomography( void )
     }
 
     if( !nodes[select]->up ) {
-      cout << "Evaluate up" << endl;
+      //cout << "Evaluate up" << endl;
       DetectionNode *plusX = nearestNode( centers, Vector2d( 0,1 ) );
       if( plusX ) {
-        cout << "Above of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
+        //cout << "Above of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
         nodes[select]->up = plusX;
         //assert( !plusX->down );
         plusX->down = nodes[select];
@@ -144,10 +151,10 @@ void AprilTagDetectionSet::filterByHomography( void )
     }
 
     if( !nodes[select]->down ) {
-      cout << "Evaluate down" << endl;
+      //cout << "Evaluate down" << endl;
       DetectionNode *plusX = nearestNode( centers, Vector2d( 0,-1 ) );
       if( plusX ) {
-        cout << "Below of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
+        //cout << "Below of " << nodes[select]->detection.id << " is " << plusX->detection.id << endl;
         nodes[select]->down = plusX;
         //assert( !plusX->up );
         plusX->up = nodes[select];
@@ -155,22 +162,31 @@ void AprilTagDetectionSet::filterByHomography( void )
     }
   }
 
-  return;
 
   // Now convert it to an Matrix of values.
-Mat graph( Size(2 * _detections.size(), 2* _detections.size()), CV_16S );
-graph.setTo( -1 );
-int x = _detections.size(), y = _detections.size();
+  Mat graph( Size(2 * _detections.size(), 2* _detections.size()), CV_16S );
+  graph.setTo( -1 );
+  int x = _detections.size(), y = _detections.size();
 
-assignToGraph( nodes[0], graph, x, y );
+  int limits[4] = { x,x,y,y };
+  assignToGraph( nodes[0], graph, x, y, limits );
 
-// Find the bounding box of non-(-1) values
-cout << graph << endl;
+  //cout << limits[0] << ' ' << limits[1] << ' ' << limits[2] << ' ' << limits[3] << endl;
+  // Find the bounding box of non-(-1) values
+  Rect rect( limits[0], limits[2], limits[1]-limits[0]+1, limits[3]-limits[2]+1 );
+  Mat roi( graph, rect );
 
+  Mat final( roi.size(), roi.type() );
+  
+  // Can't figure out my axis problem that lead to this needing to be flipped...
+  cv::flip( roi, final, 1 );
+
+  cout << final << endl;
 
   for( int i = 0; i < nodes.size(); ++i )
     delete nodes[i];
 
+  return final;
 }
 
 
