@@ -51,9 +51,12 @@ namespace cv {
      unsigned int codeIdAt( int i, int j ) const;
      unsigned long long codeAt( int i, int j ) const;
 
+     Point3f locationAt( int x, int y ) const;
 
      bool hasId( unsigned int id ) const;
      bool idLocation( unsigned int id, Point3f &pt  ) const;
+
+     Mat mostLikelyAlignment( const Mat &ids, Mat &valid );
 
     private:
 
@@ -63,6 +66,8 @@ namespace cv {
 
     TagFamily _tagFamily;
     Mat _tags;
+
+int calculateDistance( const Mat &ids, const Point2i &offset );
 
   };
 

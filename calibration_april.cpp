@@ -112,15 +112,13 @@ int main( int argc, char **argv )
     vector<AprilTags::TagDetection> detections = tagDetector.extractTags(greyscale);
 
     AprilTagDetectionSet set( detections );
-    set.filterByHomography();
-
     cout << "found " << detections.size() << " tags:" << endl;
 
     // Convert detections to contours to draw
     // Draw the current image with detections
     vector< vector<Point > > detectionOutlines;
     for (int d=0; d < detections.size(); d++) {
-    //  cout << "Id " << detections[i].id << ": " << std::hex << detections[i].code << std::dec << endl;
+      //  cout << "Id " << detections[i].id << ": " << std::hex << detections[i].code << std::dec << endl;
 
       vector<Point> detectionCorners(4);
       for( int j = 0; j < 4; ++j ) {
@@ -129,31 +127,39 @@ int main( int argc, char **argv )
       detectionOutlines.push_back( detectionCorners );
     }
     drawContours(boards[i].image, detectionOutlines, -1, Scalar(0,0,255), 4, CV_AA);
-    
+
 
     if( detections.size() > 5 ) {
-      
+
+      Mat valid;
+      Mat positions = apb.mostLikelyAlignment( set.gridOfIds(), valid );
+
       vector<Point3f> worldPts;
       vector<Point2f> imagePts;
 
-      for (int d=0; d < detections.size(); d++) {
-        if( apb.hasId( detections[d].id ) ) {
-          Point3f detectionWorld;
-          apb.idLocation( detections[d].id, detectionWorld );
+      for( int y = 0; y < valid.rows; ++y ) 
+        for( int x = 0; x < valid.cols; ++x  ) 
+          if( valid.at<uint8_t>(y,x) > 0 ) {
+            Point3f world( positions.at<Point3f>(y,x) );
 
-        imagePts.push_back( Point2f( detections[d].cxy.first, detections[d].cxy.second ) );
-        worldPts.push_back( detectionWorld );
+            if( set.validAt( x, y ) ) {
+              Point2f image( set.at(x,y).cxy.first, set.at(x,y).cxy.second );
+
+              worldPts.push_back( world );
+              imagePts.push_back( image );
+            }
+          }
+
+
+
+      objectPoints.push_back( worldPts );
+      imagePoints.push_back( imagePts );
+
+      vector<Point2f> inImage = boards[i].boardToImage( worldPts, camMat, distCoeffs );
+
+      for( int j = 0; j < inImage.size(); ++j ) {
+        cv::circle( boards[i].image, inImage[j], 5, Scalar(255,255,0), -1 );
       }
-      }
-
-        objectPoints.push_back( worldPts );
-        imagePoints.push_back( imagePts );
-
-        vector<Point2f> inImage = boards[i].boardToImage( worldPts, camMat, distCoeffs );
-
-        for( int j = 0; j < inImage.size(); ++j ) {
-          cv::circle( boards[i].image, inImage[j], 5, Scalar(255,255,0), -1 );
-        }
 
       // print out each detection
       //for (int i=0; i<detections.size(); i++) {

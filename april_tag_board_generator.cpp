@@ -65,17 +65,97 @@ bool AprilTagBoard::hasId( unsigned int id ) const
   return false;
 }
 
+Point3f AprilTagBoard::locationAt( int x, int y ) const
+{
+        return  Point3f( margin() + tagSpacing()*x + 0.5 * tagSize(),
+                    ( margin() + tagSpacing()*y ) + 0.5 * tagSize(), 0 );
+}
+
 bool AprilTagBoard::idLocation( unsigned int id, Point3f &pt ) const
 {
   for( int i = 0; i < arraySize().width; ++i )
     for( int j = 0; j < arraySize().height; ++j )
       if( codeIdAt(i,j) == id ) {
-        pt = Point3f( margin() + tagSpacing()*i + 0.5 * tagSize(),
-                    ( margin() + tagSpacing()*j ) + 0.5 * tagSize(), 0 );
+        pt = locationAt( i, j );
+        return true;
       }
 
-
   return false;
+}
+
+
+int AprilTagBoard::calculateDistance( const Mat &ids, const Point2i &offset )
+{
+  int maxWidth = std::max( ids.cols, _tags.cols ),
+      maxHeight = std::max( ids.rows, _tags.rows );
+
+  int distance = 0;
+
+  Rect tagsRect( Point2i(0,0), _tags.size() ),
+       idsRect( offset, ids.size() );
+
+  // Inefficient procedure but works for now
+  for( int x = -maxWidth; x < maxWidth; ++x ) {
+    for( int y = -maxHeight; y < maxHeight; ++y ) {
+
+      Point2i pt = Point2i(x,y);
+      if( !(tagsRect.contains(pt) && idsRect.contains(pt)) ) continue;
+
+      Point2i idsIdx = pt - offset;
+      if( ids.at<int16_t>(idsIdx.y, idsIdx.x) < 0 ) continue;
+
+      distance += _tagFamily.hammingDistance( _tagFamily.codes[ ids.at<int16_t>(idsIdx.y, idsIdx.x) ], codeAt(x,y) );
+
+    }
+  }
+
+  return distance;
+}
+
+Mat AprilTagBoard::mostLikelyAlignment( const Mat &ids, Mat &valid )
+{
+  Mat positions( Mat::zeros( ids.size(), CV_32FC3 ) );
+  valid = Mat::zeros( ids.size(), CV_8U );
+
+  // Start by determining the alignment between ids and _tags.
+  map< int , pair< Point2i, int > > results;
+
+  // Insert rotation here
+  int maxshift = 1;
+  for( int x = -maxshift; x < maxshift+1; ++x ) {
+    for( int y = -maxshift; y < maxshift+1; ++y ) {
+      Point2i offset(x,y);
+
+      int distance = calculateDistance( ids, offset );
+
+      cout << "For offset " << offset.x << ',' << offset.y << ", distance = " << distance << endl;
+      if( distance >= 0 ) results[distance] = make_pair( offset, 0 );
+    }
+  }
+
+  if( results.size() == 0 ) return Mat();
+
+  Point2i bestOffset( results.begin()->second.first );
+  int bestRotation = results.begin()->second.second;
+
+  cout << "Best offset: " << bestOffset.x << ',' << bestOffset.y << endl;
+
+  // Then use that to assign a position to member of ids.
+
+  Rect tagsRect( Point2i(0,0), _tags.size() );
+
+  for( int x = 0; x < ids.cols; ++x ) {
+    for( int y = 0; y < ids.rows; ++y ) {
+      Point2i idx( x - bestOffset.x, y - bestOffset.y );
+
+      if( tagsRect.contains( idx ) ) {
+        valid.at<uint8_t>(y,x) = 1;
+        positions.at<Point3f>(y,x) = locationAt( x, y );
+      } 
+    }
+  }
+
+  return positions;
 }
 
 
