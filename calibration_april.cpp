@@ -30,8 +30,8 @@ static void help()
 
 
 const Size imgSize(800, 600);
-const Size brdSize(5,4);
-const size_t brds_num = 20;
+const Size brdSize(10,10);
+const size_t brds_num =1;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
 {
@@ -187,7 +187,9 @@ int main( int argc, char **argv )
   vector<Mat> rvecs, tvecs;
 
   cout << "Calibrating...";
-  double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, camMat_est, distCoeffs_est, rvecs, tvecs);
+  int flags = 0;
+  double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, 
+      camMat_est, distCoeffs_est, rvecs, tvecs, flags );
   cout << "Done" << endl;
 
   //cout << endl << "Average Reprojection error: " << rep_err/brds_num/apbGen.cornersSize().area() << endl;

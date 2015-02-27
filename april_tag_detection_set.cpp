@@ -1,5 +1,6 @@
 
 #include <iomanip>
+#include <fstream>
 
 // AprilTags currently uses Eigen for fixed-size vectors and matrices
 #include <Eigen/Core>
@@ -164,6 +165,18 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
     }
   }
 
+  // Dump the graph to DOT to examine it
+  ofstream dot("/tmp/graph.dot");
+
+  dot << "graph april {" << endl;
+  for( int i = 0; i < _detections.size(); ++i ) {
+    dot << i << " [label=\"" << _detections[i].id << "\"]" << endl;
+    if( nodes[i].right > 0 ) dot << i << "--" << nodes[i].right << endl;
+    if( nodes[i].left > 0 ) dot << i << "--" << nodes[i].left << endl;
+    if( nodes[i].up > 0 ) dot << i << "--" << nodes[i].up << endl;
+    if( nodes[i].down > 0 ) dot << i << "--" << nodes[i].down << endl;
+  }
+  dot << "}" << endl;
 
   // Now convert it to an Matrix of values.
   Mat graph( Size(2 * _detections.size(), 2* _detections.size()), CV_16S );
@@ -185,7 +198,7 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
 
   //cout << _grid << endl;
 
-  cout << gridOfIds() << endl;
+  cout <<  "Identified IDs: " << endl << gridOfIds() << endl;
 
 }
 

@@ -128,7 +128,7 @@ Mat AprilTagBoard::mostLikelyAlignment( const Mat &ids, Mat &valid )
 
       int distance = calculateDistance( ids, offset );
 
-      cout << "For offset " << offset.x << ',' << offset.y << ", distance = " << distance << endl;
+      //cout << "For offset " << offset.x << ',' << offset.y << ", distance = " << distance << endl;
       if( distance >= 0 ) results[distance] = make_pair( offset, 0 );
     }
   }
@@ -238,8 +238,8 @@ vector<Point2f> SimulatedImage::boardToImage( const vector<Point3f> &boardPts, c
 
 //===========================================================================
 
-const double AprilTagBoardGenerator::_minCos = 0.85; // 0.707;
-const double AprilTagBoardGenerator::_cov = 0.8;
+const double AprilTagBoardGenerator::_minCos = 0.99; // 0.707;
+const double AprilTagBoardGenerator::_cov = 0.02; //8;
 const int AprilTagBoardGenerator::_rendererResolutionMultiplier = 4;
 
 const size_t AprilTagBoardGenerator::_segmentsPerEdge = 200;
@@ -504,7 +504,7 @@ SimulatedImage cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, c
   for(;;) {
     // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
     // and "elevation" (angle in the verical axis)
-    float d1 = static_cast<float>(rng.uniform(1.0, 10.0));
+    float d1 = static_cast<float>(rng.uniform(1.0, 20.0));
     float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
     float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 
