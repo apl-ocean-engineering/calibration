@@ -301,6 +301,7 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
 
   int limits[4] = { x,x,y,y };
 
+  // Try to seed the graph with a well-connected individual.
   vector< int > connections(4);
   for( int i = 0; i < 4; ++i ) connections[i] = -1;
   for( int i = 0; i < _detections.size(); ++i ) {
