@@ -287,10 +287,10 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
   dot << "graph april {" << endl;
   for( int i = 0; i < _detections.size(); ++i ) {
     dot << i << " [label=\"" << _detections[i].id << "\"]" << endl;
-    if( nodes[i].right > 0 ) dot << i << "--" << nodes[i].right << endl;
-    if( nodes[i].left > 0 ) dot << i << "--" << nodes[i].left << endl;
-    if( nodes[i].up > 0 ) dot << i << "--" << nodes[i].up << endl;
-    if( nodes[i].down > 0 ) dot << i << "--" << nodes[i].down << endl;
+    if( nodes[i].right >= 0 ) dot << i << "--" << nodes[i].right << endl;
+    if( nodes[i].left >= 0 ) dot << i << "--" << nodes[i].left << endl;
+    if( nodes[i].up >= 0 ) dot << i << "--" << nodes[i].up << endl;
+    if( nodes[i].down >= 0 ) dot << i << "--" << nodes[i].down << endl;
   }
   dot << "}" << endl;
 
@@ -300,7 +300,27 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
   int x = _detections.size(), y = _detections.size();
 
   int limits[4] = { x,x,y,y };
-  assignToGraph( nodes, 0, graph, x, y, limits );
+
+  vector< int > connections(4);
+  for( int i = 0; i < 4; ++i ) connections[i] = -1;
+  for( int i = 0; i < _detections.size(); ++i ) {
+    int neighbors = 0;
+    if( nodes[i].right >= 0 ) neighbors++;
+    if( nodes[i].left >= 0 ) neighbors++;
+    if( nodes[i].up >= 0 ) neighbors++;
+    if( nodes[i].down >= 0 ) neighbors++;
+
+    connections[neighbors] = i;
+
+    if( neighbors == 4 ) break;
+  }
+
+  int use = connections[4];
+  if( use == -1 ) use = connections[3];
+if( use == -1 ) use = connections[2];
+if( use == -1 ) { cout << "Tag graph is pathological.  Giving up" << endl; return; }
+
+  assignToGraph( nodes, use, graph, x, y, limits );
 
   //cout << limits[0] << ' ' << limits[1] << ' ' << limits[2] << ' ' << limits[3] << endl;
   // Find the bounding box of non-(-1) values

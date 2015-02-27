@@ -227,9 +227,10 @@ vector<Point2f> SimulatedImage::boardToImage( const vector<Point3f> &boardPts, c
   vector <Point3f> worldPts;
   vector <Point2f> imagePts;
 
-    std::transform( boardPts2d.begin(), boardPts2d.end(),
-        back_inserter( worldPts ), BoardToWorld( _origin, _pb1, _pb2 ) );
-  projectPoints( Mat(worldPts), rvec, tvec, camMat, distCoeffs, imagePts);
+  std::transform( boardPts2d.begin(), boardPts2d.end(),
+      back_inserter( worldPts ), BoardToWorld( _origin, _pb1, _pb2 ) );
+
+  if( worldPts.size() > 0 ) projectPoints( Mat(worldPts), rvec, tvec, camMat, distCoeffs, imagePts);
 
   return imagePts;
 }
@@ -503,7 +504,7 @@ SimulatedImage cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, c
   for(;;) {
     // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
     // and "elevation" (angle in the verical axis)
-    float d1 = static_cast<float>(rng.uniform(10.0, 30.0));
+    float d1 = static_cast<float>(rng.uniform(10.0, 25.0));
     float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
     float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 

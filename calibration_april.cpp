@@ -138,6 +138,8 @@ int main( int argc, char **argv )
       vector<Point3f> worldPts;
       vector<Point2f> imagePts;
 
+      cout << valid << endl;
+
       for( int y = 0; y < valid.rows; ++y ) 
         for( int x = 0; x < valid.cols; ++x  ) 
           if( valid.at<uint8_t>(y,x) > 0 ) {
@@ -151,13 +153,16 @@ int main( int argc, char **argv )
             }
           }
 
-
-
+      if( worldPts.size() != 0 && imagePts.size() != 0 && worldPts.size() == imagePts.size() ) {
       objectPoints.push_back( worldPts );
       imagePoints.push_back( imagePts );
+      } else {
+        cout << "Something wrong with projected points for this image." << endl;
+      }
 
       vector<Point2f> inImage = boards[i].boardToImage( worldPts, camMat, distCoeffs );
 
+      // Draw tag centers in image...
       for( int j = 0; j < inImage.size(); ++j ) {
         cv::circle( boards[i].image, inImage[j], 5, Scalar(255,255,0), -1 );
       }
