@@ -29,8 +29,8 @@ static void help()
 
 
 
-const Size imgSize(800, 600);
-const Size brdSize(10,10);
+const Size imgSize(1920,1080);
+const Size brdSize(20,20);
 const size_t brds_num =1;
 
 template<class T> ostream& operator<<(ostream& out, const Mat_<T>& mat)
@@ -81,8 +81,8 @@ int main( int argc, char **argv )
   camMat << 300., 0., background.cols/2., 0, 300., background.rows/2., 0., 0., 1.;
 
   Mat_<double> distCoeffs(1, 5);
-  //distCoeffs << 1.2, 0.2, 0., 0., 0.;
-  distCoeffs << 0.0, 0.0, 0., 0., 0.;
+  distCoeffs << 1.2, 0.2, 0., 0., 0.;
+  //distCoeffs << 0.0, 0.0, 0., 0., 0.;
 
   cout << "Generating chessboards...";
   vector<SimulatedImage> boards;
@@ -110,9 +110,10 @@ int main( int argc, char **argv )
     cvtColor( boards[i].image, greyscale, CV_BGR2GRAY );
 
     vector<AprilTags::TagDetection> detections = tagDetector.extractTags(greyscale);
+    cout << "found " << detections.size() << " tags:" << endl;
 
     AprilTagDetectionSet set( detections );
-    cout << "found " << detections.size() << " tags:" << endl;
+    cout << "gridded " << set.gridCount() << endl;
 
     // Convert detections to contours to draw
     // Draw the current image with detections
@@ -183,13 +184,17 @@ int main( int argc, char **argv )
   cvDestroyAllWindows();
 
   Mat camMat_est;
+  camMat.copyTo( camMat_est ); // ensure this is a deep copy, not a shallow reference copy
+
   Mat distCoeffs_est;
   vector<Mat> rvecs, tvecs;
 
   cout << "Calibrating...";
-  int flags = 0;
+  int flags = CV_CALIB_USE_INTRINSIC_GUESS;
+  TermCriteria criteria( TermCriteria::COUNT+TermCriteria::EPS, 200, DBL_EPSILON ); 
+
   double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, 
-      camMat_est, distCoeffs_est, rvecs, tvecs, flags );
+      camMat_est, distCoeffs_est, rvecs, tvecs, flags, criteria );
   cout << "Done" << endl;
 
   //cout << endl << "Average Reprojection error: " << rep_err/brds_num/apbGen.cornersSize().area() << endl;

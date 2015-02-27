@@ -6,8 +6,8 @@ all: $(APPS)
 APRILTAGS = ../apriltags/build
 
 CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3 
-LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib
-LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc 
+LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib 
+LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl
 LD = g++
 
 

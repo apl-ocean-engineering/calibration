@@ -5,6 +5,8 @@
 // AprilTags currently uses Eigen for fixed-size vectors and matrices
 #include <Eigen/Core>
 
+#include <gsl/gsl_randist.h>
+
 
 #include "april_tag_detection_set.h"
 
@@ -43,6 +45,17 @@ cv::Mat AprilTagDetectionSet::gridOfIds( void )
 }
 
 
+int AprilTagDetectionSet::gridCount( void ) const
+{
+  int count = 0;
+  for( int y = 0; y < _grid.rows; ++y ) 
+    for( int x = 0; x < _grid.cols; ++x )  
+      if( indexAt(x,y) >= 0 ) ++count;
+
+  return count;
+}
+
+
 
 //============================================================================
 //
@@ -53,6 +66,18 @@ bool CompareAlongTrack( const pair< double, int > &a, const pair< double, int> &
 { 
   return (a.first < b.first);  
 }
+
+struct Gaussian
+{
+  public:
+    Gaussian( float _mean, float _var )
+      : mean( _mean ), sigma(  sqrt(_var) ) {;}
+
+    double p( double val ) const
+    { return gsl_ran_gaussian_pdf( val-mean, sigma ); }
+
+    float mean, sigma;
+};
 
 static const float cosLimit = cos( 15 * M_PI / 180.0 );
 int nearestNode( const vector< Vector2d > &centers, const Vector2d &vector )
@@ -74,8 +99,32 @@ int nearestNode( const vector< Vector2d > &centers, const Vector2d &vector )
 
   if( candidates.size() == 0 ) return -1;
 
-  // Want the smallest positive dot product
+  // Want the closest
   return candidates.begin()->second;
+}
+
+int mostLikelyNode( const vector< Vector2d > &centers, const Gaussian &gaussian, const Vector2d &vector )
+{
+  map< double, int > candidates;
+
+  for( int i = 0; i < centers.size(); ++i ) {
+    if( centers[i].hasNaN() ) continue;
+
+    double along = vector.dot( centers[i] );
+    double cos = along / (vector.norm() * centers[i].norm() );
+
+    //cout << "To " << centers[i].second->detection.id << " is " << along << " cos " << cos << endl;
+
+    float prob = gaussian.p(along);
+    if( (cos > cosLimit ) and (along > 0) and (prob > 0.99) ) 
+      candidates[ prob ] = i;
+
+  }
+
+  if( candidates.size() == 0 ) return -1;
+
+  // Want the largest probability
+  return candidates.rbegin()->second;
 }
 
 void AprilTagDetectionSet::assignToGraph( const vector<DetectionNode> &nodes, const int idx, Mat &graph, const int x, const int y, int *limits )
@@ -101,10 +150,36 @@ void AprilTagDetectionSet::assignToGraph( const vector<DetectionNode> &nodes, co
   if( nodes[idx].down > 0 ) assignToGraph( nodes, nodes[idx].down, graph, x, y-1, limits );
 }
 
+Gaussian estimateCenterSpacing( list<double> &values )
+{
+  if( values.size() > 10 ) {
+    // For robustness drop the largest and the smallest.
+    values.sort();
+    values.pop_front();
+    values.pop_back();
+  }
+
+  // Assume inliers >> outliers for now
+
+  double mean, var;
+
+  for( list<double>::iterator itr = values.begin(); itr != values.end(); ++itr ) mean += (*itr);
+  mean /= values.size();
+
+  // Calculate sample variance
+  for( list<double>::iterator itr = values.begin(); itr != values.end(); ++itr ) var += ( (*itr) - mean )*( (*itr) - mean );
+  var /= (values.size() - 1);
+
+  return Gaussian( mean, var );
+}
+
 void AprilTagDetectionSet::arrangeIntoGrid( void )
 {
   // Identify the four corners of the 
   vector< DetectionNode > nodes( _detections.size() );
+
+  // Try to identify the distribution of distances to adjacent tags
+  list< double > lrSpacing, udSpacing;
 
   for( int current = 0; current < _detections.size(); ++current ) {
 
@@ -118,9 +193,50 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
 
       Vector3d warped( invHom *
           Vector3d( _detections[other].cxy.first - _detections[current].hxy.first,
-                    _detections[other].cxy.second - _detections[current].hxy.second, 1.0 ) );
+            _detections[other].cxy.second - _detections[current].hxy.second, 1.0 ) );
 
-     Vector2d c( warped.x() / warped.z(), warped.y() / warped.z() );
+      Vector2d c( warped.x() / warped.z(), warped.y() / warped.z() );
+
+      //cout << "Relative to " << nodes[current]->detection.id << " the center of " << nodes[other]->detection.id << " is at " << c.x() << "   " << c.y() << endl;
+
+      centers[other] = c;
+    }
+
+    int right = nearestNode( centers, Vector2d( 1, 0 ) );
+    if( right >= 0 ) lrSpacing.push_back( centers[right].norm() );
+
+    int left = nearestNode( centers, Vector2d( 1, 0 ) );
+    if( left >= 0 ) lrSpacing.push_back( centers[left].norm() );
+
+    int up = nearestNode( centers, Vector2d( 1, 0 ) );
+    if( up >= 0 ) udSpacing.push_back( centers[up].norm() );
+
+    int down = nearestNode( centers, Vector2d( 1, 0 ) );
+    if( down >= 0 ) udSpacing.push_back( centers[down].norm() );
+
+  }
+
+  Gaussian lrGaussian = estimateCenterSpacing( lrSpacing );
+  cout << "LR spacing has mean " << lrGaussian.mean << " sigma " << lrGaussian.sigma << endl;
+  Gaussian udGaussian = estimateCenterSpacing( udSpacing );
+  cout << "UD spacing has mean " << udGaussian.mean << " sigma " << udGaussian.sigma << endl;
+
+
+  for( int current = 0; current < _detections.size(); ++current ) {
+
+    Matrix3d invHom( _detections[current].homography.inverse() );
+    vector< Vector2d  > centers( _detections.size() );
+
+    centers[current] = Vector2d(NAN,NAN);
+
+    for( int other = 0; other < _detections.size(); ++other ) {
+      if( other == current ) continue;
+
+      Vector3d warped( invHom *
+          Vector3d( _detections[other].cxy.first - _detections[current].hxy.first,
+            _detections[other].cxy.second - _detections[current].hxy.second, 1.0 ) );
+
+      Vector2d c( warped.x() / warped.z(), warped.y() / warped.z() );
 
       //cout << "Relative to " << nodes[current]->detection.id << " the center of " << nodes[other]->detection.id << " is at " << c.x() << "   " << c.y() << endl;
 
@@ -128,8 +244,8 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
     }
 
     if( nodes[current].right < 0 ) {
-    //cout << "Evaluate right " << endl;
-      int nearest = nearestNode( centers, Vector2d( 1, 0 ) );
+      //cout << "Evaluate right " << endl;
+      int nearest = mostLikelyNode( centers, lrGaussian, Vector2d( 1, 0 ) );
       if( nearest >= 0 ) {
         //cout << "Right of " << _detections[current].id << " is " << _detections[nearest].id << endl;
         nodes[current].right = nearest;
@@ -138,16 +254,16 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
     }
 
     if( nodes[current].left < 0 ) {
-      int nearest = nearestNode( centers, Vector2d( -1, 0 ) );
+      int nearest = mostLikelyNode( centers, lrGaussian, Vector2d( -1, 0 ) );
       if( nearest >= 0 ) {
         //cout << "Left of " << _detections[current].id << " is " << _detections[nearest].id << endl;
         nodes[current].left = nearest;
         nodes[nearest].right = current;
       }
     }
-    
+
     if( nodes[current].up < 0 ) {
-      int nearest = nearestNode( centers, Vector2d( 0, 1 ) );
+      int nearest = mostLikelyNode( centers, udGaussian, Vector2d( 0, 1 ) );
       if( nearest >= 0 ) {
         //cout << "Up of " << _detections[current].id << " is " << _detections[nearest].id << endl;
         nodes[current].up = nearest;
@@ -156,7 +272,7 @@ void AprilTagDetectionSet::arrangeIntoGrid( void )
     }
 
     if( nodes[current].down < 0 ) {
-      int nearest = nearestNode( centers, Vector2d( 0, -1 ) );
+      int nearest = mostLikelyNode( centers, udGaussian, Vector2d( 0, -1 ) );
       if( nearest >= 0 ) {
         //cout << "Down of " << _detections[current].id << " is " << _detections[nearest].id << endl;
         nodes[current].down = nearest;

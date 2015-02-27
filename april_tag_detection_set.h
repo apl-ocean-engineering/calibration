@@ -39,6 +39,8 @@ class AprilTagDetectionSet {
     bool validAt( int x, int y ) const
     { return indexAt(x,y) >= 0; }
 
+    int gridCount( void ) const;
+
 
   private:
 

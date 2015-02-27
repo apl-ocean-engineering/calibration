@@ -83,7 +83,6 @@ bool AprilTagBoard::idLocation( unsigned int id, Point3f &pt ) const
   return false;
 }
 
-
 int AprilTagBoard::calculateDistance( const Mat &ids, const Point2i &offset )
 {
   int maxWidth = std::max( ids.cols, _tags.cols ),
@@ -504,7 +503,7 @@ SimulatedImage cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, c
   for(;;) {
     // Randomized distance from camera, "azimuth" (angle in the horizontal axis)
     // and "elevation" (angle in the verical axis)
-    float d1 = static_cast<float>(rng.uniform(1.0, 20.0));
+    float d1 = static_cast<float>(rng.uniform(10.0, 30.0));
     float ah = static_cast<float>(rng.uniform(-fov.x/2 * _cov, fov.x/2 * _cov) * CV_PI / 180);
     float av = static_cast<float>(rng.uniform(-fov.y/2 * _cov, fov.y/2 * _cov) * CV_PI / 180);
 
@@ -541,7 +540,7 @@ SimulatedImage cv::AprilTagBoardGenerator::generateImageOfBoard(const Mat& bg, c
     bool inrect3 = pts2d[2].x < bg.cols && pts2d[2].y < bg.rows && pts2d[2].x > 0 && pts2d[2].y > 0;
     bool inrect4 = pts2d[3].x < bg.cols && pts2d[3].y < bg.rows && pts2d[3].x > 0 && pts2d[3].y > 0;
 
-    if ( inrect1 && inrect2 && inrect3 && inrect4)
+    //if ( inrect1 && inrect2 && inrect3 && inrect4)
       break;
   }
 
