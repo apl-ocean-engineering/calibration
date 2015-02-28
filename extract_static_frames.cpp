@@ -22,8 +22,8 @@ int main( int argc, char **argv ) {
   }
 
   // Currently static, should be read from file (?)
-  const float consecutiveSec = 0.5,
-        standoffSec = 0.5;
+  const float consecutiveSec = 0.01,
+        standoffSec = 0.25;
   enum Mode state = PRETRIGGER; 
 
   string videofile( argv[argc-1] );
@@ -47,7 +47,7 @@ int main( int argc, char **argv ) {
 
   Mat img, grey, prev, scaled;
   Mat prevTimeCode;
-  int frame = 0, counter = 0;
+  int frame = 0, imgCount = 0, counter = 0;
   bool flash = false;
 
   while( capture.read( img ) ) {
@@ -57,7 +57,9 @@ int main( int argc, char **argv ) {
     Mat imgTC( grey, timeCodeROI_1920x1080 ), imgTimeCode;
     imgTC.setTo( 0 );
 
-    resize( grey, scaled, Size(), 0.25, 0.25, INTER_AREA );
+    Mat shrunk;
+    resize( grey, shrunk, Size(), 0.25, 0.25, INTER_AREA );
+    flip( shrunk, scaled, 1 );
 
     if( !prev.empty() ) {
 
@@ -66,7 +68,9 @@ int main( int argc, char **argv ) {
       cout << frame << " : " << state << "," << counter << " : " << 
         std::setw(10) << std::setprecision(1) << std::fixed << norm << endl;
 
-      if( norm > 1000 ) {
+      // Implement a kind of hysteresis..
+      int motionLevel = (state == ARMED ? 1500 : 1500);
+      if( norm > motionLevel ) {
         // Motion
 
         switch( state ) {
@@ -94,7 +98,7 @@ int main( int argc, char **argv ) {
           case ARMED:
             if( ++counter > consecutive ) {
               char filename[40];
-              snprintf( filename, 39, "/tmp/watch/save_%05d.png", frame );
+              snprintf( filename, 39, "/tmp/watch/save_%05d.png", imgCount++ );
               imwrite( filename, img );
               flash = true;
 

@@ -1,5 +1,6 @@
 
-APPS := calibration calibration_artificial calibration_april
+APPS := calibration calibration_artificial calibration_april \
+  extract_frame trendnet_time_code_test watch_for_change extract_static_frames
 
 all: $(APPS)
 
@@ -11,8 +12,21 @@ LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_h
 LD = g++
 
 
+extract_frame: extract_frame.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
+
+extract_static_frames: extract_static_frames.o trendnet_time_code.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
+
 calibration: calibration.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
+
+trendnet_time_code_test: trendnet_time_code_test.o trendnet_time_code.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
+
+watch_for_change: watch_for_change.o trendnet_time_code.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
+
 
 calibration_artificial: calibration_artificial.o chess_board_generator.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $?
