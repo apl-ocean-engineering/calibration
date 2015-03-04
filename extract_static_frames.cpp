@@ -1,4 +1,7 @@
 
+#include <stdlib.h>
+#include <getopt.h>
+#include <time.h>
 
 #include <iostream>
 #include <iomanip>
@@ -11,26 +14,48 @@
 using namespace std;
 using namespace cv;
 
-
 enum Mode { PRETRIGGER, ARMED, WAIT };
 
 int main( int argc, char **argv ) {
 
-  if( argc < 2 ) {
+  int opt;
+  string path("/tmp/watch"), prefix("save");
+
+  while( (opt = getopt( argc, argv, "p:d:")) != -1  ) {
+    switch( opt ) {
+      case 'p':
+        prefix = optarg;
+        break;
+      case 'd':
+        path = optarg;
+        break;
+      case '?':
+        cout << "Don't recognize option \"" << optopt << "\'"<< endl;
+        exit(-1);
+    }
+  }
+
+
+  if( optind >= argc ) {
     cout << "Usage: extract_frame <filename>" << endl;
     exit(0);
   }
 
+
+
+
   // Currently static, should be read from file (?)
-  const float consecutiveSec = 0.01,
-        standoffSec = 0.25;
+  const float consecutiveSec = 0.25, standoffSec = 1;
   enum Mode state = PRETRIGGER; 
 
-  string videofile( argv[argc-1] );
+  string videofile( argv[optind] );
 
   cout << "Opening " << videofile << endl;
   VideoCapture capture;
-  capture.open( videofile.c_str() );
+  if( isnumber(videofile.c_str()[0]) )
+    capture.open( atoi( videofile.c_str() ) );
+  else
+    capture.open( videofile.c_str() );
 
 
   double fps = capture.get( CV_CAP_PROP_FPS );
@@ -97,8 +122,12 @@ int main( int argc, char **argv ) {
             break;
           case ARMED:
             if( ++counter > consecutive ) {
-              char filename[40];
-              snprintf( filename, 39, "/tmp/watch/save_%05d.png", imgCount++ );
+              char timecode[40], filename[256];
+              time_t tt;
+              time( &tt );
+              strftime( timecode, 39, "%y%m%d_%H%M%S", localtime( &tt ) );
+              snprintf( filename, 255, "%s/%s_%s.png", path.c_str(), prefix.c_str(), timecode );
+              cout << "Save to " << filename << endl;
               imwrite( filename, img );
               flash = true;
 

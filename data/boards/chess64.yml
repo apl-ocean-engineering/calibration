@@ -1,5 +1,5 @@
 %YAML:1.0
 type: chess
-width: 7
-height: 5
-squareSize: 0.75
+width: 6
+height: 4
+squareSize: 30

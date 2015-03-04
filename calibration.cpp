@@ -8,73 +8,20 @@
 #include <string.h>
 #include <time.h>
 #include <getopt.h>
-#include <sys/stat.h>
 
 #include <iostream>
+
+
+
+#include "file_utils.h"
+#include "board.h"
+#include "detection.h"
 
 using namespace cv;
 using namespace std;
 
-const char * usage =
-" \nexample command line for calibration from a live feed.\n"
-"   calibration  -w 4 -h 5 -s 0.025 -o camera.yml -op -oe\n"
-" \n"
-" example command line for calibration from a list of stored images:\n"
-"   imagelist_creator image_list.xml *.png\n"
-"   calibration -w 4 -h 5 -s 0.025 -o camera.yml -op -oe image_list.xml\n"
-" where image_list.xml is the standard OpenCV XML/YAML\n"
-" use imagelist_creator to create the xml or yaml list\n"
-" file consisting of the list of strings, e.g.:\n"
-" \n"
-"<?xml version=\"1.0\"?>\n"
-"<opencv_storage>\n"
-"<images>\n"
-"view000.png\n"
-"view001.png\n"
-"<!-- view002.png -->\n"
-"view003.png\n"
-"view010.png\n"
-"one_extra_view.jpg\n"
-"</images>\n"
-"</opencv_storage>\n";
-
-enum Pattern { CHESSBOARD, CIRCLES_GRID, ASYMMETRIC_CIRCLES_GRID };
 
 
-static bool file_exists( const string &infile ) {
-  struct stat buffer;   
-  return (stat(infile.c_str(), &buffer) == 0 );
-}
-
-static bool directory_exists( const string &infile ) {
-  struct stat buffer;   
-  return (stat(infile.c_str(), &buffer) == 0  && (buffer.st_mode & S_IFDIR));
-}
-
-static void mkdir_p( const string &dir )
-{
-  char tmp[256];
-  char *p = NULL;
-  size_t len;
-
-  snprintf(tmp, sizeof(tmp),"%s",dir.c_str() );
-  len = strlen(tmp);
-
-  bool finalSep = (tmp[len - 1] == '/');
-
-  for(p = tmp + 1; *p; p++)
-    if(*p == '/') {
-      *p = 0;
-      mkdir(tmp, S_IRWXU);
-      *p = '/';
-    }
-
-  if( finalSep ) {
-    tmp[len-1] = 0;
-    mkdir(tmp, S_IRWXU);
-    tmp[len-1] = '/';
-  }
-}
 
 class CalibrationOpts {
   public:
@@ -97,7 +44,7 @@ class CalibrationOpts {
     string boardName;
     string cameraName;
     vector< string > inFiles;
-    bool ignoreCache;
+    bool ignoreCache, retryUnregistered;
 
     const string boardPath( void )
     { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -118,60 +65,199 @@ class CalibrationOpts {
       return camDir + filename;
     }
 
-};
 
 
-
-class Board {
-  public:
-    Board( Pattern pat, int w, int h, float squares )
-      : pattern(pat), width(w), height(h), squareSize( squares )
-    {;}
-
-    string name;
-    Pattern pattern;
-    int width, height;
-    float squareSize;
-
-    Size size( void ) const { return Size( width,height ); }
-
-  private:
-};
-
-
-class BoardFactory {
-  public:
-    static Board load( const string &infile )
+    //== Option parsing and help ==
+    void help()
     {
-      FileStorage fs( infile, FileStorage::READ );
-      if( ! fs.isOpened() ) {
-        cout << "Couldn't open board file \"" << infile << "\"" << endl;
-        exit(-1);
-      }
-
-      string type_s;
-      int width, height;
-      float squares;
-      Pattern type;
-
-      fs["type"] >> type_s;
-      fs["width"] >> width;
-      fs["height"] >> height;
-      fs["squareSize"] >> squares;
-
-      if( type_s.compare("chessboard" ) ) {
-        type = CHESSBOARD;
-      } else {
-        cout << "Don't know how to handle board type \"" << type_s << "\"" << endl;
-        exit(-1);
-      }
-
-      return Board( type, width, height, squares );
+      printf( "This is a camera calibration sample.\n"
+          "Usage: calibration\n"
+          "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
+          "     --board,-b <board_name>    # Name of calibration pattern\n"
+          "     --camera, -c <camera_name> # Name of camera\n"
+          "     --ignore-cache, -i       # Ignore and overwrite files in cache\n"
+          "     --retry-unregistered, -r   # Re-try to find the chessboard if the cache file is empty\n"
+          //     "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
+          //     "                              # (used only for video capturing)\n"
+          //     "     [-o <out_camera_params>] # the output filename for intrinsic [and extrinsic] parameters\n"
+          //     "     [-op]                    # write detected feature points\n"
+          //     "     [-oe]                    # write extrinsic parameters\n"
+          //     "     [-zt]                    # assume zero tangential distortion\n"
+          //     "     [-a <aspectRatio>]      # fix aspect ratio (fx/fy)\n"
+          //     "     [-p]                     # fix the principal point at the center\n"
+          //     "     [-v]                     # flip the captured images around the horizontal axis\n"
+          //     "     [-V]                     # use a video file, and not an image list, uses\n"
+          //     "                              # [input_data] string for the video file name\n"
+          //     "     [-su]                    # show undistorted images after calibration\n"
+          "     [input_data]             # list of files to use\n"
+          "\n" );
+      //printf("\n%s",usage);
+      //printf( "\n%s", liveCaptureHelp );
     }
-  private:
+
+
+    void parseOpts( int argc, char **argv )
+    {
+      static struct option long_options[] = {
+        { "data_directory", true, NULL, 'd' },
+        { "board", true, NULL, 'b' },
+        { "camera", true, NULL, 'c' },
+        { "ignore-cache", false, NULL, 'i' },
+        { "retry-unregistered", false, NULL, 'r' },
+        { "help", false, NULL, '?' },
+        { 0, 0, 0, 0 }
+      };
+
+
+      if( argc < 2 )
+      {
+        help();
+        exit(1);
+      }
+
+      int indexPtr;
+      int optVal;
+      while( (optVal = getopt_long( argc, argv, "irb:c:d:?", long_options, &indexPtr )) != -1 ) {
+        switch( optVal ) {
+          case 'd':
+            dataDir = optarg;
+            break;
+          case 'b':
+            boardName = optarg;
+            break;
+          case 'c':
+            cameraName = optarg;
+            break;
+          case 'i':
+            ignoreCache = true;
+            break;
+          case 'r':
+            retryUnregistered = true;
+            break;
+          case '?': 
+            help();
+            break;
+          default:
+            exit(-1);
+
+        }
+      }
+
+      if( optind == argc )
+      {
+        cout << "No input files specified." << endl;
+        exit(-1);
+      }
+
+      for( int i = optind; i < argc; ++i ) {
+        string infile( argv[i] );
+
+        if( !file_exists( infile ) ) {
+          cout << "Couldn't open input file \"" << infile << "\"" << endl;
+          exit(-1);
+        }
+
+        inFiles.push_back( infile );
+      }
+
+      //    for( i = 1; i < argc; i++ )
+      //    {
+      //        const char* s = argv[i];
+      //        if( strcmp( s, "-w" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%u", &boardSize.width ) != 1 || boardSize.width <= 0 )
+      //                return fprintf( stderr, "Invalid board width\n" ), -1;
+      //        }
+      //        else if( strcmp( s, "-h" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%u", &boardSize.height ) != 1 || boardSize.height <= 0 )
+      //                return fprintf( stderr, "Invalid board height\n" ), -1;
+      //        }
+      //        else if( strcmp( s, "-pt" ) == 0 )
+      //        {
+      //            i++;
+      //            if( !strcmp( argv[i], "circles" ) )
+      //                pattern = CIRCLES_GRID;
+      //            else if( !strcmp( argv[i], "acircles" ) )
+      //                pattern = ASYMMETRIC_CIRCLES_GRID;
+      //            else if( !strcmp( argv[i], "chessboard" ) )
+      //                pattern = CHESSBOARD;
+      //            else
+      //                return fprintf( stderr, "Invalid pattern type: must be chessboard or circles\n" ), -1;
+      //        }
+      //        else if( strcmp( s, "-s" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%f", &squareSize ) != 1 || squareSize <= 0 )
+      //                return fprintf( stderr, "Invalid board square width\n" ), -1;
+      //        }
+      //        ..else if( strcmp( s, "-n" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%u", &nframes ) != 1 || nframes <= 3 )
+      //                return printf("Invalid number of images\n" ), -1;
+      //        }
+      //        else if( strcmp( s, "-a" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%f", &aspectRatio ) != 1 || aspectRatio <= 0 )
+      //                return printf("Invalid aspect ratio\n" ), -1;
+      //            flags |= CV_CALIB_FIX_ASPECT_RATIO;
+      //        }
+      //        else if( strcmp( s, "-d" ) == 0 )
+      //        {
+      //            if( sscanf( argv[++i], "%u", &delay ) != 1 || delay <= 0 )
+      //                return printf("Invalid delay\n" ), -1;
+      //        }
+      //        else if( strcmp( s, "-op" ) == 0 )
+      //        {
+      //            writePoints = true;
+      //        }
+      //        else if( strcmp( s, "-oe" ) == 0 )
+      //        {
+      //            writeExtrinsics = true;
+      //        }
+      //        else if( strcmp( s, "-zt" ) == 0 )
+      //        {
+      //            flags |= CV_CALIB_ZERO_TANGENT_DIST;
+      //        }
+      //        else if( strcmp( s, "-p" ) == 0 )
+      //        {
+      //            flags |= CV_CALIB_FIX_PRINCIPAL_POINT;
+      //        }
+      //        else if( strcmp( s, "-v" ) == 0 )
+      //        {
+      //            flipVertical = true;
+      //        }
+      //        else if( strcmp( s, "-V" ) == 0 )
+      //        {
+      //            videofile = true;
+      //        }
+      //        else if( strcmp( s, "-o" ) == 0 )
+      //        {
+      //            outputFilename = argv[++i];
+      //        }
+      //        else if( strcmp( s, "-su" ) == 0 )
+      //        {
+      //            showUndistorted = true;
+      //        }
+      //        else if( s[0] != '-' )
+      //        {
+      //            if( isdigit(s[0]) )
+      //                sscanf(s, "%d", &cameraId);
+      //            else
+      //                inputFilename = s;
+      //        }
+      //        else
+      //            return fprintf( stderr, "Unknown option %s", s ), -1;
+      //    }
+
+      string msg;
+      if( !validate( msg ) ) {
+        cout << "Error: " <<  msg << endl;
+        exit(-1);
+      }
+    }
+
 
 };
-
 
 class Image {
   public:
@@ -181,38 +267,6 @@ class Image {
 
     const string &fileName( void ) const { return _fileName; }
     const Mat    &img( void )      const { return _img; }
-    vector< Point2f > points;
-
-    bool loadCache( const string &cacheFile )
-    {
-      if( !file_exists( cacheFile ) ) {
-        cout << "Unable to find cache file \"" << cacheFile << "\"" << endl;
-        return false;
-      }
-
-      FileStorage fs( cacheFile, FileStorage::READ );
-
-      // Load and validate data
-      Mat pts;
-      fs["points"] >> pts;
-
-      // Should be able to do this in-place, but ...
-      for( int i = 0; i < pts.rows; ++i ) {
-points.push_back( Point2f(pts.at<float>(i,0), pts.at<float>(i,1) ) );
-      }
-
-      return true;
-    }
-
-    void writeCache( const string &cacheFile )
-    {
-      mkdir_p( cacheFile );
-
-      FileStorage fs( cacheFile, FileStorage::WRITE );
-
-      fs << "points" << Mat( points );
-
-    }
 
     string basename( void )
     {
@@ -220,7 +274,7 @@ points.push_back( Point2f(pts.at<float>(i,0), pts.at<float>(i,1) ) );
       if( sep == string::npos )
         return _fileName;
 
-        return String( _fileName, sep+1 );
+      return String( _fileName, sep+1 );
     }
 
   private:
@@ -229,44 +283,6 @@ points.push_back( Point2f(pts.at<float>(i,0), pts.at<float>(i,1) ) );
     Mat _img;
 };
 
-
-const char* liveCaptureHelp =
-"When the live video from camera is used as input, the following hot-keys may be used:\n"
-"  <ESC>, 'q' - quit the program\n"
-"  'g' - start capturing images\n"
-"  'u' - switch undistortion on/off\n";
-
-static void help()
-{
-  printf( "This is a camera calibration sample.\n"
-      "Usage: calibration\n"
-      "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
-      "     --board,-b <board_name>    # Name of calibration pattern\n"
-      "     --camera, -c <camera_name> # Name of camera\n"
-      "     --ignore-cache, -i       # Ignore and overwrite files in cache\n"
-      "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
-      "                              # (used only for video capturing)\n"
-      "     [-o <out_camera_params>] # the output filename for intrinsic [and extrinsic] parameters\n"
-      "     [-op]                    # write detected feature points\n"
-      "     [-oe]                    # write extrinsic parameters\n"
-      "     [-zt]                    # assume zero tangential distortion\n"
-      "     [-a <aspectRatio>]      # fix aspect ratio (fx/fy)\n"
-      "     [-p]                     # fix the principal point at the center\n"
-      "     [-v]                     # flip the captured images around the horizontal axis\n"
-      "     [-V]                     # use a video file, and not an image list, uses\n"
-      "                              # [input_data] string for the video file name\n"
-      "     [-su]                    # show undistorted images after calibration\n"
-      "     [input_data]             # input data, one of the following:\n"
-      "                              #  - text file with a list of the images of the board\n"
-      "                              #    the text file can be generated with imagelist_creator\n"
-      "                              #  - name of video file with a video of the board\n"
-      "                              # if input_data not specified, a live view from the camera is used\n"
-      "\n" );
-  printf("\n%s",usage);
-  printf( "\n%s", liveCaptureHelp );
-}
-
-enum { DETECTION = 0, CAPTURING = 1, CALIBRATED = 2 };
 
 static double computeReprojectionErrors(
     const vector<vector<Point3f> >& objectPoints,
@@ -294,35 +310,10 @@ static double computeReprojectionErrors(
   return std::sqrt(totalErr/totalPoints);
 }
 
-static void calcChessboardCorners(Size boardSize, float squareSize, vector<Point3f>& corners, Pattern patternType = CHESSBOARD)
-{
-  corners.resize(0);
-
-  switch(patternType)
-  {
-    case CHESSBOARD:
-    case CIRCLES_GRID:
-      for( int i = 0; i < boardSize.height; i++ )
-        for( int j = 0; j < boardSize.width; j++ )
-          corners.push_back(Point3f(float(j*squareSize),
-                float(i*squareSize), 0));
-      break;
-
-    case ASYMMETRIC_CIRCLES_GRID:
-      for( int i = 0; i < boardSize.height; i++ )
-        for( int j = 0; j < boardSize.width; j++ )
-          corners.push_back(Point3f(float((2*j + i % 2)*squareSize),
-                float(i*squareSize), 0));
-      break;
-
-    default:
-      CV_Error(CV_StsBadArg, "Unknown pattern type\n");
-  }
-}
-
 static bool runCalibration( vector<vector<Point2f> > imagePoints,
-    Size imageSize, Size boardSize, Pattern patternType,
-    float squareSize, float aspectRatio,
+    vector< vector<Point3f> > objectPoints,
+    Size imageSize, 
+    float aspectRatio,
     int flags, Mat& cameraMatrix, Mat& distCoeffs,
     vector<Mat>& rvecs, vector<Mat>& tvecs,
     vector<float>& reprojErrs,
@@ -333,11 +324,6 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
     cameraMatrix.at<double>(0,0) = aspectRatio;
 
   distCoeffs = Mat::zeros(8, 1, CV_64F);
-
-  vector<vector<Point3f> > objectPoints(1);
-  calcChessboardCorners(boardSize, squareSize, objectPoints[0], patternType);
-
-  objectPoints.resize(imagePoints.size(),objectPoints[0]);
 
   double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
       distCoeffs, rvecs, tvecs, flags|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
@@ -429,7 +415,7 @@ static void saveCameraParams( const string& filename,
       t = tvecs[i].t();
     }
     cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
-  out   << "extrinsic_parameters" << bigmat;
+    out   << "extrinsic_parameters" << bigmat;
   }
 
   out << "images_used" << "[";
@@ -451,209 +437,17 @@ static void saveCameraParams( const string& filename,
   }
 }
 
-//static bool readStringList( const string& filename, vector<string>& l )
-//{
-//  l.resize(0);
-//  FileStorage fs(filename, FileStorage::READ);
-//  if( !fs.isOpened() )
-//    return false;
-//  FileNode n = fs.getFirstTopLevelNode();
-//  if( n.type() != FileNode::SEQ )
-//    return false;
-//  FileNodeIterator it = n.begin(), it_end = n.end();
-//  for( ; it != it_end; ++it )
-//    l.push_back((string)*it);
-//  return true;
-//}
 
-
-static bool runAndSave(const string& outputFilename,
-    const vector<vector<Point2f> >& imagePoints,
-    Size imageSize, const Board &board,
-    const vector<Image> &imagesUsed,
-    float aspectRatio, int flags, Mat& cameraMatrix,
-    Mat& distCoeffs, bool writeExtrinsics, bool writePoints )
+static string mkCameraFileName( void )
 {
-  vector<Mat> rvecs, tvecs;
-  vector<float> reprojErrs;
-  double totalAvgErr = 0;
-
-  bool ok = runCalibration(imagePoints, imageSize, board.size(), board.pattern, board.squareSize,
-      aspectRatio, flags, cameraMatrix, distCoeffs,
-      rvecs, tvecs, reprojErrs, totalAvgErr);
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
-
-  if( ok )
-    saveCameraParams( outputFilename, imageSize,
-        board, imagesUsed, aspectRatio,
-        flags, cameraMatrix, distCoeffs,
-        writeExtrinsics ? rvecs : vector<Mat>(),
-        writeExtrinsics ? tvecs : vector<Mat>(),
-        writeExtrinsics ? reprojErrs : vector<float>(),
-        writePoints ? imagePoints : vector<vector<Point2f> >(),
-        totalAvgErr );
-  return ok;
+  char strtime[32];
+  time_t tt;
+  time( &tt );
+  struct tm *t2 = localtime( &tt );
+  strftime( strtime, 32, "cal_%y%m%d_%H%M%S.yml", t2 );
+  return  string( strtime );
 }
 
-
-
-void parseOpts( int argc, char **argv, CalibrationOpts &opts )
-{
-  static struct option long_options[] = {
-    { "data_directory", true, NULL, 'd' },
-    { "board", true, NULL, 'b' },
-    { "camera", true, NULL, 'c' },
-    { "ignore-cache", false, NULL, 'i' },
-    { "help", false, NULL, '?' },
-    { 0, 0, 0, 0 }
-  };
-
-
-  if( argc < 2 )
-  {
-    help();
-    exit(1);
-  }
-
-  int indexPtr;
-  int optVal;
-  while( (optVal = getopt_long( argc, argv, "ib:c:d:?", long_options, &indexPtr )) != -1 ) {
-    switch( optVal ) {
-      case 'd':
-        opts.dataDir = optarg;
-        break;
-      case 'b':
-        opts.boardName = optarg;
-        break;
-      case 'c':
-        opts.cameraName = optarg;
-        break;
-      case 'i':
-        opts.ignoreCache = true;
-        break;
-      case '?': 
-        help();
-        break;
-      default:
-        exit(-1);
-
-    }
-  }
-
-  if( optind == argc )
-  {
-    cout << "No input files specified." << endl;
-    exit(-1);
-  }
-
-  for( int i = optind; i < argc; ++i ) {
-    string infile( argv[i] );
-
-    if( !file_exists( infile ) ) {
-        cout << "Couldn't open input file \"" << infile << "\"" << endl;
-        exit(-1);
-      }
-
-      opts.inFiles.push_back( infile );
-  }
-
-  //    for( i = 1; i < argc; i++ )
-  //    {
-  //        const char* s = argv[i];
-  //        if( strcmp( s, "-w" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%u", &boardSize.width ) != 1 || boardSize.width <= 0 )
-  //                return fprintf( stderr, "Invalid board width\n" ), -1;
-  //        }
-  //        else if( strcmp( s, "-h" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%u", &boardSize.height ) != 1 || boardSize.height <= 0 )
-  //                return fprintf( stderr, "Invalid board height\n" ), -1;
-  //        }
-  //        else if( strcmp( s, "-pt" ) == 0 )
-  //        {
-  //            i++;
-  //            if( !strcmp( argv[i], "circles" ) )
-  //                pattern = CIRCLES_GRID;
-  //            else if( !strcmp( argv[i], "acircles" ) )
-  //                pattern = ASYMMETRIC_CIRCLES_GRID;
-  //            else if( !strcmp( argv[i], "chessboard" ) )
-  //                pattern = CHESSBOARD;
-  //            else
-  //                return fprintf( stderr, "Invalid pattern type: must be chessboard or circles\n" ), -1;
-  //        }
-  //        else if( strcmp( s, "-s" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%f", &squareSize ) != 1 || squareSize <= 0 )
-  //                return fprintf( stderr, "Invalid board square width\n" ), -1;
-  //        }
-  //        ..else if( strcmp( s, "-n" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%u", &nframes ) != 1 || nframes <= 3 )
-  //                return printf("Invalid number of images\n" ), -1;
-  //        }
-  //        else if( strcmp( s, "-a" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%f", &aspectRatio ) != 1 || aspectRatio <= 0 )
-  //                return printf("Invalid aspect ratio\n" ), -1;
-  //            flags |= CV_CALIB_FIX_ASPECT_RATIO;
-  //        }
-  //        else if( strcmp( s, "-d" ) == 0 )
-  //        {
-  //            if( sscanf( argv[++i], "%u", &delay ) != 1 || delay <= 0 )
-  //                return printf("Invalid delay\n" ), -1;
-  //        }
-  //        else if( strcmp( s, "-op" ) == 0 )
-  //        {
-  //            writePoints = true;
-  //        }
-  //        else if( strcmp( s, "-oe" ) == 0 )
-  //        {
-  //            writeExtrinsics = true;
-  //        }
-  //        else if( strcmp( s, "-zt" ) == 0 )
-  //        {
-  //            flags |= CV_CALIB_ZERO_TANGENT_DIST;
-  //        }
-  //        else if( strcmp( s, "-p" ) == 0 )
-  //        {
-  //            flags |= CV_CALIB_FIX_PRINCIPAL_POINT;
-  //        }
-  //        else if( strcmp( s, "-v" ) == 0 )
-  //        {
-  //            flipVertical = true;
-  //        }
-  //        else if( strcmp( s, "-V" ) == 0 )
-  //        {
-  //            videofile = true;
-  //        }
-  //        else if( strcmp( s, "-o" ) == 0 )
-  //        {
-  //            outputFilename = argv[++i];
-  //        }
-  //        else if( strcmp( s, "-su" ) == 0 )
-  //        {
-  //            showUndistorted = true;
-  //        }
-  //        else if( s[0] != '-' )
-  //        {
-  //            if( isdigit(s[0]) )
-  //                sscanf(s, "%d", &cameraId);
-  //            else
-  //                inputFilename = s;
-  //        }
-  //        else
-  //            return fprintf( stderr, "Unknown option %s", s ), -1;
-  //    }
-
-  string msg;
-  if( !opts.validate( msg ) ) {
-    cout << "Error: " <<  msg << endl;
-    exit(-1);
-  }
-}
 
 
 
@@ -662,10 +456,9 @@ int main( int argc, char** argv )
 
   CalibrationOpts opts;
 
-  parseOpts( argc, argv, opts );
+  opts.parseOpts( argc, argv );
 
-  Board board = BoardFactory::load( opts.boardPath() );
-  board.name = opts.boardName;
+  Board *board = Board::load( opts.boardPath(), opts.boardName );
 
   const char* outputFilename = "out_camera_data.yml";
   Size imageSize;
@@ -674,25 +467,8 @@ int main( int argc, char** argv )
   Mat cameraMatrix, distCoeffs;
   bool writeExtrinsics = false, writePoints = false;
 
-  //    Size boardSize, 
-  //    float squareSize = 1.f, 
-  //    const char* inputFilename = 0;
-  //
-  //    int i, nframes = 10;
-  //    bool undistortImage = false;
-  //    VideoCapture capture;
-  //    bool flipVertical = false;
-  //    bool showUndistorted = false;
-  //    bool videofile = false;
-  //    int delay = 1000;
-  //    clock_t prevTimestamp = 0;
-  //    int mode = DETECTION;
-  //    int cameraId = 0;
-  //    vector<string> imageList;
-  //    Pattern pattern = CHESSBOARD;
-
-
   vector<vector<Point2f> > imagePoints;
+  vector< vector<Point3f> > objectPoints;
 
   if( opts.inFiles.size() < 1 ) {
     cout << "No input files specified on command line." << endl;
@@ -708,7 +484,6 @@ int main( int argc, char** argv )
 
     view = imread(opts.inFiles[i], 1);
 
-    // Fix this later
     imageSize = view.size();
 
     //if(!view.data)
@@ -722,13 +497,18 @@ int main( int argc, char** argv )
     //}
 
     Image img( opts.inFiles[i], view );
-    bool found;
-
+    Detection *detection = NULL;
 
     // Check for cached data
-    string imageCache = opts.imageCache( img.fileName() );
-    if( !opts.ignoreCache && img.loadCache( imageCache ) ) {
+    string detectionCache = opts.imageCache( img.fileName() );
+    bool doRegister = true;
 
+    if( !opts.ignoreCache && (detection = Detection::load( detectionCache )) != NULL ) {
+      doRegister = false;
+      if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
+    }
+
+    if( doRegister == false ) {
       cout << "  ... loaded data from cache." << endl;
     } else {
 
@@ -740,54 +520,27 @@ int main( int argc, char** argv )
       vector<Point2f> pointbuf;
       cvtColor(view, viewGray, COLOR_BGR2GRAY);
 
+      detection = board->detectPattern( viewGray, pointbuf );
 
-      switch( board.pattern )
-      {
-        case CHESSBOARD:
-          found = findChessboardCorners( view, board.size(), pointbuf,
-              CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
-          break;
-        case CIRCLES_GRID:
-          found = findCirclesGrid( view, board.size(), pointbuf );
-          break;
-        case ASYMMETRIC_CIRCLES_GRID:
-          found = findCirclesGrid( view, board.size(), pointbuf, CALIB_CB_ASYMMETRIC_GRID );
-          break;
-        default:
-          return fprintf( stderr, "Unknown pattern type\n" ), -1;
-      }
-
-      // improve the found corners' coordinate accuracy
-      if( board.pattern == CHESSBOARD && found) 
-        cornerSubPix( viewGray, pointbuf, Size(11,11), Size(-1,-1), TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 0.1 ));
-
-
-
-      if( found )  {
+      if( detection->found )  
         cout << "  Found calibration pattern." << endl;
-        img.points = pointbuf;
-      }
 
-      //if( mode == CAPTURING && found &&
-      //    (!capture.isOpened() || clock() - prevTimestamp > delay*1e-3*CLOCKS_PER_SEC) )
-      //{
-      //  imagePoints.push_back(pointbuf);
-      //  prevTimestamp = clock();
-      //  blink = capture.isOpened();
-      //}
-      img.writeCache( opts.imageCache( img.fileName() ) );
+      detection->writeCache( *board, opts.imageCache( img.fileName() ) );
     }
 
-    if( img.points.size() > 0 ) {
+    if( detection->points.size() > 0 ) {
       imagesUsed.push_back( img );
-      imagePoints.push_back( img.points );
-      drawChessboardCorners( view, board.size(), Mat(img.points), found );
+      imagePoints.push_back( detection->points );
+      objectPoints.push_back( detection->corners );
+
+      detection->drawCorners(  *board, view );
     }
 
     string outfile( opts.tmpPath( img.basename() ) );
     mkdir_p( outfile );
     imwrite(  outfile, view );
 
+    delete detection;
 
     //      string msg = mode == CAPTURING ? "100/100" :
     //        mode == CALIBRATED ? "Calibrated" : "Press 'g' to start";
@@ -815,8 +568,8 @@ int main( int argc, char** argv )
     //        undistort(temp, view, cameraMatrix, distCoeffs);
     //      }
 
-//    imshow("Image View", view);
-//    waitKey(1000);
+    //    imshow("Image View", view);
+    //    waitKey(1000);
 
     //int key = 0xff & waitKey(capture.isOpened() ? 50 : 500);
 
@@ -840,21 +593,31 @@ int main( int argc, char** argv )
   } // For each image
 
 
-cout << "Have points from " << imagePoints.size() << " images" << endl;
+  cout << "Using points from " << imagePoints.size() << "/" << opts.inFiles.size() << " images" << endl;
 
-char strtime[32];
-time_t tt;
-time( &tt );
-struct tm *t2 = localtime( &tt );
-strftime( strtime, 32, "cal_%y%m%d_%H%M%S.yml", t2 );
-string cameraFile( opts.cameraPath( strtime ) );
+  string cameraFile( opts.cameraPath(mkCameraFileName() ) );
+  vector<Mat> rvecs, tvecs;
+  vector<float> reprojErrs;
+  double totalAvgErr = 0;
 
-cout << "Appended results to " << cameraFile << endl;
-  runAndSave(cameraFile, imagePoints, imageSize, board,
-      imagesUsed,
-      aspectRatio,
+  bool ok = runCalibration(imagePoints, objectPoints,
+      imageSize, aspectRatio, flags, cameraMatrix, distCoeffs,
+      rvecs, tvecs, reprojErrs, totalAvgErr);
+  printf("%s. avg reprojection error = %.2f\n",
+      ok ? "Calibration succeeded" : "Calibration failed",
+      totalAvgErr);
+
+  if( ok )
+    cout << "Writing results to " << cameraFile << endl;
+  saveCameraParams( outputFilename, imageSize,
+      *board, imagesUsed, aspectRatio,
       flags, cameraMatrix, distCoeffs,
-      writeExtrinsics, writePoints);
+      writeExtrinsics ? rvecs : vector<Mat>(),
+      writeExtrinsics ? tvecs : vector<Mat>(),
+      writeExtrinsics ? reprojErrs : vector<float>(),
+      writePoints ? imagePoints : vector<vector<Point2f> >(),
+      totalAvgErr );
+  return ok;
 
   //    if( inputFilename )
   //    {
@@ -900,6 +663,9 @@ cout << "Appended results to " << cameraFile << endl;
   //                break;
   //        }
   //    }
+  //
+
+  delete board;
 
   return 0;
   }
