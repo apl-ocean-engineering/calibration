@@ -86,9 +86,9 @@ class CalibrationOpts {
       return true;
     }
 
-
     string dataDir;
     string boardName;
+    string cameraName;
     vector< string > inFiles;
     bool ignoreCache;
 
@@ -100,6 +100,11 @@ class CalibrationOpts {
 
     const string imageCache( const string &image )
     { return cachePath() + "/" + image + ".yml"; }
+
+    const string tmpPath( const string &file )
+    { return dataDir + "/tmp/" + file; }
+
+
 };
 
 
@@ -193,6 +198,15 @@ points.push_back( Point2f(pts.at<float>(i,0), pts.at<float>(i,1) ) );
 
       fs << "points" << Mat( points );
 
+    }
+
+    string basename( void )
+    {
+      size_t sep = _fileName.find_last_of( '/' );
+      if( sep == string::npos )
+        return _fileName;
+
+        return String( _fileName, sep+1 );
     }
 
   private:
@@ -729,6 +743,10 @@ int main( int argc, char** argv )
       drawChessboardCorners( view, board.size(), Mat(img.points), found );
     }
 
+    string outfile( opts.tmpPath( img.basename() ) );
+    mkdir_p( outfile.c_str() );
+    imwrite(  outfile, view );
+
 
     //      string msg = mode == CAPTURING ? "100/100" :
     //        mode == CALIBRATED ? "Calibrated" : "Press 'g' to start";
@@ -756,8 +774,8 @@ int main( int argc, char** argv )
     //        undistort(temp, view, cameraMatrix, distCoeffs);
     //      }
 
-    imshow("Image View", view);
-    waitKey(1000);
+//    imshow("Image View", view);
+//    waitKey(1000);
 
     //int key = 0xff & waitKey(capture.isOpened() ? 50 : 500);
 
