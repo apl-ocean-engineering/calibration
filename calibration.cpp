@@ -46,12 +46,18 @@ static bool file_exists( const string &infile ) {
   return (stat(infile.c_str(), &buffer) == 0 );
 }
 
-static void mkdir_p(const char *dir) {
+static bool directory_exists( const string &infile ) {
+  struct stat buffer;   
+  return (stat(infile.c_str(), &buffer) == 0  && (buffer.st_mode & S_IFDIR));
+}
+
+static void mkdir_p( const string &dir )
+{
   char tmp[256];
   char *p = NULL;
   size_t len;
 
-  snprintf(tmp, sizeof(tmp),"%s",dir);
+  snprintf(tmp, sizeof(tmp),"%s",dir.c_str() );
   len = strlen(tmp);
 
   bool finalSep = (tmp[len - 1] == '/');
@@ -82,6 +88,7 @@ class CalibrationOpts {
     bool validate( string &msg)
     {
       if( boardName.empty() ) { msg = "Board name not set"; return false; }
+      if( cameraName.empty() ) { msg = "Camea name not set"; return false; }
 
       return true;
     }
@@ -104,6 +111,12 @@ class CalibrationOpts {
     const string tmpPath( const string &file )
     { return dataDir + "/tmp/" + file; }
 
+    const string cameraPath( const string &filename )
+    {
+      string camDir(  dataDir + "/cameras/" + cameraName + "/" );
+      if( !directory_exists( camDir ) ) mkdir_p( camDir );
+      return camDir + filename;
+    }
 
 };
 
@@ -115,6 +128,7 @@ class Board {
       : pattern(pat), width(w), height(h), squareSize( squares )
     {;}
 
+    string name;
     Pattern pattern;
     int width, height;
     float squareSize;
@@ -192,7 +206,7 @@ points.push_back( Point2f(pts.at<float>(i,0), pts.at<float>(i,1) ) );
 
     void writeCache( const string &cacheFile )
     {
-      mkdir_p( cacheFile.c_str() );
+      mkdir_p( cacheFile );
 
       FileStorage fs( cacheFile, FileStorage::WRITE );
 
@@ -227,7 +241,8 @@ static void help()
   printf( "This is a camera calibration sample.\n"
       "Usage: calibration\n"
       "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
-      "     --board,-b <board_name>  # File describing calibration board\n"
+      "     --board,-b <board_name>    # Name of calibration pattern\n"
+      "     --camera, -c <camera_name> # Name of camera\n"
       "     --ignore-cache, -i       # Ignore and overwrite files in cache\n"
       "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
       "                              # (used only for video capturing)\n"
@@ -339,15 +354,25 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
 
 
 static void saveCameraParams( const string& filename,
-    Size imageSize, Size boardSize,
-    float squareSize, float aspectRatio, int flags,
+    Size imageSize, const Board &board,
+    const vector< Image > &imagesUsed,
+    float aspectRatio, int flags,
     const Mat& cameraMatrix, const Mat& distCoeffs,
     const vector<Mat>& rvecs, const vector<Mat>& tvecs,
     const vector<float>& reprojErrs,
     const vector<vector<Point2f> >& imagePoints,
     double totalAvgErr )
 {
-  FileStorage fs( filename, FileStorage::WRITE );
+  //FileStorage existing( filename, FileStorage::READ || FileStorage::MEMORY );
+
+  //int idx = 0;
+  //if( !existing.isOpened() || existing.root().type() == FileNode::NONE  ) {
+  //cout << "Creating new file for camera" <<endl;
+  //} else {
+
+  //}
+
+  FileStorage out( filename, FileStorage::WRITE );
 
   time_t tt;
   time( &tt );
@@ -355,18 +380,19 @@ static void saveCameraParams( const string& filename,
   char buf[1024];
   strftime( buf, sizeof(buf)-1, "%c", t2 );
 
-  fs << "calibration_time" << buf;
+  out << "calibration_time" << buf;
 
   if( !rvecs.empty() || !reprojErrs.empty() )
-    fs << "nframes" << (int)std::max(rvecs.size(), reprojErrs.size());
-  fs << "image_width" << imageSize.width;
-  fs << "image_height" << imageSize.height;
-  fs << "board_width" << boardSize.width;
-  fs << "board_height" << boardSize.height;
-  fs << "square_size" << squareSize;
+    out << "nframes" << (int)std::max(rvecs.size(), reprojErrs.size());
+  out << "image_width" << imageSize.width;
+  out << "image_height" << imageSize.height;
+  out << "board_name" << board.name;
+  out << "board_width" << board.size().width;
+  out << "board_height" << board.size().height;
+  out << "square_size" << board.squareSize;
 
   if( flags & CV_CALIB_FIX_ASPECT_RATIO )
-    fs << "aspectRatio" << aspectRatio;
+    out << "aspectRatio" << aspectRatio;
 
   if( flags != 0 )
   {
@@ -375,17 +401,17 @@ static void saveCameraParams( const string& filename,
         flags & CV_CALIB_FIX_ASPECT_RATIO ? "+fix_aspectRatio" : "",
         flags & CV_CALIB_FIX_PRINCIPAL_POINT ? "+fix_principal_point" : "",
         flags & CV_CALIB_ZERO_TANGENT_DIST ? "+zero_tangent_dist" : "" );
-    cvWriteComment( *fs, buf, 0 );
+    cvWriteComment( *out, buf, 0 );
   }
 
-  fs << "flags" << flags;
+  out << "flags" << flags;
 
-  fs << "camera_matrix" << cameraMatrix;
-  fs << "distortion_coefficients" << distCoeffs;
+  out << "camera_matrix" << cameraMatrix;
+  out << "distortion_coefficients" << distCoeffs;
 
-  fs << "avg_reprojection_error" << totalAvgErr;
+  out << "avg_reprojection_error" << totalAvgErr;
   if( !reprojErrs.empty() )
-    fs << "per_view_reprojection_errors" << Mat(reprojErrs);
+    out << "per_view_reprojection_errors" << Mat(reprojErrs);
 
   if( !rvecs.empty() && !tvecs.empty() )
   {
@@ -402,9 +428,15 @@ static void saveCameraParams( const string& filename,
       r = rvecs[i].t();
       t = tvecs[i].t();
     }
-    cvWriteComment( *fs, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
-    fs << "extrinsic_parameters" << bigmat;
+    cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
+  out   << "extrinsic_parameters" << bigmat;
   }
+
+  out << "images_used" << "[";
+  for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
+    out << img->fileName();
+  }
+  out << "]";
 
   if( !imagePoints.empty() )
   {
@@ -415,29 +447,30 @@ static void saveCameraParams( const string& filename,
       Mat imgpti(imagePoints[i]);
       imgpti.copyTo(r);
     }
-    fs << "image_points" << imagePtMat;
+    out << "image_points" << imagePtMat;
   }
 }
 
-static bool readStringList( const string& filename, vector<string>& l )
-{
-  l.resize(0);
-  FileStorage fs(filename, FileStorage::READ);
-  if( !fs.isOpened() )
-    return false;
-  FileNode n = fs.getFirstTopLevelNode();
-  if( n.type() != FileNode::SEQ )
-    return false;
-  FileNodeIterator it = n.begin(), it_end = n.end();
-  for( ; it != it_end; ++it )
-    l.push_back((string)*it);
-  return true;
-}
+//static bool readStringList( const string& filename, vector<string>& l )
+//{
+//  l.resize(0);
+//  FileStorage fs(filename, FileStorage::READ);
+//  if( !fs.isOpened() )
+//    return false;
+//  FileNode n = fs.getFirstTopLevelNode();
+//  if( n.type() != FileNode::SEQ )
+//    return false;
+//  FileNodeIterator it = n.begin(), it_end = n.end();
+//  for( ; it != it_end; ++it )
+//    l.push_back((string)*it);
+//  return true;
+//}
 
 
 static bool runAndSave(const string& outputFilename,
     const vector<vector<Point2f> >& imagePoints,
     Size imageSize, const Board &board,
+    const vector<Image> &imagesUsed,
     float aspectRatio, int flags, Mat& cameraMatrix,
     Mat& distCoeffs, bool writeExtrinsics, bool writePoints )
 {
@@ -454,7 +487,7 @@ static bool runAndSave(const string& outputFilename,
 
   if( ok )
     saveCameraParams( outputFilename, imageSize,
-        board.size(), board.squareSize, aspectRatio,
+        board, imagesUsed, aspectRatio,
         flags, cameraMatrix, distCoeffs,
         writeExtrinsics ? rvecs : vector<Mat>(),
         writeExtrinsics ? tvecs : vector<Mat>(),
@@ -471,6 +504,7 @@ void parseOpts( int argc, char **argv, CalibrationOpts &opts )
   static struct option long_options[] = {
     { "data_directory", true, NULL, 'd' },
     { "board", true, NULL, 'b' },
+    { "camera", true, NULL, 'c' },
     { "ignore-cache", false, NULL, 'i' },
     { "help", false, NULL, '?' },
     { 0, 0, 0, 0 }
@@ -485,13 +519,16 @@ void parseOpts( int argc, char **argv, CalibrationOpts &opts )
 
   int indexPtr;
   int optVal;
-  while( (optVal = getopt_long( argc, argv, "ib:d:?", long_options, &indexPtr )) != -1 ) {
+  while( (optVal = getopt_long( argc, argv, "ib:c:d:?", long_options, &indexPtr )) != -1 ) {
     switch( optVal ) {
       case 'd':
         opts.dataDir = optarg;
         break;
       case 'b':
         opts.boardName = optarg;
+        break;
+      case 'c':
+        opts.cameraName = optarg;
         break;
       case 'i':
         opts.ignoreCache = true;
@@ -628,6 +665,7 @@ int main( int argc, char** argv )
   parseOpts( argc, argv, opts );
 
   Board board = BoardFactory::load( opts.boardPath() );
+  board.name = opts.boardName;
 
   const char* outputFilename = "out_camera_data.yml";
   Size imageSize;
@@ -660,6 +698,8 @@ int main( int argc, char** argv )
     cout << "No input files specified on command line." << endl;
     exit(-1);
   }
+
+  vector<Image> imagesUsed;
 
   if( opts.ignoreCache ) cout << "Ignoring cached data." << endl;
   for( int i = 0; i < opts.inFiles.size(); ++i ) {
@@ -739,12 +779,13 @@ int main( int argc, char** argv )
     }
 
     if( img.points.size() > 0 ) {
+      imagesUsed.push_back( img );
       imagePoints.push_back( img.points );
       drawChessboardCorners( view, board.size(), Mat(img.points), found );
     }
 
     string outfile( opts.tmpPath( img.basename() ) );
-    mkdir_p( outfile.c_str() );
+    mkdir_p( outfile );
     imwrite(  outfile, view );
 
 
@@ -801,7 +842,16 @@ int main( int argc, char** argv )
 
 cout << "Have points from " << imagePoints.size() << " images" << endl;
 
-  runAndSave(outputFilename, imagePoints, imageSize, board,
+char strtime[32];
+time_t tt;
+time( &tt );
+struct tm *t2 = localtime( &tt );
+strftime( strtime, 32, "cal_%y%m%d_%H%M%S.yml", t2 );
+string cameraFile( opts.cameraPath( strtime ) );
+
+cout << "Appended results to " << cameraFile << endl;
+  runAndSave(cameraFile, imagePoints, imageSize, board,
+      imagesUsed,
       aspectRatio,
       flags, cameraMatrix, distCoeffs,
       writeExtrinsics, writePoints);
