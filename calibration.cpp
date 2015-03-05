@@ -326,7 +326,8 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
   distCoeffs = Mat::zeros(8, 1, CV_64F);
 
   double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
-      distCoeffs, rvecs, tvecs, flags|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+      distCoeffs, rvecs, tvecs, flags|CV_CALIB_RATIONAL_MODEL);
+
   ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
   printf("RMS error reported by calibrateCamera: %g\n", rms);
 
@@ -349,14 +350,6 @@ static void saveCameraParams( const string& filename,
     const vector<vector<Point2f> >& imagePoints,
     double totalAvgErr )
 {
-  //FileStorage existing( filename, FileStorage::READ || FileStorage::MEMORY );
-
-  //int idx = 0;
-  //if( !existing.isOpened() || existing.root().type() == FileNode::NONE  ) {
-  //cout << "Creating new file for camera" <<endl;
-  //} else {
-
-  //}
 
   FileStorage out( filename, FileStorage::WRITE );
 
@@ -460,7 +453,6 @@ int main( int argc, char** argv )
 
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
-  const char* outputFilename = "out_camera_data.yml";
   Size imageSize;
   float aspectRatio = 1.f;
   int flags = 0;
@@ -541,56 +533,7 @@ int main( int argc, char** argv )
     imwrite(  outfile, view );
 
     delete detection;
-
-    //      string msg = mode == CAPTURING ? "100/100" :
-    //        mode == CALIBRATED ? "Calibrated" : "Press 'g' to start";
-    //      int baseLine = 0;
-    //      Size textSize = getTextSize(msg, 1, 1, 1, &baseLine);
-    //      Point textOrigin(view.cols - 2*textSize.width - 10, view.rows - 2*baseLine - 10);
-    //
-    //      if( mode == CAPTURING )
-    //      {
-    //        if(undistortImage)
-    //          msg = format( "%d/%d Undist", (int)imagePoints.size(), nframes );
-    //        else
-    //          msg = format( "%d/%d", (int)imagePoints.size(), nframes );
-    //      }
-    //
-    //      putText( view, msg, textOrigin, 1, 1,
-    //          mode != CALIBRATED ? Scalar(0,0,255) : Scalar(0,255,0));
-    //
-    //      if( blink )
-    //        bitwise_not(view, view);
-    //
-    //      if( mode == CALIBRATED && undistortImage )
-    //      {
-    //        Mat temp = view.clone();
-    //        undistort(temp, view, cameraMatrix, distCoeffs);
-    //      }
-
-    //    imshow("Image View", view);
-    //    waitKey(1000);
-
-    //int key = 0xff & waitKey(capture.isOpened() ? 50 : 500);
-
-    //if( (key & 255) == 27 )
-    //  break;
-
-    //if( key == 'u' && mode == CALIBRATED )
-    //  undistortImage = !undistortImage;
-
-    //      if( capture.isOpened() && key == 'g' )
-    //      {
-    //        mode = CAPTURING;
-    //        imagePoints.clear();
-    //      }
-    //
-    //      if( mode == CAPTURING && imagePoints.size() >= (unsigned)nframes )
-    //      {
-    //
-    //
-
-  } // For each image
+  }
 
 
   cout << "Using points from " << imagePoints.size() << "/" << opts.inFiles.size() << " images" << endl;
@@ -607,9 +550,9 @@ int main( int argc, char** argv )
       ok ? "Calibration succeeded" : "Calibration failed",
       totalAvgErr);
 
-  if( ok )
+  if( ok ) {
     cout << "Writing results to " << cameraFile << endl;
-  saveCameraParams( outputFilename, imageSize,
+  saveCameraParams( cameraFile, imageSize,
       *board, imagesUsed, aspectRatio,
       flags, cameraMatrix, distCoeffs,
       writeExtrinsics ? rvecs : vector<Mat>(),
@@ -617,7 +560,49 @@ int main( int argc, char** argv )
       writeExtrinsics ? reprojErrs : vector<float>(),
       writePoints ? imagePoints : vector<vector<Point2f> >(),
       totalAvgErr );
-  return ok;
+  }
+
+
+
+
+  // Redraw each image with rectified points
+  Mat map1, map2;
+  double alpha = 0;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
+                      //                alpha = 1 means all source image pixels are included
+                      //
+  Mat optimalCameraMatrix( getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, alpha, imageSize, NULL ) );
+
+  initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), cameraMatrix,
+      imageSize, CV_16SC2, map1, map2);
+
+  for( int i = 0; i < imagesUsed.size(); ++i ) {
+
+    vector<Point2f> imagePoints2;
+
+    projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
+        cameraMatrix, distCoeffs, imagePoints2);
+
+    Mat out;
+    imagesUsed[i].img().copyTo( out );
+    for( int j = 0; j < imagePoints[i].size(); ++j ) {
+      circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
+
+      circle( out, imagePoints2[j], 5, Scalar(0,255,0), 1 );
+    }
+
+
+    string outfile( opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() ) );
+    mkdir_p( outfile );
+    imwrite(  outfile, out );
+   
+    Mat rview;
+    remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
+    outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
+    mkdir_p( outfile );
+    imwrite(  outfile, rview );
+
+  }
+
 
   //    if( inputFilename )
   //    {
@@ -668,4 +653,4 @@ int main( int argc, char** argv )
   delete board;
 
   return 0;
-  }
+}
