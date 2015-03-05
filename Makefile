@@ -7,8 +7,10 @@ all: $(APPS)
 
 APRILTAGS = ../apriltags/build
 
-CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3  -DUSE_APRILTAGS
-LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib 
+CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3  -DUSE_APRILTAGS \
+	    -Ithird_party/ffts/build/include/ffts 
+LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib  \
+	  -Lthird_party/ffts/build/lib -lffts
 LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl
 LD = g++
 
@@ -16,8 +18,8 @@ LD = g++
 extract_frame: extract_frame.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
 
-align_streams: align_streams.o trendnet_time_code.o file_utils.o
-	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
+align_streams: align_streams.o trendnet_time_code.o file_utils.o 
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^ 
 
 extract_static_frames: extract_static_frames.o trendnet_time_code.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
