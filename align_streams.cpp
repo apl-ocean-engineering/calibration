@@ -236,7 +236,7 @@ class Video
     void dumpTransitions( const string &filename )
     {
       const int vspacing = 3, hspacing = 2;
-      Mat canvas( Mat::zeros( Size( hspacing + 2 * TimeCodeROI.width, _transitions.size() * (TimeCodeROI.height + vspacing) ),
+      Mat canvas( Mat::zeros( Size( 3 * (hspacing + TimeCodeROI.width), _transitions.size() * (TimeCodeROI.height + vspacing) ),
             CV_8UC1 ) );
 
       int i = 0;
@@ -244,9 +244,12 @@ class Video
 
         Mat beforeROI( canvas, Rect( 0, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
         Mat  afterROI( canvas, Rect( TimeCodeROI.width + hspacing, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
+        Mat  diffROI( canvas, Rect( 2*(TimeCodeROI.width + hspacing), i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
 
         itr->second.before.copyTo( beforeROI );
         itr->second.after.copyTo( afterROI );
+
+        absdiff( itr->second.before, itr->second.after, diffROI );
       }
 
       imwrite( filename, canvas );
