@@ -8,6 +8,9 @@
 
 #include <getopt.h>
 
+#include "file_utils.h"
+#include "trendnet_time_code.h"
+
 using namespace cv;
 using namespace std;
 
@@ -19,6 +22,7 @@ struct AlignmentOptions
 
 
   float window, maxDelta;
+  string video1, video2;
 
   bool parseArgv( int argc, char **argv, string &msg )
   {
@@ -58,23 +62,58 @@ struct AlignmentOptions
       return false;
     }
 
+    video1 = argv[optind++];
+    video2 = argv[optind];
+
     return validate( msg );
   }
 
   bool validate( string &msg )
   {
+    if( !file_exists( video1 ) ) {
+      msg = "File \'" + video1 + "\' doesn't exist";
+      return false;
+    }
+    if( !file_exists( video2 ) ) {
+      msg = "File \'" + video2 + "\' doesn't exist";
+      return false;
+    }
+
     return true;
   }
 
   void help( string &msg )
   {
     stringstream strm;
-    strm << "Help!";
+    strm << "Help!" << endl;
 
     msg = strm.str();
   }
 };
 
+
+
+class Video
+{
+  public:
+    Video( const string &file )
+      : capture( file.c_str() ),filename( file )
+    {;}
+
+    string filename;
+    VideoCapture capture;
+
+    string dump( void ) 
+    {
+      stringstream strm;
+
+      strm << "File " << filename << ": " << \
+        capture.get( CV_CAP_PROP_FRAME_WIDTH ) << " x " << capture.get( CV_CAP_PROP_FRAME_HEIGHT ) << ", ";
+      strm << capture.get( CV_CAP_PROP_FPS ) << " fps.";
+
+      return strm.str();
+    }
+};
 
 
 int main( int argc, char **argv )
@@ -86,6 +125,16 @@ int main( int argc, char **argv )
     exit(-1);
   }
 
+  Video video[2] = { Video( opts.video1 ), Video( opts.video2 ) };
+
+  for( int i = 0; i < 2; ++i ) {
+    if( !video[i].capture.isOpened() ) {
+      cerr << "Can't open video " << i << endl;
+      exit(-1);
+    }
+
+    cout << video[i].dump() << endl;
+  }
 
 
 
