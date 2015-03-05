@@ -1,6 +1,7 @@
 
 APPS := calibration calibration_artificial calibration_april \
-  extract_frame trendnet_time_code_test watch_for_change extract_static_frames
+  extract_frame trendnet_time_code_test watch_for_change extract_static_frames \
+  align_streams
 
 all: $(APPS)
 
@@ -13,6 +14,9 @@ LD = g++
 
 
 extract_frame: extract_frame.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
+
+align_streams: align_streams.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
 
 extract_static_frames: extract_static_frames.o trendnet_time_code.o
