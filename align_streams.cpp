@@ -1,4 +1,6 @@
 
+#include <stdlib.h>
+
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -34,11 +36,14 @@ struct AlignmentOptions
 {
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( void )
-    : window( 4.2 ), maxDelta( 5.0 )
+    : window( 4.2 ), maxDelta( 5.0 ), offset(0), offsetGiven(false)
   {;}
 
 
   float window, maxDelta;
+  int offset;
+bool offsetGiven;
+
   string video1, video2;
 
   bool parseArgv( int argc, char **argv, string &msg )
@@ -46,6 +51,7 @@ struct AlignmentOptions
     static struct option long_options[] = {
       { "window", true, NULL, 'w' },
       { "max-delay", true, NULL, 'd'},
+      { "offset", true, NULL, 'o'},
       { "help", false, NULL, '?' },
       { 0, 0, 0, }
     };
@@ -59,6 +65,10 @@ struct AlignmentOptions
           break;
         case 'w':
           window = atof( optarg );
+          break;
+        case 'o':
+          offset = atoi( optarg );
+          offsetGiven = true;
           break;
         case '?':
           help( msg );
@@ -120,7 +130,7 @@ struct TimecodeTransition
 
 };
 
-    typedef pair< int, int > IndexPair;
+typedef pair< int, int > IndexPair;
 
 class Video
 {
@@ -163,11 +173,24 @@ class Video
     void findTransitionsSeconds( float start, float end, int deltaNorm = DefaultDeltaNorm )
     { findTransitions( floor( start * fps() ), ceil( end * fps() ), deltaNorm ); }
 
-    void seek( int offset )
+    int frame( void ) { return capture.get( CV_CAP_PROP_POS_FRAMES ); }
+
+    void seek( int frame)
     {
-      capture.set( CV_CAP_PROP_POS_FRAMES, offset );
+      //  Incredibly inefficient but appears to be more reliable
+      capture.open( filename );
+      for( int i = 0; i < frame; ++i ) capture.grab();
+      
+      //capture.set( CV_CAP_PROP_POS_FRAMES, frame);
+    }
+    void scrub( int offset )
+    {
+      seek( frame()+offset );
     }
     void rewind( void ) { seek( 0 ); }
+
+    bool read( Mat &mat )
+    { return capture.read( mat ); }
 
     void findTransitions( int start, int end, int deltaNorm = DefaultDeltaNorm )
     {
@@ -198,7 +221,6 @@ class Video
         }
 
         meanNorm += (norms[ at ] = cv::norm( prev, curr, NORM_L2 ));
-
 
         prev = curr;
       }
@@ -313,6 +335,10 @@ class Video
         itr->after.copyTo( afterROI );
 
         absdiff( itr->before, itr->after, diffROI );
+
+        stringstream strm;
+        strm << itr->frame;
+        putText( diffROI, strm.str(), Point( 0, TimeCodeROI.height ), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(255,255,255) );
       }
 
       imwrite( filename, canvas );
@@ -332,15 +358,116 @@ class Synchronizer
       : _video0( v0 ), _video1( v1 ), _offset( 0 )
     {;}
 
+    void setOffset( int offset )
+    { _offset = offset; }
+
     void rewind( void )
     {
       if( _offset < 0 ) {
-        _video0.seek( _offset );
+        _video0.seek( -_offset );
         _video1.seek( 0 );
       } else {
         _video0.seek( 0 );
         _video1.seek( _offset );
       }
+      cout << "Rewind to frames: " << _video0.frame() << ' ' << _video1.frame() << endl;
+    }
+
+    bool seek( int which, int dest )
+    {
+      if( which == 0 ) {
+        int dest1 = dest + _offset;
+
+        if( dest >= 0 && dest < _video0.frameCount() && 
+            dest1 >= 0 && dest1 < _video1.frameCount() ) {
+          _video0.seek(dest);
+          _video1.seek(dest1);
+          return true;
+        } 
+
+      } else {
+        return seek( 0, dest - _offset );
+      }
+
+      return  false;
+    }
+
+    bool scrub( int offset )
+    {  int dest0 = _video0.frame() + offset;
+      return seek( 0, dest0 );
+    }
+
+    static const float Scale;
+
+    bool advanceToNextTransition( int which )
+    {
+      int current = (which == 0) ? _video0.frame() : _video1.frame();
+
+      const Video::TransitionVec &transitions( (which==0) ? _video0.transitions() : _video1.transitions() );
+
+      if( transitions.size() == 0 ) 
+        return false;
+      else 
+      {
+        if( transitions[0].frame > current ) {
+          seek( which, transitions[0].frame );
+          cout << "Advancing video " << which << " to frame " << transitions[0].frame << endl;
+          return true;
+        } 
+
+        if( transitions.size() > 1 )
+          for( int i = 1; i < transitions.size(); ++i ) {
+            if( (transitions[i-1].frame <= current) && (transitions[i].frame > current) ) {
+              cout << "Advancing video " << which << " to frame " << transitions[i].frame << endl;
+              seek( which , transitions[i].frame );
+              return true;
+            }
+          }
+      }
+
+      return false;
+    }
+
+    Size compositeSize( void )
+    { return  Size( Scale*(_video0.width() + _video1.width()), Scale*std::max(_video0.height(), _video1.height()) ); }
+
+    void advanceOnly( int which )
+    {
+if( which == 0 ) {
+  _offset--;
+  _video1.scrub(-1);
+} else {
+  _offset++;
+  _video0.scrub(-1);
+}
+    }
+
+    bool nextCompositeFrame( Mat &img )
+    {
+
+      img.create( compositeSize(), CV_8UC3 );
+
+      Mat video0ROI( img, Rect( 0, 0, Scale*_video0.width(), Scale*_video0.height() ) );
+      Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
+
+      cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
+
+      Mat frame;
+      if( _video0.read( frame ) ) 
+        if( Scale != 1.0 )
+        resize( frame, video0ROI, video0ROI.size() );
+        else
+          frame.copyTo( video0ROI );
+      else return false;
+
+      if( _video1.read(frame )  )
+        if( Scale != 1.0 )
+        resize( frame, video1ROI, video1ROI.size() );
+        else
+          frame.copyTo( video1ROI );
+      else return false;
+
+      return true;
     }
 
     // Tools for estimating initial offset
@@ -426,7 +553,7 @@ class Synchronizer
       cout << "With frames " << _video0.transitions()[ best.v0.second-1 ].frame << " " << _video1.transitions()[ best.v1.second-1 ].frame << endl;
       cout << "With video1 offset to video0 by " << _offset << endl;
 
-      return 0;
+      return _offset;
     }
 
 
@@ -438,6 +565,8 @@ class Synchronizer
 
 
 };
+
+    const float Synchronizer::Scale = 1;
 
 
 int main( int argc, char **argv )
@@ -478,9 +607,36 @@ int main( int argc, char **argv )
 #endif
 
   Synchronizer sync( video[0], video[1] );
-  int offset = sync.estimateOffset( opts.window, opts.maxDelta );
+  if( opts.offsetGiven )
+    sync.setOffset( opts.offset );
+  else
+    sync.estimateOffset( opts.window, opts.maxDelta );
 
   sync.rewind();
+  sync.seek( 0, 151 );
+
+  Mat img;
+  while( sync.nextCompositeFrame( img )) {
+    int ch;
+    imshow( "Composite", img );
+    ch = waitKey( 0 );
+
+    if( ch == 'q' )
+      break;
+    else if (ch == ',')
+      sync.scrub(-2);
+    else if (ch == '[')
+      sync.advanceToNextTransition( 0 );
+    else if (ch == ']')
+      sync.advanceToNextTransition( 1 );
+    else if (ch == 'R')
+      sync.rewind();
+    else if (ch == 'l')
+      sync.advanceOnly( 0 );
+    else if (ch == 'r')
+      sync.advanceOnly( 1 );
+
+  }
 
 
   exit(0);
