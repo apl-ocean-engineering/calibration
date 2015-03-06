@@ -24,6 +24,7 @@
 #include "trendnet_time_code.h"
 
 #include "video.h"
+#include "synchronizer.h"
 
 using namespace cv;
 using namespace std;
@@ -126,224 +127,6 @@ struct AlignmentOptions
 
 
 
-class Synchronizer
-{
-  public:
-    Synchronizer( Video &v0, Video &v1 )
-      : _video0( v0 ), _video1( v1 ), _offset( 0 )
-    {;}
-
-    void setOffset( int offset )
-    { _offset = offset; }
-
-    void rewind( void )
-    {
-      if( _offset < 0 ) {
-        _video0.seek( -_offset );
-        _video1.seek( 0 );
-      } else {
-        _video0.seek( 0 );
-        _video1.seek( _offset );
-      }
-      cout << "Rewind to frames: " << _video0.frame() << ' ' << _video1.frame() << endl;
-    }
-
-    bool seek( int which, int dest )
-    {
-      if( which == 0 ) {
-        int dest1 = dest + _offset;
-
-        if( dest >= 0 && dest < _video0.frameCount() && 
-            dest1 >= 0 && dest1 < _video1.frameCount() ) {
-          _video0.seek(dest);
-          _video1.seek(dest1);
-          return true;
-        } 
-
-      } else {
-        return seek( 0, dest - _offset );
-      }
-
-      return  false;
-    }
-
-    bool scrub( int offset )
-    {  int dest0 = _video0.frame() + offset;
-      return seek( 0, dest0 );
-    }
-
-    static const float Scale;
-
-    bool advanceToNextTransition( int which )
-    {
-      int current = (which == 0) ? _video0.frame() : _video1.frame();
-
-      const Video::TransitionVec &transitions( (which==0) ? _video0.transitions() : _video1.transitions() );
-
-      if( transitions.size() == 0 ) 
-        return false;
-      else 
-      {
-        if( transitions[0].frame > current ) {
-          seek( which, transitions[0].frame );
-          cout << "Advancing video " << which << " to frame " << transitions[0].frame << endl;
-          return true;
-        } 
-
-        if( transitions.size() > 1 )
-          for( int i = 1; i < transitions.size(); ++i ) {
-            if( (transitions[i-1].frame <= current) && (transitions[i].frame > current) ) {
-              cout << "Advancing video " << which << " to frame " << transitions[i].frame << endl;
-              seek( which , transitions[i].frame );
-              return true;
-            }
-          }
-      }
-
-      return false;
-    }
-
-    Size compositeSize( void )
-    { return  Size( Scale*(_video0.width() + _video1.width()), Scale*std::max(_video0.height(), _video1.height()) ); }
-
-    void advanceOnly( int which )
-    {
-      if( which == 0 ) {
-        _offset--;
-        _video1.scrub(-1);
-      } else {
-        _offset++;
-        _video0.scrub(-1);
-      }
-    }
-
-    bool nextCompositeFrame( Mat &img )
-    {
-
-      img.create( compositeSize(), CV_8UC3 );
-
-      Mat video0ROI( img, Rect( 0, 0, Scale*_video0.width(), Scale*_video0.height() ) );
-      Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
-
-      cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
-
-      Mat frame;
-      if( _video0.read( frame ) ) 
-        if( Scale != 1.0 )
-          resize( frame, video0ROI, video0ROI.size() );
-        else
-          frame.copyTo( video0ROI );
-      else return false;
-
-      if( _video1.read(frame )  )
-        if( Scale != 1.0 )
-          resize( frame, video1ROI, video1ROI.size() );
-        else
-          frame.copyTo( video1ROI );
-      else return false;
-
-      return true;
-    }
-
-    // Tools for estimating initial offset
-    float compareSpans( IndexPair &thisSpan, IndexPair &otherSpan )
-    {
-      cout << "======================" << endl;
-      cout << "this span:  " << thisSpan.first << ' ' << thisSpan.second << endl;
-      for( int i = thisSpan.first; i < thisSpan.second; ++i ) {
-        if( i > thisSpan.first ) 
-          cout << _video0.transitions()[i].frame << ' ' << _video0.transitions()[i].frame - _video0.transitions()[i-1].frame << endl;
-        else
-          cout << _video0.transitions()[i].frame << ' ' <<endl;
-      }
-
-      cout << "other span: " << otherSpan.first << ' ' << otherSpan.second << endl;
-      for( int i = otherSpan.first; i < otherSpan.second; ++i ) {
-        if( i > otherSpan.first ) 
-          cout << _video1.transitions()[i].frame << ' ' << _video1.transitions()[i].frame - _video1.transitions()[i-1].frame << endl;
-        else
-          cout << _video1.transitions()[i].frame << ' ' <<endl;
-      }
-
-
-      if( (thisSpan.second - thisSpan.first) != (otherSpan.second - otherSpan.first) ) {
-        cout << "Spans are different lengths, using shorter of the two " << endl;
-      }
-      int  length = std::min( thisSpan.second-thisSpan.first, otherSpan.second-otherSpan.first );
-
-      float total = 0.0;
-      for( int i = 0; i < length; ++i ) {
-        total += norm( _video0.transitions()[ thisSpan.first+i ].before, _video1.transitions()[ otherSpan.first+i ].before, NORM_L2 );
-        total += norm( _video0.transitions()[ thisSpan.first+i ].after, _video1.transitions()[ otherSpan.first+i ].after, NORM_L2 );
-      }
-      total /= length;
-
-      return total;
-    }
-
-    struct OffsetResult {
-      OffsetResult( IndexPair vid0, IndexPair vid1 )
-        : v0( vid0 ), v1( vid1 )
-      {;}
-
-      IndexPair v0, v1;
-    };
-
-    int estimateOffset( float window, float maxDelta ) 
-    {
-      // TODO:  Currently assumes both videos have same FPS
-      int maxDeltaFrames = floor(maxDelta *  _video0.fps()),
-          windowFrames = floor(window * _video0.fps());
-      map <float, OffsetResult> results;
-
-      IndexPair thisSpan( _video0.getSpan( 0, windowFrames ) );
-      IndexPair otherSpan( _video1.getSpan( maxDeltaFrames, windowFrames ) );
-
-      cout << "Getting span with max delta " << maxDeltaFrames << "  length " << windowFrames << endl;
-      cout << " Got " << thisSpan.first << ' ' << thisSpan.second << endl;
-      cout << " Got " << otherSpan.first << ' ' << otherSpan.second << endl;
-
-
-      // Start with set of transitions from maxDelta to maxDelta+window (this is the maximum backwards shift on video1)
-
-      do {
-        float result = compareSpans( thisSpan, otherSpan );
-        cout << "    result: " << result << endl;
-        results.insert( make_pair( result, OffsetResult( thisSpan, otherSpan ) ) );
-      } while( _video1.shiftSpan( otherSpan, windowFrames, -1 ) ) ;
-
-      // Now start shifting my span forward
-      do {
-        float result = compareSpans( thisSpan, otherSpan );
-        cout << "    result: " << result << endl;
-        results.insert( make_pair( result, OffsetResult( thisSpan, otherSpan ) ) );
-      } while( _video0.shiftSpan( thisSpan, windowFrames, +1 ) );
-
-      OffsetResult best = results.begin()->second;
-
-      // Calculate offset from end of spans...
-      _offset = _video1.transitions()[ best.v1.second-1 ].frame - _video0.transitions()[ best.v0.second-1 ].frame;
-
-      cout << "Best alignment has score " << results.begin()->first << endl;
-      cout << "With frames " << _video0.transitions()[ best.v0.second-1 ].frame << " " << _video1.transitions()[ best.v1.second-1 ].frame << endl;
-      cout << "With video1 offset to video0 by " << _offset << endl;
-
-      return _offset;
-    }
-
-
-
-  private:
-    Video & _video0, &_video1;
-
-    int _offset;
-
-
-};
-
-const float Synchronizer::Scale = 1;
-
-
 int main( int argc, char **argv )
 {
   string error;
@@ -358,6 +141,7 @@ int main( int argc, char **argv )
 #endif
 
   VideoLookahead video[2] = { VideoLookahead( opts.video1, opts.lookahead ), VideoLookahead( opts.video2, opts.lookahead ) };
+  TransitionVec transitions[2];
 
   for( int i = 0; i < 2; ++i ) {
     if( !video[i].capture.isOpened() ) {
@@ -367,12 +151,14 @@ int main( int argc, char **argv )
 
     cout << video[i].dump() << endl;
 
-    video[i].findTransitionsSeconds( 0, 2*opts.maxDelta );
+    video[i].initializeTransitionStatistics( 0, 2*opts.maxDelta * video[i].fps(), transitions[i] );
+
+    cout << "Found " << transitions[i].size() << " transitions" << endl;
 
     stringstream filename;
     filename << "/tmp/transitions_" << i << ".png";
 
-    video[i].dumpTransitions( filename.str() );
+    Video::dumpTransitions( transitions[i], filename.str() );
 
     if( i == 0 ) normFile << endl << endl;
   }
@@ -385,7 +171,8 @@ int main( int argc, char **argv )
   if( opts.offsetGiven )
     sync.setOffset( opts.offset );
   else
-    sync.estimateOffset( opts.window, opts.maxDelta );
+    sync.estimateOffset( transitions[0], transitions[1], 
+        opts.window * video[0].fps(), opts.maxDelta * video[0].fps() );
 
   sync.rewind();
   sync.seek( 0, 151 );
@@ -401,9 +188,9 @@ int main( int argc, char **argv )
     else if (ch == ',')
       sync.scrub(-2);
     else if (ch == '[')
-      sync.advanceToNextTransition( 0 );
+      sync.advanceToNextTransition( transitions[0], 0 );
     else if (ch == ']')
-      sync.advanceToNextTransition( 1 );
+      sync.advanceToNextTransition( transitions[1], 1 );
     else if (ch == 'R')
       sync.rewind();
     else if (ch == 'l')

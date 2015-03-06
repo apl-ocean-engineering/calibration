@@ -26,7 +26,6 @@
 //#define MAKE_NORMFILE
 
 using std::pair;
-using std::vector;
 using std::string;
 
 struct TimecodeTransition
@@ -40,21 +39,32 @@ struct TimecodeTransition
 
 };
 
+typedef std::vector< TimecodeTransition > TransitionVec;
+typedef std::map< int, TimecodeTransition > TransitionMap;
+
+
+struct Gaussian {
+  Gaussian()
+    : mean(0.0), stddev(1.0) 
+  {;}
+
+  float mean, stddev;
+
+  float p( int x ) {
+    return gsl_cdf_gaussian_P( x - mean, stddev );
+  }
+};
+
 typedef pair< int, int > IndexPair;
 
 class Video
 {
   public:
 
-    typedef vector< TimecodeTransition > TransitionVec;
-
     Video( const string &file );
 
     string filename;
     cv::VideoCapture capture;
-
-    const TransitionVec &transitions( void ) const { return _transitions; }
-    const TransitionVec &transitions( void ) { return _transitions; }
 
     float fps( void ) { return capture.get( CV_CAP_PROP_FPS ); }
     int frameCount( void ) { return capture.get( CV_CAP_PROP_FRAME_COUNT ); }
@@ -73,10 +83,9 @@ class Video
     }
 
     static const cv::Rect TimeCodeROI;
-    static const int DefaultDeltaNorm = 128;
 
-    void findTransitionsSeconds( float start, float end, int deltaNorm = DefaultDeltaNorm )
-    { findTransitions( floor( start * fps() ), ceil( end * fps() ), deltaNorm ); }
+//    void findTransitionsSeconds( float start, float end )
+//    { findTransitions( floor( start * fps() ), ceil( end * fps() ) ); }
 
     virtual int frame( void ) { return capture.get( CV_CAP_PROP_POS_FRAMES ); }
 
@@ -86,17 +95,15 @@ class Video
     void rewind( void ) { seek( 0 ); }
     virtual bool read( cv::Mat &mat );
 
-    void findTransitions( int start, int end, int deltaNorm = DefaultDeltaNorm );
+    void initializeTransitionStatistics( int start, int end, TransitionVec &transitions );
 
-    IndexPair getSpan( int start, int length );
+    static void dumpTransitions( const TransitionVec &transitions, const string &filename );
 
-    bool shiftSpan( IndexPair &pair, int length, int direction );
+  protected:
 
-    void dumpTransitions( const string &filename );
- 
-  private:
+    Gaussian _distTimecodeNorm, _distDt;
+    bool _transitionStatisticsInitialized;
 
-    TransitionVec _transitions;
 };
 
 
