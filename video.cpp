@@ -192,12 +192,12 @@ void Video::dumpTransitions( const string &filename )
 
 void VideoLookahead::seek( int dest )
 {
-  if( dest >= frame() && dest <= (frame() + _queue.size()) ) {
+  if( dest >= frame() && dest <= (frame() + _future.size()) ) {
     int drop = dest - frame();
-    for( int i =0; i < drop && !_queue.empty(); ++i ) _queue.pop();
+    for( int i =0; i < drop && !_future.empty(); ++i ) _future.pop();
 
   } else {
-    while( !_queue.empty() ) _queue.pop();
+    while( !_future.empty() ) _future.pop();
 
     Video::seek( dest );
   }
@@ -206,15 +206,15 @@ void VideoLookahead::seek( int dest )
 bool VideoLookahead::read( cv::Mat &mat ) 
 {
   Mat framein;
-  while( _queue.size() < _lookaheadFrames && capture.read( framein ) )  {
+  while( _future.size() < _lookaheadFrames && capture.read( framein ) )  {
     Mat foo;
     framein.copyTo( foo );
-    _queue.push( foo );
+    _future.push( foo );
   }
 
-  if( _queue.size() > 0 ) {
-    _queue.front().copyTo( mat );
-    _queue.pop();
+  if( _future.size() > 0 ) {
+    _future.front().copyTo( mat );
+    _future.pop();
     return true;
   }
 

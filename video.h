@@ -105,13 +105,13 @@ class VideoLookahead : public Video
   public:
     VideoLookahead( const string &file, float lookaheadSecs );
 
-    virtual int frame( void ) { return  Video::frame() - _queue.size(); }
+    virtual int frame( void ) { return  Video::frame() - _future.size(); }
     virtual void seek( int frame );
     virtual bool read( cv::Mat &mat );
 
   private:
     int _lookaheadFrames;
-    std::queue< cv::Mat > _queue;
+    std::queue< cv::Mat > _future;
 };
 
 
