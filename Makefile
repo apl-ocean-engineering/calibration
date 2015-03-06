@@ -9,8 +9,10 @@ APRILTAGS = ../apriltags/build
 
 CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3  -DUSE_APRILTAGS \
 	    -Ithird_party/ffts/build/include/ffts 
-LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib  \
-	  -Lthird_party/ffts/build/lib -lffts
+LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib -lgsl
+
+	  #-Lthird_party/ffts/build/lib -lffts
+
 LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl
 LD = g++
 
