@@ -23,6 +23,8 @@
 #include "file_utils.h"
 #include "trendnet_time_code.h"
 
+#include "video.h"
+
 using namespace cv;
 using namespace std;
 
@@ -36,13 +38,13 @@ struct AlignmentOptions
 {
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( void )
-    : window( 4.2 ), maxDelta( 5.0 ), offset(0), offsetGiven(false)
+    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2), offset(0), offsetGiven(false)
   {;}
 
 
-  float window, maxDelta;
+  float window, maxDelta, lookahead;
   int offset;
-bool offsetGiven;
+  bool offsetGiven;
 
   string video1, video2;
 
@@ -52,13 +54,14 @@ bool offsetGiven;
       { "window", true, NULL, 'w' },
       { "max-delay", true, NULL, 'd'},
       { "offset", true, NULL, 'o'},
+      { "lookahead", true, NULL, 'l'},
       { "help", false, NULL, '?' },
       { 0, 0, 0, }
     };
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, ":w:d:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, ":w:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'd':
           maxDelta = atof(optarg);
@@ -69,6 +72,9 @@ bool offsetGiven;
         case 'o':
           offset = atoi( optarg );
           offsetGiven = true;
+          break;
+        case 'l':
+          lookahead = atof( optarg );
           break;
         case '?':
           help( msg );
@@ -119,237 +125,6 @@ bool offsetGiven;
 };
 
 
-struct TimecodeTransition
-{
-  TimecodeTransition( int fr, const Mat &b, const Mat &a )
-    : frame(fr), before( b.clone() ), after( a.clone() )
-  {;}
-
-  int frame;
-  Mat before, after;
-
-};
-
-typedef pair< int, int > IndexPair;
-
-class Video
-{
-  public:
-
-    typedef vector< TimecodeTransition > TransitionVec;
-
-    Video( const string &file )
-      : capture( file.c_str() ),filename( file )
-    {
-      // Should be more flexible about this..
-      assert( (height() == 1080) && (width() == 1920) );
-    }
-
-    string filename;
-    VideoCapture capture;
-
-    const TransitionVec &transitions( void ) const { return _transitions; }
-    const TransitionVec &transitions( void ) { return _transitions; }
-
-    float fps( void ) { return capture.get( CV_CAP_PROP_FPS ); }
-    int frameCount( void ) { return capture.get( CV_CAP_PROP_FRAME_COUNT ); }
-    int height( void ) { return capture.get( CV_CAP_PROP_FRAME_HEIGHT ); }
-    int width( void ) { return capture.get( CV_CAP_PROP_FRAME_WIDTH ); }
-
-    string dump( void ) 
-    {
-      stringstream strm;
-
-      strm << "File " << filename << ": ";
-      strm << width() << " x " << height() << ", ";
-      strm << fps() << " fps.";
-
-      return strm.str();
-    }
-
-    static const Rect TimeCodeROI;
-    static const int DefaultDeltaNorm = 128;
-
-    void findTransitionsSeconds( float start, float end, int deltaNorm = DefaultDeltaNorm )
-    { findTransitions( floor( start * fps() ), ceil( end * fps() ), deltaNorm ); }
-
-    int frame( void ) { return capture.get( CV_CAP_PROP_POS_FRAMES ); }
-
-    void seek( int frame)
-    {
-      //  Incredibly inefficient but appears to be more reliable
-      capture.open( filename );
-      for( int i = 0; i < frame; ++i ) capture.grab();
-      
-      //capture.set( CV_CAP_PROP_POS_FRAMES, frame);
-    }
-    void scrub( int offset )
-    {
-      seek( frame()+offset );
-    }
-    void rewind( void ) { seek( 0 ); }
-
-    bool read( Mat &mat )
-    { return capture.read( mat ); }
-
-    void findTransitions( int start, int end, int deltaNorm = DefaultDeltaNorm )
-    {
-      start = std::max( 0, std::min( frameCount(), start ) );
-      end = std::max( 0, std::min( frameCount(), end ) );
-      int length = end-start;
-
-      rewind();
-
-      // First, sample the norms
-      vector < float > norms(length, 0);
-      float meanNorm = 0;
-      vector < Mat > timecodes(length);
-
-      Mat prev;
-      for( int at = 0; at < length; ++at ) {
-        Mat fullImage;
-        capture >> fullImage;
-
-        Mat timeCodeROI( fullImage, TimeCodeROI ), curr;
-        cv::cvtColor( timeCodeROI, curr, CV_BGR2GRAY );
-
-        curr.copyTo(timecodes[at]);
-
-        if( prev.empty() ) {
-          prev = curr;
-          continue;
-        }
-
-        meanNorm += (norms[ at ] = cv::norm( prev, curr, NORM_L2 ));
-
-        prev = curr;
-      }
-
-      // Gather statistics on the norms
-      meanNorm /= length;
-
-      float var = 0, stddev= 0;
-      for( int i = 0; i < norms.size(); ++i ) var += pow( norms[i] - meanNorm, 2 );
-      stddev = sqrt( var / (length-1) );
-
-      cout << "Norm stats:: mean " << meanNorm << " stddev " << stddev << endl;
-
-      int prevIdx = -1;
-      int dtMean = fps();
-      float dtStddev = 2.0;
-
-      float pThreshold = 0.99;
-      for( int i = 1; i < length; ++i ) {
-
-        float p_norm = gsl_cdf_gaussian_P( norms[i] - meanNorm, stddev );
-        float p_dt = 1.0;
-
-        if( prevIdx >= 0 ) p_dt = gsl_cdf_gaussian_P( (i - prevIdx) - dtMean, dtStddev );
-
-        float p = p_norm * p_dt;
-
-        if( p_norm > pThreshold ) {
-          //cout << "Captured transition at frame " << at+start << endl;
-          _transitions.push_back( TimecodeTransition( i, timecodes[i-1], timecodes[i] ) );
-          prevIdx = i;
-        }
-
-
-#ifdef MAKE_NORMFILE
-        normFile << i << " " << norms[i] << ' ' << p_norm << ' ' << p_dt << ' ' << p << endl; 
-#endif
-
-      }
-
-      cout << "Have " << _transitions.size() << " transitions" << endl;
-    }
-
-
-
-    IndexPair getSpan( int start, int length )
-    {
-      cout << "Getting span from " << start << " to " << start+length << endl;
-      if( (start+length) > frameCount() ) { start = frameCount()-length;
-
-        cout << "Adjusted span from " << start << " to " << length << endl;
-      }
-
-      int startIdx = 0;
-      for( int i = 0; i < _transitions.size(); ++i )
-        if( _transitions[i].frame > start ) { startIdx = i; break; }
-
-      int endIdx = _transitions.size();
-      for( int i = startIdx; i < _transitions.size(); ++i ) 
-        if( _transitions[i].frame > (start+length) ) {endIdx = i; break;}
-
-
-      //      cout << "Excluded these transitios:" << endl;
-      //      for( int i = 0; i < startIdx; ++i ) cout << _transitions[i].frame << endl;
-      //      cout << endl;
-      //
-      //      cout << "Included there transitions"<< endl;
-      //      for( int i = startIdx; i < endIdx; ++i ) cout << _transitions[i].frame << endl;
-      //      cout <<endl;
-      //
-      //      cout << "Excluded there transitions"<< endl;
-      //      for( int i = endIdx; i < _transitions.size(); ++i ) cout << _transitions[i].frame << endl;
-      //      cout <<endl;
-
-
-      return make_pair( startIdx, endIdx );
-    }
-
-    bool shiftSpan( IndexPair &pair, int length, int direction )
-    {
-      if( direction < 0 ) {
-        if( pair.first == 0 ) return false;
-        direction = -1;
-      } else if (direction > 0 ) {
-        if( pair.second == _transitions.size() ) return false;
-        direction = +1;
-
-      }
-      pair.first += direction;
-      pair.second = _transitions.size();
-      int max = _transitions[pair.first].frame + length;
-      for( int i = pair.first; i < _transitions.size(); ++i ) 
-        if( _transitions[i].frame > max ) {pair.second = i; break;}
-
-      return true;
-    }
-
-    void dumpTransitions( const string &filename )
-    {
-      const int vspacing = 3, hspacing = 2;
-      Mat canvas( Mat::zeros( Size( 3 * (hspacing + TimeCodeROI.width), _transitions.size() * (TimeCodeROI.height + vspacing) ),
-            CV_8UC1 ) );
-
-      int i = 0;
-      for( TransitionVec::iterator itr = _transitions.begin(); itr != _transitions.end(); ++itr, ++i ) {
-
-        Mat beforeROI( canvas, Rect( 0, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
-        Mat  afterROI( canvas, Rect( TimeCodeROI.width + hspacing, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
-        Mat  diffROI( canvas, Rect( 2*(TimeCodeROI.width + hspacing), i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
-
-        itr->before.copyTo( beforeROI );
-        itr->after.copyTo( afterROI );
-
-        absdiff( itr->before, itr->after, diffROI );
-
-        stringstream strm;
-        strm << itr->frame;
-        putText( diffROI, strm.str(), Point( 0, TimeCodeROI.height ), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(255,255,255) );
-      }
-
-      imwrite( filename, canvas );
-    }
-
-  private:
-
-    TransitionVec _transitions;
-};
-
-const Rect Video::TimeCodeROI = timeCodeROI_1920x1080;
 
 class Synchronizer
 {
@@ -433,13 +208,13 @@ class Synchronizer
 
     void advanceOnly( int which )
     {
-if( which == 0 ) {
-  _offset--;
-  _video1.scrub(-1);
-} else {
-  _offset++;
-  _video0.scrub(-1);
-}
+      if( which == 0 ) {
+        _offset--;
+        _video1.scrub(-1);
+      } else {
+        _offset++;
+        _video0.scrub(-1);
+      }
     }
 
     bool nextCompositeFrame( Mat &img )
@@ -455,14 +230,14 @@ if( which == 0 ) {
       Mat frame;
       if( _video0.read( frame ) ) 
         if( Scale != 1.0 )
-        resize( frame, video0ROI, video0ROI.size() );
+          resize( frame, video0ROI, video0ROI.size() );
         else
           frame.copyTo( video0ROI );
       else return false;
 
       if( _video1.read(frame )  )
         if( Scale != 1.0 )
-        resize( frame, video1ROI, video1ROI.size() );
+          resize( frame, video1ROI, video1ROI.size() );
         else
           frame.copyTo( video1ROI );
       else return false;
@@ -566,7 +341,7 @@ if( which == 0 ) {
 
 };
 
-    const float Synchronizer::Scale = 1;
+const float Synchronizer::Scale = 1;
 
 
 int main( int argc, char **argv )
@@ -582,7 +357,7 @@ int main( int argc, char **argv )
   normFile.open("norms.txt");
 #endif
 
-  Video video[2] = { Video( opts.video1 ), Video( opts.video2 ) };
+  VideoLookahead video[2] = { VideoLookahead( opts.video1, opts.lookahead ), VideoLookahead( opts.video2, opts.lookahead ) };
 
   for( int i = 0; i < 2; ++i ) {
     if( !video[i].capture.isOpened() ) {

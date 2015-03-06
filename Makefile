@@ -21,7 +21,7 @@ LD = g++
 extract_frame: extract_frame.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
 
-align_streams: align_streams.o trendnet_time_code.o file_utils.o 
+align_streams: align_streams.o trendnet_time_code.o file_utils.o  video.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^ 
 
 extract_static_frames: extract_static_frames.o trendnet_time_code.o
