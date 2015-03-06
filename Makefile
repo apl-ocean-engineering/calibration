@@ -5,13 +5,14 @@ APPS := calibration calibration_artificial calibration_april \
 
 all: $(APPS)
 
-APRILTAGS = ../apriltags/build
+APRILTAGS_PATH = third_party/apriltags/build
+FFTS_PATH = third_party/ffts/build
 
-CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS)/include -I/usr/local/include/eigen3  -DUSE_APRILTAGS \
-	    -Ithird_party/ffts/build/include/ffts 
-LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS)/lib -lgsl
+CXXFLAGS =  -g -I/opt/opencv/include -I$(APRILTAGS_PATH)/include -I/usr/local/include/eigen3  -DUSE_APRILTAGS \
+	    -I$(FFTS_PATH)/include/ffts 
+LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS_PATH)/lib -lgsl
 
-	  #-Lthird_party/ffts/build/lib -lffts
+	  #-L$(FFTS)/lib -lffts
 
 LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl
 LD = g++

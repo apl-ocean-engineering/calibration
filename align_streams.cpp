@@ -29,10 +29,12 @@ using namespace std;
 ofstream normFile;
 #endif
 
+
 struct AlignmentOptions
 {
+  // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( void )
-    : window( 5.0 ), maxDelta( 5.0 )
+    : window( 4.2 ), maxDelta( 5.0 )
   {;}
 
 
@@ -118,6 +120,8 @@ struct TimecodeTransition
 
 };
 
+    typedef pair< int, int > IndexPair;
+
 class Video
 {
   public:
@@ -134,7 +138,8 @@ class Video
     string filename;
     VideoCapture capture;
 
-    const TransitionVec &transitions( void ) const;
+    const TransitionVec &transitions( void ) const { return _transitions; }
+    const TransitionVec &transitions( void ) { return _transitions; }
 
     float fps( void ) { return capture.get( CV_CAP_PROP_FPS ); }
     int frameCount( void ) { return capture.get( CV_CAP_PROP_FRAME_COUNT ); }
@@ -158,13 +163,19 @@ class Video
     void findTransitionsSeconds( float start, float end, int deltaNorm = DefaultDeltaNorm )
     { findTransitions( floor( start * fps() ), ceil( end * fps() ), deltaNorm ); }
 
+    void seek( int offset )
+    {
+      capture.set( CV_CAP_PROP_POS_FRAMES, offset );
+    }
+    void rewind( void ) { seek( 0 ); }
+
     void findTransitions( int start, int end, int deltaNorm = DefaultDeltaNorm )
     {
       start = std::max( 0, std::min( frameCount(), start ) );
       end = std::max( 0, std::min( frameCount(), end ) );
       int length = end-start;
 
-      capture.set( CV_CAP_PROP_POS_FRAMES, start );
+      rewind();
 
       // First, sample the norms
       vector < float > norms(length, 0);
@@ -231,7 +242,6 @@ class Video
       cout << "Have " << _transitions.size() << " transitions" << endl;
     }
 
-    typedef pair< int, int > IndexPair;
 
 
     IndexPair getSpan( int start, int length )
@@ -246,41 +256,44 @@ class Video
       for( int i = 0; i < _transitions.size(); ++i )
         if( _transitions[i].frame > start ) { startIdx = i; break; }
 
-      int endIdx = startIdx+1;
+      int endIdx = _transitions.size();
       for( int i = startIdx; i < _transitions.size(); ++i ) 
-        if( _transitions[i].frame < (start+length) ) endIdx = i+1;
+        if( _transitions[i].frame > (start+length) ) {endIdx = i; break;}
 
 
-//      cout << "Excluded these transitios:" << endl;
-//      for( int i = 0; i < startIdx; ++i ) cout << _transitions[i].frame << endl;
-//      cout << endl;
-//
-//      cout << "Included there transitions"<< endl;
-//      for( int i = startIdx; i < endIdx; ++i ) cout << _transitions[i].frame << endl;
-//      cout <<endl;
-//
-//      cout << "Excluded there transitions"<< endl;
-//      for( int i = endIdx; i < _transitions.size(); ++i ) cout << _transitions[i].frame << endl;
-//      cout <<endl;
+      //      cout << "Excluded these transitios:" << endl;
+      //      for( int i = 0; i < startIdx; ++i ) cout << _transitions[i].frame << endl;
+      //      cout << endl;
+      //
+      //      cout << "Included there transitions"<< endl;
+      //      for( int i = startIdx; i < endIdx; ++i ) cout << _transitions[i].frame << endl;
+      //      cout <<endl;
+      //
+      //      cout << "Excluded there transitions"<< endl;
+      //      for( int i = endIdx; i < _transitions.size(); ++i ) cout << _transitions[i].frame << endl;
+      //      cout <<endl;
 
 
       return make_pair( startIdx, endIdx );
     }
 
-    int alignWith( Video &other, float window, float maxDelta ) 
+    bool shiftSpan( IndexPair &pair, int length, int direction )
     {
-      int maxDeltaFrames = floor(maxDelta * fps()),
-          windowFrames = floor(window * fps());
+      if( direction < 0 ) {
+        if( pair.first == 0 ) return false;
+        direction = -1;
+      } else if (direction > 0 ) {
+        if( pair.second == _transitions.size() ) return false;
+        direction = +1;
 
-      IndexPair otherSpan( other.getSpan( maxDeltaFrames, windowFrames ) );
+      }
+      pair.first += direction;
+      pair.second = _transitions.size();
+      int max = _transitions[pair.first].frame + length;
+      for( int i = pair.first; i < _transitions.size(); ++i ) 
+        if( _transitions[i].frame > max ) {pair.second = i; break;}
 
-      cout << "Other told to get from " << maxDeltaFrames << " " << windowFrames << endl;
-      cout << " Got " << otherSpan.first << ' ' << otherSpan.second << endl;
-
-      // Start with set of transitions from maxDelta to maxDelta+window (this is the maximum backwards shift on video1
-
-
-      return 0;
+      return true;
     }
 
     void dumpTransitions( const string &filename )
@@ -311,6 +324,121 @@ class Video
 };
 
 const Rect Video::TimeCodeROI = timeCodeROI_1920x1080;
+
+class Synchronizer
+{
+  public:
+    Synchronizer( Video &v0, Video &v1 )
+      : _video0( v0 ), _video1( v1 ), _offset( 0 )
+    {;}
+
+    void rewind( void )
+    {
+      if( _offset < 0 ) {
+        _video0.seek( _offset );
+        _video1.seek( 0 );
+      } else {
+        _video0.seek( 0 );
+        _video1.seek( _offset );
+      }
+    }
+
+    // Tools for estimating initial offset
+    float compareSpans( IndexPair &thisSpan, IndexPair &otherSpan )
+    {
+      cout << "======================" << endl;
+      cout << "this span:  " << thisSpan.first << ' ' << thisSpan.second << endl;
+      for( int i = thisSpan.first; i < thisSpan.second; ++i ) {
+        if( i > thisSpan.first ) 
+          cout << _video0.transitions()[i].frame << ' ' << _video0.transitions()[i].frame - _video0.transitions()[i-1].frame << endl;
+        else
+          cout << _video0.transitions()[i].frame << ' ' <<endl;
+      }
+
+      cout << "other span: " << otherSpan.first << ' ' << otherSpan.second << endl;
+      for( int i = otherSpan.first; i < otherSpan.second; ++i ) {
+        if( i > otherSpan.first ) 
+          cout << _video1.transitions()[i].frame << ' ' << _video1.transitions()[i].frame - _video1.transitions()[i-1].frame << endl;
+        else
+          cout << _video1.transitions()[i].frame << ' ' <<endl;
+      }
+
+
+      if( (thisSpan.second - thisSpan.first) != (otherSpan.second - otherSpan.first) ) {
+        cout << "Spans are different lengths, using shorter of the two " << endl;
+      }
+      int  length = std::min( thisSpan.second-thisSpan.first, otherSpan.second-otherSpan.first );
+
+      float total = 0.0;
+      for( int i = 0; i < length; ++i ) {
+        total += norm( _video0.transitions()[ thisSpan.first+i ].before, _video1.transitions()[ otherSpan.first+i ].before, NORM_L2 );
+        total += norm( _video0.transitions()[ thisSpan.first+i ].after, _video1.transitions()[ otherSpan.first+i ].after, NORM_L2 );
+      }
+      total /= length;
+
+      return total;
+    }
+
+    struct OffsetResult {
+      OffsetResult( IndexPair vid0, IndexPair vid1 )
+        : v0( vid0 ), v1( vid1 )
+      {;}
+
+      IndexPair v0, v1;
+    };
+
+    int estimateOffset( float window, float maxDelta ) 
+    {
+      // TODO:  Currently assumes both videos have same FPS
+      int maxDeltaFrames = floor(maxDelta *  _video0.fps()),
+          windowFrames = floor(window * _video0.fps());
+      map <float, OffsetResult> results;
+
+      IndexPair thisSpan( _video0.getSpan( 0, windowFrames ) );
+      IndexPair otherSpan( _video1.getSpan( maxDeltaFrames, windowFrames ) );
+
+      cout << "Getting span with max delta " << maxDeltaFrames << "  length " << windowFrames << endl;
+      cout << " Got " << thisSpan.first << ' ' << thisSpan.second << endl;
+      cout << " Got " << otherSpan.first << ' ' << otherSpan.second << endl;
+
+
+      // Start with set of transitions from maxDelta to maxDelta+window (this is the maximum backwards shift on video1)
+
+      do {
+        float result = compareSpans( thisSpan, otherSpan );
+        cout << "    result: " << result << endl;
+        results.insert( make_pair( result, OffsetResult( thisSpan, otherSpan ) ) );
+      } while( _video1.shiftSpan( otherSpan, windowFrames, -1 ) ) ;
+
+      // Now start shifting my span forward
+      do {
+        float result = compareSpans( thisSpan, otherSpan );
+        cout << "    result: " << result << endl;
+        results.insert( make_pair( result, OffsetResult( thisSpan, otherSpan ) ) );
+      } while( _video0.shiftSpan( thisSpan, windowFrames, +1 ) );
+
+      OffsetResult best = results.begin()->second;
+
+      // Calculate offset from end of spans...
+      _offset = _video1.transitions()[ best.v1.second-1 ].frame - _video0.transitions()[ best.v0.second-1 ].frame;
+
+      cout << "Best alignment has score " << results.begin()->first << endl;
+      cout << "With frames " << _video0.transitions()[ best.v0.second-1 ].frame << " " << _video1.transitions()[ best.v1.second-1 ].frame << endl;
+      cout << "With video1 offset to video0 by " << _offset << endl;
+
+      return 0;
+    }
+
+
+
+  private:
+    Video & _video0, &_video1;
+
+    int _offset;
+
+
+};
+
 
 int main( int argc, char **argv )
 {
@@ -349,12 +477,16 @@ int main( int argc, char **argv )
   normFile.close();
 #endif
 
-  int offset = video[0].alignWith( video[1], opts.window, opts.maxDelta );
+  Synchronizer sync( video[0], video[1] );
+  int offset = sync.estimateOffset( opts.window, opts.maxDelta );
 
+  sync.rewind();
 
 
   exit(0);
 }
+
+
 
 
 
@@ -373,7 +505,7 @@ int norms( int start, int end, float **n, int length = 0 )
 
   *n = (float *)valloc( len * sizeof(float) );
 
-  capture.set( CV_CAP_PROP_POS_FRAMES, start );
+  seek( start );
 
   Mat prev;
   for( int at = start; at < end; ++at ) {
