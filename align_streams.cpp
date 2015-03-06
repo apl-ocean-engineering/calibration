@@ -109,10 +109,11 @@ struct AlignmentOptions
 
 struct TimecodeTransition
 {
-  TimecodeTransition( const Mat &b, const Mat &a )
-    : before( b.clone() ), after( a.clone() )
+  TimecodeTransition( int fr, const Mat &b, const Mat &a )
+    : frame(fr), before( b.clone() ), after( a.clone() )
   {;}
 
+  int frame;
   Mat before, after;
 
 };
@@ -121,7 +122,7 @@ class Video
 {
   public:
 
-    typedef map< int, TimecodeTransition > TransitionMap;
+    typedef vector< TimecodeTransition > TransitionVec;
 
     Video( const string &file )
       : capture( file.c_str() ),filename( file )
@@ -132,6 +133,8 @@ class Video
 
     string filename;
     VideoCapture capture;
+
+    const TransitionVec &transitions( void ) const;
 
     float fps( void ) { return capture.get( CV_CAP_PROP_FPS ); }
     int frameCount( void ) { return capture.get( CV_CAP_PROP_FRAME_COUNT ); }
@@ -214,7 +217,7 @@ class Video
 
         if( p_norm > pThreshold ) {
           //cout << "Captured transition at frame " << at+start << endl;
-          _transitions.insert( std::pair< int, TimecodeTransition >( i, TimecodeTransition( timecodes[i-1], timecodes[i] ) ) );
+          _transitions.push_back( TimecodeTransition( i, timecodes[i-1], timecodes[i] ) );
           prevIdx = i;
         }
 
@@ -228,6 +231,57 @@ class Video
       cout << "Have " << _transitions.size() << " transitions" << endl;
     }
 
+    typedef pair< int, int > IndexPair;
+
+
+    IndexPair getSpan( int start, int length )
+    {
+      cout << "Getting span from " << start << " to " << start+length << endl;
+      if( (start+length) > frameCount() ) { start = frameCount()-length;
+
+        cout << "Adjusted span from " << start << " to " << length << endl;
+      }
+
+      int startIdx = 0;
+      for( int i = 0; i < _transitions.size(); ++i )
+        if( _transitions[i].frame > start ) { startIdx = i; break; }
+
+      int endIdx = startIdx+1;
+      for( int i = startIdx; i < _transitions.size(); ++i ) 
+        if( _transitions[i].frame < (start+length) ) endIdx = i+1;
+
+
+//      cout << "Excluded these transitios:" << endl;
+//      for( int i = 0; i < startIdx; ++i ) cout << _transitions[i].frame << endl;
+//      cout << endl;
+//
+//      cout << "Included there transitions"<< endl;
+//      for( int i = startIdx; i < endIdx; ++i ) cout << _transitions[i].frame << endl;
+//      cout <<endl;
+//
+//      cout << "Excluded there transitions"<< endl;
+//      for( int i = endIdx; i < _transitions.size(); ++i ) cout << _transitions[i].frame << endl;
+//      cout <<endl;
+
+
+      return make_pair( startIdx, endIdx );
+    }
+
+    int alignWith( Video &other, float window, float maxDelta ) 
+    {
+      int maxDeltaFrames = floor(maxDelta * fps()),
+          windowFrames = floor(window * fps());
+
+      IndexPair otherSpan( other.getSpan( maxDeltaFrames, windowFrames ) );
+
+      cout << "Other told to get from " << maxDeltaFrames << " " << windowFrames << endl;
+      cout << " Got " << otherSpan.first << ' ' << otherSpan.second << endl;
+
+      // Start with set of transitions from maxDelta to maxDelta+window (this is the maximum backwards shift on video1
+
+
+      return 0;
+    }
 
     void dumpTransitions( const string &filename )
     {
@@ -236,16 +290,16 @@ class Video
             CV_8UC1 ) );
 
       int i = 0;
-      for( TransitionMap::iterator itr = _transitions.begin(); itr != _transitions.end(); ++itr, ++i ) {
+      for( TransitionVec::iterator itr = _transitions.begin(); itr != _transitions.end(); ++itr, ++i ) {
 
         Mat beforeROI( canvas, Rect( 0, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
         Mat  afterROI( canvas, Rect( TimeCodeROI.width + hspacing, i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
         Mat  diffROI( canvas, Rect( 2*(TimeCodeROI.width + hspacing), i * (TimeCodeROI.height + vspacing), TimeCodeROI.width, TimeCodeROI.height ) );
 
-        itr->second.before.copyTo( beforeROI );
-        itr->second.after.copyTo( afterROI );
+        itr->before.copyTo( beforeROI );
+        itr->after.copyTo( afterROI );
 
-        absdiff( itr->second.before, itr->second.after, diffROI );
+        absdiff( itr->before, itr->after, diffROI );
       }
 
       imwrite( filename, canvas );
@@ -253,7 +307,7 @@ class Video
 
   private:
 
-    TransitionMap _transitions;
+    TransitionVec _transitions;
 };
 
 const Rect Video::TimeCodeROI = timeCodeROI_1920x1080;
@@ -281,7 +335,7 @@ int main( int argc, char **argv )
 
     cout << video[i].dump() << endl;
 
-    video[i].findTransitionsSeconds( 0, opts.maxDelta + opts.window );
+    video[i].findTransitionsSeconds( 0, 2*opts.maxDelta );
 
     stringstream filename;
     filename << "/tmp/transitions_" << i << ".png";
@@ -295,6 +349,8 @@ int main( int argc, char **argv )
   normFile.close();
 #endif
 
+  int offset = video[0].alignWith( video[1], opts.window, opts.maxDelta );
+
 
 
   exit(0);
@@ -304,47 +360,47 @@ int main( int argc, char **argv )
 
 #ifdef FOURIER_APPROACH
 
-    int normsSeconds( float start, float end, float **n )
-    {  return norms( floor( start * fps() ), ceil( end * fps() ), n ); }
+int normsSeconds( float start, float end, float **n )
+{  return norms( floor( start * fps() ), ceil( end * fps() ), n ); }
 
-    int norms( int start, int end, float **n, int length = 0 )
-    {
-      start = std::max( 0, std::min( frameCount(), start ) );
-      end = std::max( 0, std::min( frameCount(), end ) );
+int norms( int start, int end, float **n, int length = 0 )
+{
+  start = std::max( 0, std::min( frameCount(), start ) );
+  end = std::max( 0, std::min( frameCount(), end ) );
 
-      int window = end-start;
-      int len = std::max( length, window );
+  int window = end-start;
+  int len = std::max( length, window );
 
-      *n = (float *)valloc( len * sizeof(float) );
+  *n = (float *)valloc( len * sizeof(float) );
 
-      capture.set( CV_CAP_PROP_POS_FRAMES, start );
+  capture.set( CV_CAP_PROP_POS_FRAMES, start );
 
-      Mat prev;
-      for( int at = start; at < end; ++at ) {
-        Mat fullImage;
-        capture >> fullImage;
+  Mat prev;
+  for( int at = start; at < end; ++at ) {
+    Mat fullImage;
+    capture >> fullImage;
 
-        Mat timeCodeROI( fullImage, TimeCodeROI );
+    Mat timeCodeROI( fullImage, TimeCodeROI );
 
-        if( prev.empty() ) {
-          cv::cvtColor( timeCodeROI, prev, CV_BGR2GRAY );
-          continue;
-        }
-
-        Mat curr;
-        cv::cvtColor( timeCodeROI, curr, CV_BGR2GRAY );
-
-        (*n)[2*at] = cv::norm( prev, curr, NORM_L2 ); 
-        (*n)[2*at+1] = 0.0f;
-
-        prev = curr;
-      }
-
-      // Zero pad the remainder
-      memset( &(*n[window]), 0, (len - window) * sizeof(float) );
-
-      return window;
+    if( prev.empty() ) {
+      cv::cvtColor( timeCodeROI, prev, CV_BGR2GRAY );
+      continue;
     }
+
+    Mat curr;
+    cv::cvtColor( timeCodeROI, curr, CV_BGR2GRAY );
+
+    (*n)[2*at] = cv::norm( prev, curr, NORM_L2 ); 
+    (*n)[2*at+1] = 0.0f;
+
+    prev = curr;
+  }
+
+  // Zero pad the remainder
+  memset( &(*n[window]), 0, (len - window) * sizeof(float) );
+
+  return window;
+}
 
 // Should be window floor'ed to nearest power of two or somesuch
 int windowLength = 128;
