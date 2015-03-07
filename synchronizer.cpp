@@ -48,28 +48,33 @@ bool Synchronizer::scrub( int offset )
 }
 
 
-bool Synchronizer::advanceToNextTransition( const TransitionVec &transitions, int which )
+bool Synchronizer::advanceToNextTransition( int which )
 {
   int current = (which == 0) ? _video0.frame() : _video1.frame();
+  Video &vid( (which == 0) ? _video0 : _video1 );
+  const TransitionMap &transitions( vid.transitions() );
 
-  if( transitions.size() == 0 ) 
+  if( transitions.size() == 0 )
     return false;
   else 
   {
-    if( transitions[0].frame > current ) {
-      seek( which, transitions[0].frame );
-      cout << "Advancing video " << which << " to frame " << transitions[0].frame << endl;
+    if( transitions.begin()->first > current ) {
+      seek( which, transitions.begin()->first );
+      cout << "Advancing o " << which << " to frame " << transitions.begin()->first << endl;
       return true;
     } 
 
-    if( transitions.size() > 1 )
-      for( int i = 1; i < transitions.size(); ++i ) {
-        if( (transitions[i-1].frame <= current) && (transitions[i].frame > current) ) {
-          cout << "Advancing video " << which << " to frame " << transitions[i].frame << endl;
-          seek( which , transitions[i].frame );
+    if( transitions.size() > 1 ) {
+      TransitionMap::const_iterator itr = transitions.begin(), prev = itr;
+    itr++;
+    for( ; itr != transitions.end(); ++itr, ++prev ) {
+      if( (prev->first <= current) && (itr->first > current) ) {
+          seek( which , itr->first );
+          cout << "Advancing o " << which << " to frame " << itr->first << endl;
           return true;
         }
       }
+    }
   }
 
   return false;
@@ -99,7 +104,6 @@ bool Synchronizer::nextCompositeFrame( Mat &img )
   Mat video0ROI( img, Rect( 0, 0, Scale*_video0.width(), Scale*_video0.height() ) );
   Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
 
-  cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
 
   Mat frame;
   if( _video0.read( frame ) ) 
@@ -115,6 +119,8 @@ bool Synchronizer::nextCompositeFrame( Mat &img )
     else
       frame.copyTo( video1ROI );
   else return false;
+
+  cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
 
   return true;
 }
@@ -241,16 +247,18 @@ int Synchronizer::estimateOffset( const TransitionVec &trans0,  const Transition
   } while( shiftSpan( trans1, otherSpan, windowFrames, -1 ) ) ;
 
   // Now start shifting my span forward
-  do {
+  while( shiftSpan(  trans0, thisSpan, windowFrames, +1 ) ) {
     float result = compareSpans( trans0, thisSpan, trans1,  otherSpan );
     cout << "    result: " << result << endl;
     results.insert( make_pair( result, OffsetResult( thisSpan, otherSpan ) ) );
-  } while( shiftSpan(  trans0, thisSpan, windowFrames, +1 ) );
+  }
 
   OffsetResult best = results.begin()->second;
 
   // Calculate offset from end of spans...
-  _offset = trans1[ best.v1.second-1 ].frame - trans0[ best.v0.second-1 ].frame;
+  // Need to handle case where spans are different length
+  int dt = std::min( best.v0.second-best.v0.first, best.v1.second-best.v1.first ) - 1;
+  _offset = trans1[ dt ].frame - trans0[ dt ].frame;
 
   cout << "Best alignment has score " << results.begin()->first << endl;
   cout << "With frames " << trans0[ best.v0.second-1 ].frame << " " << trans1[ best.v1.second-1 ].frame << endl;

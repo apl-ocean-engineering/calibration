@@ -53,6 +53,10 @@ struct Gaussian {
   float p( int x ) {
     return gsl_cdf_gaussian_P( x - mean, stddev );
   }
+
+  float pdf( int x ) {
+    return gsl_ran_gaussian_pdf( x-mean, stddev );
+  }
 };
 
 typedef pair< int, int > IndexPair;
@@ -60,6 +64,7 @@ typedef pair< int, int > IndexPair;
 class Video
 {
   public:
+    static const cv::Rect TimeCodeROI;
 
     Video( const string &file );
 
@@ -82,7 +87,6 @@ class Video
       return strm.str();
     }
 
-    static const cv::Rect TimeCodeROI;
 
 //    void findTransitionsSeconds( float start, float end )
 //    { findTransitions( floor( start * fps() ), ceil( end * fps() ) ); }
@@ -97,15 +101,40 @@ class Video
 
     void initializeTransitionStatistics( int start, int end, TransitionVec &transitions );
 
+    bool detectTransition( float norm, int dt = -1);
+    bool detectTransition( const cv::Mat &before, const cv::Mat &after, int dt = -1 );
+
     static void dumpTransitions( const TransitionVec &transitions, const string &filename );
+
+    const TransitionMap &transitions( void ) const { return _transitions; }
 
   protected:
 
     Gaussian _distTimecodeNorm, _distDt;
     bool _transitionStatisticsInitialized;
 
+    TransitionMap _transitions;
+
 };
 
+
+// !! Takes a copy of the image
+struct CachedFrame
+{
+  public:
+    CachedFrame( cv::Mat &img )
+      : image( img.clone() ), _timecode()
+    {;}
+
+    cv::Mat image;
+
+    void copyTo( cv::Mat &mat ) { image.copyTo(mat); }
+
+    const cv::Mat &timecode( void );
+
+  private:
+      cv::Mat _timecode;
+};
 
 class VideoLookahead : public Video
 {
@@ -118,7 +147,9 @@ class VideoLookahead : public Video
 
   private:
     int _lookaheadFrames;
-    std::queue< cv::Mat > _future;
+    std::queue< CachedFrame > _future;
+
+int closestTransition( int frame );
 };
 
 

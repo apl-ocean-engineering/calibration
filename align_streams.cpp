@@ -188,9 +188,9 @@ int main( int argc, char **argv )
     else if (ch == ',')
       sync.scrub(-2);
     else if (ch == '[')
-      sync.advanceToNextTransition( transitions[0], 0 );
+      sync.advanceToNextTransition( 0 );
     else if (ch == ']')
-      sync.advanceToNextTransition( transitions[1], 1 );
+      sync.advanceToNextTransition( 1 );
     else if (ch == 'R')
       sync.rewind();
     else if (ch == 'l')

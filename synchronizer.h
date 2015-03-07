@@ -20,7 +20,7 @@ class Synchronizer
     bool seek( int which, int dest );
     bool scrub( int offset );
 
-    bool advanceToNextTransition( const TransitionVec &transition, int which );
+    bool advanceToNextTransition( int which );
     void advanceOnly( int which );
 
     cv::Size compositeSize( void );

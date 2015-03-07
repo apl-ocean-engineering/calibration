@@ -1,4 +1,6 @@
 
+#include <iomanip>
+
 #include "video.h"
 
 using namespace std;
@@ -7,7 +9,7 @@ using namespace cv;
 
 const Rect Video::TimeCodeROI = timeCodeROI_1920x1080;
 
-Video::Video( const string &file )
+  Video::Video( const string &file )
 : capture( file.c_str() ),filename( file ),
   _distTimecodeNorm(), _distDt(), _transitionStatisticsInitialized( false )
 {
@@ -73,8 +75,8 @@ void Video::initializeTransitionStatistics( int start, int end, TransitionVec &t
   _distTimecodeNorm.stddev = stddev;
   cout << "Norm stats:: mean " << meanNorm << " stddev " << stddev << endl;
 
-  _distDt.mean = fps();
-  _distDt.stddev = 2.0;
+  _distDt.mean = 30; //fps();
+  _distDt.stddev = 5.0;
 
   _transitionStatisticsInitialized = true;
 
@@ -83,35 +85,47 @@ void Video::initializeTransitionStatistics( int start, int end, TransitionVec &t
   // Now identify the transitions
   transitions.clear();
 
-  float pThreshold = 0.99;
   for( int i = 1; i < length; ++i ) {
 
-    float p_norm = _distTimecodeNorm.p( norms[i] );
-    float p_dt = 1.0;
-
-    if( prevIdx >= 0 ) p_dt = _distDt.p( i - prevIdx );
-
-    float p = p_norm * p_dt;
-
-    if( p_norm > pThreshold ) {
-      //cout << "Captured transition at frame " << at+start << endl;
-      transitions.push_back( TimecodeTransition( i, timecodes[i-1], timecodes[i] ) );
+    int dt = (prevIdx >= 0 ) ? (i-prevIdx) : -1;
+    if( detectTransition( norms[i], dt ) ) {
+      // The frames are numbered from 1 hence the "+1"
+      transitions.push_back( TimecodeTransition( i+1, timecodes[i-1], timecodes[i] ) );
       prevIdx = i;
     }
-
-
-    cout << i << " " << norms[i] << ' ' << p_norm << ' ' << p_dt << ' ' << p << endl; 
-#ifdef MAKE_NORMFILE
-    normFile << i << " " << norms[i] << ' ' << p_norm << ' ' << p_dt << ' ' << p << endl; 
-#endif
-
   }
 
-  cout << "Have " << transitions.size() << " transitions" << endl;
+
+#ifdef MAKE_NORMFILE
+  normFile << i << " " << norms[i] << ' ' << p_norm << ' ' << p_dt << ' ' << p << endl; 
+#endif
+
+cout << "Have " << transitions.size() << " transitions" << endl;
 }
 
 
+bool Video::detectTransition( float norm, int dt )
+{
+  float pThreshold = (dt > 0) ? 0.6 : 0.9;
 
+  float p_norm = _distTimecodeNorm.p( norm );
+  float p_dt = 1.0;
+
+  if( dt > 0 ) {
+    float dtErr = dt - _distDt.mean * std::max(1.0f,round( dt / _distDt.mean ));
+    float dtScaled = dtErr / _distDt.stddev;
+    p_dt = gsl_cdf_chisq_Q( dtScaled*dtScaled, 1 );
+  }
+
+  bool result =  (p_norm * p_dt) > pThreshold;
+ // cout << dt << ' ' << std::setw(12) << norm << ' ' << std::setw(12) << p_norm << ' ' << std::setw(12) << p_dt << ' ' << std::setw(12) << (p_norm * p_dt) <<  (result ? " Y" : "") << endl; 
+  return result;
+}
+
+bool Video::detectTransition( const Mat &before, const Mat &after, int dt )
+{
+  return detectTransition( cv::norm( before, after, NORM_L2 ), dt );
+}
 
 void Video::dumpTransitions( const TransitionVec &transitions, const string &filename )
 {
@@ -162,15 +176,48 @@ void VideoLookahead::seek( int dest )
   }
 }
 
+int VideoLookahead::closestTransition( int frame )
+{
+  // Basically, the first key that's less than frame, starting from the back
+  int ret = -1;
+
+  for( TransitionMap::const_reverse_iterator itr = _transitions.rbegin(); itr != _transitions.rend(); ++itr ) {
+    if( itr->second.frame < frame ) return itr->second.frame;
+  }
+
+  return ret;
+}
+
+
 bool VideoLookahead::read( cv::Mat &mat ) 
 {
   Mat framein;
   while( _future.size() < _lookaheadFrames && capture.read( framein ) )  {
-    Mat foo;
-    framein.copyTo( foo );
-    _future.push( foo );
+
+    // Look for transitions
+    int frame = capture.get( CV_CAP_PROP_POS_FRAMES );
+    int closest = closestTransition( frame );
+    int dt = -1;
+    if( closest >= 0 ) {
+      int dt = (frame-closest);
+      if( dt > 2*fps() ) dt = -1;
+    }
+
+    if( _future.size() > 0 ) {
+      Mat prevTimecode( _future.back().timecode() );
+      _future.push( framein );
+
+      if( detectTransition( prevTimecode, _future.back().timecode(), dt ) ) {
+        cout  << filename << ":  Believe there's a transition at frame " << frame << endl;
+        _transitions.insert( make_pair( frame, TimecodeTransition( frame, prevTimecode, _future.back().timecode() ) ) );
+      }
+    } else {
+      _future.push( framein );
+    }
   }
 
+
+  // Return the front of the queue
   if( _future.size() > 0 ) {
     _future.front().copyTo( mat );
     _future.pop();
@@ -178,4 +225,15 @@ bool VideoLookahead::read( cv::Mat &mat )
   }
 
   return false;
+}
+
+//== CachedFrame ===
+const Mat &CachedFrame::timecode( void ) 
+{
+  if( _timecode.empty() ) {
+    Mat timeCodeROI( image, Video::TimeCodeROI ), curr;
+    cv::cvtColor( timeCodeROI, _timecode, CV_BGR2GRAY );
+  }
+
+  return _timecode;
 }
