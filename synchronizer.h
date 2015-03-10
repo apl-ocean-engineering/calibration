@@ -11,7 +11,7 @@ class Synchronizer
 {
   public:
 
-        static const float Scale;
+    static const float Scale;
 
     Synchronizer( Video &v0, Video &v1 );
 
@@ -27,6 +27,8 @@ class Synchronizer
     cv::Size compositeSize( void );
     virtual bool nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 );
     virtual bool nextCompositeFrame( cv::Mat &img );
+
+    void compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale = Scale );
 
     // Tools for estimating initial offset
     IndexPair getSpan( const TransitionVec &transition,  int start, int length );
@@ -44,7 +46,8 @@ class Synchronizer
 
     virtual int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
         float window, float maxDelta ) ;
- 
+
+    int bootstrap( float windowFrames, float maxDeltaFrames );
 
   protected:
     Video & _video0, &_video1;

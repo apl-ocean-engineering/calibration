@@ -134,6 +134,28 @@ bool Synchronizer::nextCompositeFrame( Mat &img )
   return true;
 }
 
+void Synchronizer::compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale )
+{
+  // TODO.  Should check size of input images
+
+  Size compSize( scale*(img0.cols + img1.cols),
+                 scale*std::max(img0.rows, img1.rows) ); 
+  composite.create( compSize, CV_8UC3 );
+
+  Mat video0ROI( composite, Rect( 0, 0,               scale*img0.cols, scale*img0.rows) );
+  Mat video1ROI( composite, Rect( scale*img0.cols, 0, scale*img1.cols, scale*img1.rows) );
+
+  if( scale != 1.0 ) {
+    resize( img0, video0ROI, video0ROI.size() );
+    resize( img1, video1ROI, video1ROI.size() );
+  } else {
+    img0.copyTo( video0ROI );
+    img1.copyTo( video1ROI );
+  }
+}
+    
+
+
 //---------------------------------------------------------------------------
 // Tools for estimating initial offset
 //---------------------------------------------------------------------------
@@ -276,6 +298,39 @@ int Synchronizer::estimateOffset( const TransitionVec &trans0,  const Transition
   return _offset;
 }
 
+int Synchronizer::bootstrap( float window, float maxDelta )
+{
+  TransitionVec transitions[2];
+  int windowFrames = window * _video0.fps(),
+      maxDeltaFrames = maxDelta * _video0.fps();
+
+    if( !_video0.capture.isOpened() ) {
+      cerr << "Can't open video 0" << endl;
+      exit(-1);
+    }
+    if( !_video1.capture.isOpened() ) {
+      cerr << "Can't open video 1" << endl;
+      exit(-1);
+    }
+
+    cout << _video0.dump() << endl;
+    cout << _video1.dump() << endl;
+
+    _video0.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[0] );
+    _video1.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[1] );
+
+    //cout << "Found " << transitions[i].size() << " transitions" << endl;
+
+    //stringstream filename;
+    //filename << "/tmp/transitions_" << i << ".png";
+
+    //Video::dumpTransitions( transitions[i], filename.str() );
+
+  return estimateOffset( transitions[0], transitions[1], windowFrames, maxDeltaFrames  );
+}
+
+
+
 
 //===========================================================================
 
@@ -327,7 +382,7 @@ bool KFSynchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
         _lastObs[0] = trans0[i];
         _lastObs[1] = trans1[i];
       } else {
-        cerr << "Encontered large offset frames " << trans0[i] << ", " << trans1[i] << " : dt = " << dt << " when offset = " << _offset << endl;
+        cerr << "Encontered large offset at frames " << trans0[i] << ", " << trans1[i] << " : dt = " << dt << " when offset = " << _offset << endl;
       }
 
 
@@ -378,7 +433,7 @@ int SynchroKalmanFilter::predict( void )
   _state = _f * _state;
   _cov = _f * _cov * _f.transpose() + _q;
 
-  cout << _state << endl;
+  //cout << _state << endl;
 
   return lround( _state(0) );
 }
@@ -412,7 +467,7 @@ int SynchroKalmanFilter::update( int obs, int future )
   _state = _state + kg * inno;
   _cov = ( MatrixXd::Identity( depth(), depth() ) - kg * h ) * _cov;
 
-  cout << "States after prediction: " << endl << _state << endl;
+//  cout << "States after prediction: " << endl << _state << endl;
 
   return 0;
 }

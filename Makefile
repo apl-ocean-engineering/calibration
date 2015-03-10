@@ -1,7 +1,7 @@
 
 APPS := calibration calibration_artificial calibration_april \
   extract_frame trendnet_time_code_test watch_for_change extract_static_frames \
-  align_streams
+  align_streams aligned_streams_apriltag_extract
 
 all: $(APPS)
 
@@ -22,6 +22,9 @@ extract_frame: extract_frame.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^
 
 align_streams: align_streams.o trendnet_time_code.o file_utils.o  video.o synchronizer.o
+	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^ 
+
+aligned_streams_apriltag_extract: aligned_streams_apriltag_extract.o trendnet_time_code.o file_utils.o  video.o synchronizer.o
 	$(LD) -o $@ $(LDFLAGS) $(LIBS) $^ 
 
 extract_static_frames: extract_static_frames.o trendnet_time_code.o
