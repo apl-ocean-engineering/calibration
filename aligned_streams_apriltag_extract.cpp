@@ -15,6 +15,12 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_cdf.h>
 
+#define THREADED_APRILTAG_DETECTION
+
+#ifdef THREADED_APRILTAG_DETECTION
+#include <boost/thread.hpp>
+#endif
+
 #ifdef USE_FFTS
 #include <ffts.h>
 #endif
@@ -140,6 +146,29 @@ struct AlignmentOptions
 
 
 
+#ifdef THREADED_APRILTAG_DETECTION
+struct AprilTagDetectorCallable
+{
+  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
+    : _detections( detections ),
+      _img( image ),
+      _detector( AprilTags::tagCodes36h11 )
+  {;}
+
+  vector<AprilTags::TagDetection> &_detections;
+  Mat &_img;
+  AprilTags::TagDetector _detector;
+
+  void operator()( void )
+  {
+    _detections = _detector.extractTags( _img );
+  }
+
+};
+#endif
+
+
+
 int main( int argc, char **argv )
 {
   string error;
@@ -160,7 +189,6 @@ int main( int argc, char **argv )
   sync.rewind();
   sync.seek( 0, 500 );
 
-  AprilTags::TagDetector detector( AprilTags::tagCodes36h11 );
 
   Mat frame[2];
   while( sync.nextSynchronizedFrames( frame[0], frame[1] ) ) {
@@ -170,8 +198,19 @@ int main( int argc, char **argv )
     cvtColor( frame[1], bw[1], CV_BGR2GRAY );
 
     vector<AprilTags::TagDetection> tags[2];
+
+#ifdef THREADED_APRILTAG_DETECTION
+    boost::thread detector0( AprilTagDetectorCallable( tags[0], bw[0] ) ),
+                  detector1( AprilTagDetectorCallable( tags[1], bw[1] ) );
+
+    detector0.join();
+    detector1.join();
+
+#else
+  AprilTags::TagDetector detector( AprilTags::tagCodes36h11 );
     tags[0] = detector.extractTags( bw[0] );
     tags[1] = detector.extractTags( bw[1] );
+#endif
 
     const int tagCount = 35;
 

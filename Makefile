@@ -14,7 +14,7 @@ LDFLAGS = $(CXXFLAGS) -L/opt/opencv/lib -L$(APRILTAGS_PATH)/lib -lgsl
 
 	  #-L$(FFTS)/lib -lffts
 
-LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl
+LIBS = -lapriltags -lopencv_core -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lopencv_imgproc  -lgsl -lboost_thread-mt -lboost_system-mt
 LD = g++
 
 
