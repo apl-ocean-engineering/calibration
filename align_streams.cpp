@@ -39,12 +39,12 @@ struct AlignmentOptions
 {
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( void )
-    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2), offset(0), offsetGiven(false)
+    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2), offset(0),  waitKey(0), offsetGiven(false)
   {;}
 
 
   float window, maxDelta, lookahead;
-  int offset;
+  int offset, waitKey;
   bool offsetGiven;
 
   string video1, video2;
@@ -53,6 +53,7 @@ struct AlignmentOptions
   {
     static struct option long_options[] = {
       { "window", true, NULL, 'w' },
+      { "wait-key", true, NULL, 'k' },
       { "max-delay", true, NULL, 'd'},
       { "offset", true, NULL, 'o'},
       { "lookahead", true, NULL, 'l'},
@@ -62,13 +63,16 @@ struct AlignmentOptions
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, ":w:d:o:l:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, ":w:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'd':
           maxDelta = atof(optarg);
           break;
         case 'w':
           window = atof( optarg );
+          break;
+        case 'k':
+          waitKey = atoi( optarg );
           break;
         case 'o':
           offset = atoi( optarg );
@@ -167,7 +171,7 @@ int main( int argc, char **argv )
   normFile.close();
 #endif
 
-  Synchronizer sync( video[0], video[1] );
+  KFSynchronizer sync( video[0], video[1] );
   if( opts.offsetGiven )
     sync.setOffset( opts.offset );
   else
@@ -180,8 +184,10 @@ int main( int argc, char **argv )
   Mat img;
   while( sync.nextCompositeFrame( img )) {
     int ch;
-    imshow( "Composite", img );
-    ch = waitKey( 0 );
+    Mat shrunk;
+    resize( img, shrunk, Size(), 0.5, 0.5 );
+    imshow( "Composite", shrunk );
+    ch = waitKey( opts.waitKey );
 
     if( ch == 'q' )
       break;

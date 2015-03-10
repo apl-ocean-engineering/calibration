@@ -154,6 +154,18 @@ void Video::dumpTransitions( const TransitionVec &transitions, const string &fil
 }
 
 
+vector<int> Video::transitionsAfter( int after )
+{
+  vector<int> output;
+
+  // Got to be a more efficient way to do this?
+  for( TransitionMap::iterator itr = _transitions.begin(); itr != _transitions.end(); ++itr ) {
+    if( itr->first > after ) output.push_back( itr->first );
+  }
+
+  return output;
+}
+
 
 //====
 
@@ -225,6 +237,12 @@ bool VideoLookahead::read( cv::Mat &mat )
   }
 
   return false;
+}
+
+bool VideoLookahead::drop( void )
+{
+  Mat foo;
+  return read( foo );
 }
 
 //== CachedFrame ===

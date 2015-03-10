@@ -108,6 +108,8 @@ class Video
 
     const TransitionMap &transitions( void ) const { return _transitions; }
 
+    std::vector<int> transitionsAfter( int after );
+
   protected:
 
     Gaussian _distTimecodeNorm, _distDt;
@@ -144,6 +146,10 @@ class VideoLookahead : public Video
     virtual int frame( void ) { return  Video::frame() - _future.size(); }
     virtual void seek( int frame );
     virtual bool read( cv::Mat &mat );
+    bool drop( void );
+
+    int lookaheadFrames( void ) const { return _lookaheadFrames; }
+
 
   private:
     int _lookaheadFrames;

@@ -1,8 +1,11 @@
 
+#include <Eigen/LU>
+
 #include "synchronizer.h"
 
 using namespace std;
 using namespace cv;
+using namespace Eigen;
 
 const float Synchronizer::Scale = 1.0;
 
@@ -66,9 +69,9 @@ bool Synchronizer::advanceToNextTransition( int which )
 
     if( transitions.size() > 1 ) {
       TransitionMap::const_iterator itr = transitions.begin(), prev = itr;
-    itr++;
-    for( ; itr != transitions.end(); ++itr, ++prev ) {
-      if( (prev->first <= current) && (itr->first > current) ) {
+      itr++;
+      for( ; itr != transitions.end(); ++itr, ++prev ) {
+        if( (prev->first <= current) && (itr->first > current) ) {
           seek( which , itr->first );
           cout << "Advancing o " << which << " to frame " << itr->first << endl;
           return true;
@@ -96,6 +99,14 @@ void Synchronizer::advanceOnly( int which )
   }
 }
 
+
+bool Synchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
+{
+  if( _video0.read( video0 ) && _video1.read( video1 ) ) return true;
+
+  return false;
+}
+
 bool Synchronizer::nextCompositeFrame( Mat &img )
 {
 
@@ -105,20 +116,18 @@ bool Synchronizer::nextCompositeFrame( Mat &img )
   Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
 
 
-  Mat frame;
-  if( _video0.read( frame ) ) 
+  Mat frame0, frame1;
+  if( nextSynchronizedFrames( frame0, frame1 ) ) {
     if( Scale != 1.0 )
-      resize( frame, video0ROI, video0ROI.size() );
+      resize( frame0, video0ROI, video0ROI.size() );
     else
-      frame.copyTo( video0ROI );
-  else return false;
+      frame0.copyTo( video0ROI );
 
-  if( _video1.read(frame )  )
     if( Scale != 1.0 )
-      resize( frame, video1ROI, video1ROI.size() );
+      resize( frame1, video1ROI, video1ROI.size() );
     else
-      frame.copyTo( video1ROI );
-  else return false;
+      frame1.copyTo( video1ROI );
+  } else return false;
 
   cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
 
@@ -268,6 +277,143 @@ int Synchronizer::estimateOffset( const TransitionVec &trans0,  const Transition
 }
 
 
+//===========================================================================
+
+  KFSynchronizer::KFSynchronizer( VideoLookahead &video0, VideoLookahead &video1 )
+: Synchronizer( video0, video1 ), _lvideo0( video0 ), _lvideo1( video1 ),
+  _kf( std::min( _lvideo0.lookaheadFrames(), _lvideo1.lookaheadFrames() ) )
+{
+  _lastObs[0] = _lastObs[1] = 0;
+}
+
+bool KFSynchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
+{
+  int predOffset = _kf.predict();
+
+  if( predOffset  != _offset ) {
+    cout << "Predicted offset of " << predOffset << " does not agree with curent estimate " << _offset << endl;
+
+    if( predOffset > _offset ) {
+      // Video 1 is moving ahead, take a frame and drop if
+      _lvideo1.drop();
+      _offset = predOffset;
+    } else if ( predOffset < _offset ) {
+      _lvideo0.drop();
+      _offset = predOffset;
+    }
+
+  }
+
+  bool result = Synchronizer::nextSynchronizedFrames( video0, video1 );
 
 
+  vector<int> trans0, trans1;
+  trans0 = _video0.transitionsAfter( std::max(_video0.frame(), _lastObs[0] ) );
+  trans1 = _video1.transitionsAfter( std::max(_video1.frame(), _lastObs[1] ) );
+
+  if( (trans0.size() > 0) and (trans0.size() == trans1.size()) ) {
+    for( int i = 0; i < trans0.size(); ++i ) {
+      int dt = trans1[i] - trans0[i];
+
+      if( (dt >= (_offset-2)) && (dt <= (_offset+2))) {
+        int future0 = trans0[i] - _video0.frame(),
+            future1 = trans1[i] - _video1.frame();
+        int future = std::min( future0, future1 );
+
+        cout << "Updating estimate of offset with dt = " << dt << " at " << future << " frames in the future." << endl;
+
+        _kf.update( dt, future );
+
+        _lastObs[0] = trans0[i];
+        _lastObs[1] = trans1[i];
+      } else {
+        cerr << "Encontered large offset frames " << trans0[i] << ", " << trans1[i] << " : dt = " << dt << " when offset = " << _offset << endl;
+      }
+
+
+    }
+  }
+
+
+
+  return result;
+}
+
+int KFSynchronizer::estimateOffset( const TransitionVec &trans0,  const TransitionVec &trans1, float windowFrames, float maxDeltaFrames ) 
+{
+  int out = Synchronizer::estimateOffset( trans0, trans1, windowFrames, maxDeltaFrames );
+  _kf.setOffset( _offset );
+  return out;
+}
+
+//===========================================================================
+
+
+  SynchroKalmanFilter::SynchroKalmanFilter( int depth )
+: _state(depth), _cov( depth, depth ),
+  _f( depth, depth ), _q( depth, depth ), _r()
+{
+  float cov0 = 0.05;
+
+  _cov.setIdentity();
+  _cov *= cov0;
+
+  // Set the state propagation matrix
+  _f.setZero();
+  _f.topRightCorner( depth-1, depth-1 ).setIdentity();
+  _f(depth-1,depth-1) = 1;
+  _q.setIdentity();
+  _q *= cov0;
+
+  _r.setZero();
+}
+
+void SynchroKalmanFilter::setOffset( int offset )
+{
+  _state.fill( offset );
+}
+
+int SynchroKalmanFilter::predict( void )
+{
+  _state = _f * _state;
+  _cov = _f * _cov * _f.transpose() + _q;
+
+  cout << _state << endl;
+
+  return lround( _state(0) );
+}
+
+int SynchroKalmanFilter::update( int obs, int future )
+{
+  // Generate a Y (observation) matrix
+   Matrix< double, 1, 1> y;
+   y(0,0) = obs;
+
+  // generate an H matrix
+  RowVectorXd h( depth() );
+  h.setZero();
+  h( future ) = 1.0;
+
+  MatrixXd inno( depth(), depth() );
+  inno = y - h * _state;
+
+  //cout << "Inno: " << endl << inno << endl;
+
+  MatrixXd innoCov( depth(), depth() );
+  innoCov = h * _cov * h.transpose() + _r;
+
+  //cout << "Innocov: " << endl << innoCov << endl;
+
+  MatrixXd kg( depth(), depth() );
+  kg = _cov * h.transpose() * innoCov.inverse();
+
+  //cout << "KG: " << endl << kg << endl;
+
+  _state = _state + kg * inno;
+  _cov = ( MatrixXd::Identity( depth(), depth() ) - kg * h ) * _cov;
+
+  cout << "States after prediction: " << endl << _state << endl;
+
+  return 0;
+}
 

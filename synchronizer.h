@@ -2,6 +2,7 @@
 #define __SYNCHRONIZER_H__
 
 #include <opencv2/core/core.hpp>
+#include <Eigen/Core>
 
 #include "video.h"
 
@@ -24,8 +25,9 @@ class Synchronizer
     void advanceOnly( int which );
 
     cv::Size compositeSize( void );
-    bool nextCompositeFrame( cv::Mat &img );
- 
+    virtual bool nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 );
+    virtual bool nextCompositeFrame( cv::Mat &img );
+
     // Tools for estimating initial offset
     IndexPair getSpan( const TransitionVec &transition,  int start, int length );
     bool shiftSpan( const  TransitionVec &transition, IndexPair &pair, int length, int direction );
@@ -40,17 +42,61 @@ class Synchronizer
       IndexPair v0, v1;
     };
 
-    int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
+    virtual int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
         float window, float maxDelta ) ;
  
 
-  private:
+  protected:
     Video & _video0, &_video1;
 
     int _offset;
 
 
 };
+
+
+class SynchroKalmanFilter
+{
+  public:
+    SynchroKalmanFilter( int depth );
+
+    int predict( void );
+    int update( int obs, int future );
+
+    void setOffset( int offset );
+
+  private:
+
+    int depth( void ) const { return _state.rows(); }
+
+    Eigen::VectorXd _state;
+    Eigen::MatrixXd _cov;
+
+    Eigen::MatrixXd _f, _q;
+    Eigen::Matrix<double,1,1> _r;
+
+};
+
+
+class KFSynchronizer : public Synchronizer 
+{
+  public:
+    KFSynchronizer( VideoLookahead &v0, VideoLookahead &v1 );
+
+    virtual bool nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 );
+
+    virtual int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
+        float window, float maxDelta ) ;
+
+  private:
+    VideoLookahead &_lvideo0, &_lvideo1;
+    int _lastObs[2];
+
+    SynchroKalmanFilter _kf;
+};
+
+
+
 
 
 #endif
