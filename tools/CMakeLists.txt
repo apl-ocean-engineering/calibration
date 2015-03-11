@@ -1,10 +1,13 @@
 
 include_directories( "${CMAKE_SOURCE_DIR}/include" 
 	${OpenCV_INCLUDE_DIRS} )
-
-add_executable( align_streams align_streams.cpp )
-target_link_libraries( align_streams 
-	lib_camera_calibration ${OpenCV_LIBS} 
+link_libraries(	lib_camera_calibration ${OpenCV_LIBS} 
 	${GSL_LIBRARIES}
 	${Boost_LIBRARIES}
 	${APRILTAGS_LIBS} )
+
+add_executable( align_streams align_streams.cpp )
+
+add_executable( calibration calibration.cpp )
+
+add_executable( stereo_calibration stereo_calibration.cpp )

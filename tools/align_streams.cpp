@@ -1,5 +1,6 @@
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <iostream>
 #include <string>
@@ -37,6 +38,8 @@
 using namespace cv;
 using namespace std;
 
+using AprilTags::TagDetection;
+
 struct AlignmentOptions
 {
 
@@ -45,8 +48,12 @@ struct AlignmentOptions
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( int argc, char **argv )
     : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2),
-    minFractionOfSharedTags( 0.5 ),
-    seekTo(0), offset(0),  waitKey(0), offsetGiven(false),
+    minFractionOfSharedTags( 0.25 ),
+    seekTo(0), offset(0),  waitKey(0), 
+    standoffFrames( 100 ),
+    offsetGiven(false),
+    doExtract( false ),
+    extractPath( "/tmp/extracted" ),
     verb( NONE )
   {
     string msg;
@@ -58,8 +65,9 @@ struct AlignmentOptions
 
 
   float window, maxDelta, lookahead, minFractionOfSharedTags;
-  int seekTo, offset, waitKey;
-  bool offsetGiven;
+  int seekTo, offset, waitKey, standoffFrames;
+  bool offsetGiven, doExtract;
+  string extractPath;
 
   Verb verb;
 
@@ -68,26 +76,35 @@ struct AlignmentOptions
   bool parseArgv( int argc, char **argv, string &msg )
   {
     static struct option long_options[] = {
-      { "window", true, NULL, 'w' },
-      { "shared-fraction", true, NULL, 'f' },
-      { "seek-to", true, NULL, 's' },
-      { "wait-key", true, NULL, 'k' },
-      { "max-delay", true, NULL, 'd'},
-      { "offset", true, NULL, 'o'},
-      { "lookahead", true, NULL, 'l'},
-      { "help", false, NULL, '?' },
+      { "do-extract", optional_argument, NULL, 'e' },
+      { "window", required_argument, NULL, 'w' },
+      { "seek-to", required_argument, NULL, 's' },
+      { "shared-fraction", required_argument, NULL, 'f' },
+      { "standoff_frames", required_argument, NULL, 'y' },
+      { "wait-key", required_argument, NULL, 'k' },
+      { "max-delay", required_argument, NULL, 'd'},
+      { "offset", required_argument, NULL, 'o'},
+      { "lookahead", required_argument, NULL, 'l'},
+      { "help", no_argument, NULL, '?' },
       { 0, 0, 0, }
     };
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, ":w:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, "e::w:y:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'd':
           maxDelta = atof(optarg);
           break;
+        case 'e':   // Extract images
+          doExtract = true;
+          if( optarg ) extractPath = optarg;
+          break;
         case 'w':
           window = atof( optarg );
+          break;
+        case 'y':
+          standoffFrames = atoi( optarg );
           break;
         case 's':
           seekTo = atoi( optarg );
@@ -165,37 +182,15 @@ struct AlignmentOptions
 };
 
 
-#ifdef THREADED_APRILTAG_DETECTION
-struct AprilTagDetectorCallable
-{
-  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
-    : _detections( detections ),
-    _img( image ),
-    _detector( AprilTags::tagCodes36h11 )
-  {;}
-
-  vector<AprilTags::TagDetection> &_detections;
-  Mat &_img;
-  AprilTags::TagDetector _detector;
-
-  void operator()( void )
-  {
-    _detections = _detector.extractTags( _img );
-  }
-
-};
-#endif
-
-
 class AlignStreamsMain {
   public:
     AlignStreamsMain( int argc, char **argv )
       : opts( argc, argv ),
       video0( opts.video1, opts.lookahead ), 
       video1( opts.video2, opts.lookahead ),
-      sync( video0, video1 )
-  {
-  }
+      sync( video0, video1 ),
+      extractPath( opts.extractPath )
+  {;}
 
     int go( void )
     {
@@ -284,13 +279,34 @@ class AlignStreamsMain {
 
         const int tagCount = 35;
 
-        cout << "Found " << tags[0].size() << " and " << tags[1].size() << endl;
 
+        // Calculate the number of tags in common
+        vector< pair< AprilTags::TagDetection, AprilTags::TagDetection > > pairs = findCommonPairs( tags[0], tags[1] );
 
-        if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
-            ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
-          cout << "!!! I'm doing something" << endl;
+        cout << "Found " << tags[0].size() << " and " << tags[1].size();
+        cout << "  with " << pairs.size() << " tags in common" << endl;
+
+        bool extracted = false;
+        if( opts.doExtract ) {
+          //          if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
+          //              ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
+
+          if ( ( (float)pairs.size() / tagCount) > opts.minFractionOfSharedTags  ) {
+            cout << "!!! I'm doing something" << endl;
+            extracted = true;
+
+            imwrite( extractPath.video0( video0.frame(), video1.frame() ).c_str(), frame[0] );
+            imwrite( extractPath.video1( video0.frame(), video1.frame() ).c_str(), frame[1] );
+
+            Mat composite;
+            sync.compose( frame[0], frame[1], composite );
+            imwrite( extractPath.composite( video0.frame(), video1.frame() ).c_str(), composite );
+
+            Mat discard;
+            for( int i = 0; i < opts.standoffFrames && sync.nextCompositeFrame( discard ); ++i ) {;}
+          }
         }
+
 
         for( int j = 0; j < 2; ++j ) {
           for( int i = 0; i < tags[j].size(); ++i ) {
@@ -307,6 +323,7 @@ class AlignStreamsMain {
 
         if( ch == 'q' )
           break;
+
         //else if (ch == ',')
         //  sync.scrub(-2);
         //else if (ch == '[')
@@ -320,25 +337,105 @@ class AlignStreamsMain {
         //else if (ch == 'r')
         //  sync.advanceOnly( 1 );
 
+        }
+
+        return 0;
       }
 
-      return 0;
-    }
+      vector< pair< TagDetection, TagDetection > > findCommonPairs(
+          vector< TagDetection > &a, vector< TagDetection > &b )
+      {
+        vector< pair< TagDetection, TagDetection > > pairs;
+
+        // Brute force for now.  Assume no duplicates
+        for( int i = 0; i < a.size(); ++i ) {
+          for( int j = 0; j < b.size(); ++j ) {
+            if( a[i].id == b[j].id ) {
+              pairs.push_back( make_pair( a[i], b[j] ) );
+            }
+          }
+        }
+        return pairs;
+      }
 
 
-  private:
-    AlignmentOptions opts;
-    VideoLookahead video0, video1;
-    KFSynchronizer sync;
+      private:
+      AlignmentOptions opts;
+      VideoLookahead video0, video1;
+      KFSynchronizer sync;
+
+
+      struct ExtractPath {
+        ExtractPath( const string &root )
+          : _root( root )
+        {;}
+
+        string _root;
+
+        const string video0( int frame0, int frame1 )
+        { return videoPath( 0, frame0, frame1 ); }
+        const string video1( int frame0, int frame1 )
+        { return videoPath( 1, frame0, frame1 ); }
+
+        const string videoPath( int which, int frame0, int frame1 )
+        {
+          char path[40];
+          snprintf( path, 39, "/video%d/frame%d_%06d_%06d.jpg", which, which, frame0, frame1 );
+
+          string total( _root );
+          total += path;
+          mkdir_p(total);
+
+          return total;
+
+        }
+
+        const string composite( int frame0, int frame1 )
+        {
+          char path[40];
+          snprintf( path, 39, "/composite/composite_%06d_%06d.jpg", frame0, frame1 );
+
+          string total( _root );
+          total += path;
+          mkdir_p(total);
+
+          return total;
+        }
+
+      };
+
+#ifdef THREADED_APRILTAG_DETECTION
+struct AprilTagDetectorCallable
+{
+  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
+    : _detections( detections ),
+    _img( image ),
+    _detector( AprilTags::tagCodes36h11 )
+  {;}
+
+  vector<AprilTags::TagDetection> &_detections;
+  Mat &_img;
+  AprilTags::TagDetector _detector;
+
+  void operator()( void )
+  {
+    _detections = _detector.extractTags( _img );
+  }
 
 };
+#endif
 
-int main( int argc, char **argv )
-{
 
-  AlignStreamsMain main( argc, argv );
 
-  exit( main.go() );
-}
+      ExtractPath extractPath;
+    };
+
+    int main( int argc, char **argv )
+    {
+
+      AlignStreamsMain main( argc, argv );
+
+      exit( main.go() );
+    }
 
 

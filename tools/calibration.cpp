@@ -11,11 +11,10 @@
 
 #include <iostream>
 
-
-
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
+#include "image.h"
 
 using namespace cv;
 using namespace std;
@@ -257,30 +256,6 @@ class CalibrationOpts {
     }
 
 
-};
-
-class Image {
-  public:
-    Image( const string &filename, Mat &img )
-      : _fileName( filename ), _img( img )
-    {;}
-
-    const string &fileName( void ) const { return _fileName; }
-    const Mat    &img( void )      const { return _img; }
-
-    string basename( void )
-    {
-      size_t sep = _fileName.find_last_of( '/' );
-      if( sep == string::npos )
-        return _fileName;
-
-      return String( _fileName, sep+1 );
-    }
-
-  private:
-
-    string _fileName;
-    Mat _img;
 };
 
 

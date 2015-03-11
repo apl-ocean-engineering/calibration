@@ -102,7 +102,10 @@ void Synchronizer::advanceOnly( int which )
 
 bool Synchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
 {
-  if( _video0.read( video0 ) && _video1.read( video1 ) ) return true;
+  if( _video0.read( video0 ) && _video1.read( video1 ) ) {
+    cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
+    return true;
+  }
 
   return false;
 }
@@ -139,7 +142,7 @@ void Synchronizer::compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composi
   // TODO.  Should check size of input images
 
   Size compSize( scale*(img0.cols + img1.cols),
-                 scale*std::max(img0.rows, img1.rows) ); 
+      scale*std::max(img0.rows, img1.rows) ); 
   composite.create( compSize, CV_8UC3 );
 
   Mat video0ROI( composite, Rect( 0, 0,               scale*img0.cols, scale*img0.rows) );
@@ -153,7 +156,7 @@ void Synchronizer::compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composi
     img1.copyTo( video1ROI );
   }
 }
-    
+
 
 
 //---------------------------------------------------------------------------
@@ -304,27 +307,27 @@ int Synchronizer::bootstrap( float window, float maxDelta )
   int windowFrames = window * _video0.fps(),
       maxDeltaFrames = maxDelta * _video0.fps();
 
-    if( !_video0.capture.isOpened() ) {
-      cerr << "Can't open video 0" << endl;
-      exit(-1);
-    }
-    if( !_video1.capture.isOpened() ) {
-      cerr << "Can't open video 1" << endl;
-      exit(-1);
-    }
+  if( !_video0.capture.isOpened() ) {
+    cerr << "Can't open video 0" << endl;
+    exit(-1);
+  }
+  if( !_video1.capture.isOpened() ) {
+    cerr << "Can't open video 1" << endl;
+    exit(-1);
+  }
 
-    cout << _video0.dump() << endl;
-    cout << _video1.dump() << endl;
+  cout << _video0.dump() << endl;
+  cout << _video1.dump() << endl;
 
-    _video0.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[0] );
-    _video1.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[1] );
+  _video0.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[0] );
+  _video1.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[1] );
 
-    //cout << "Found " << transitions[i].size() << " transitions" << endl;
+  //cout << "Found " << transitions[i].size() << " transitions" << endl;
 
-    //stringstream filename;
-    //filename << "/tmp/transitions_" << i << ".png";
+  //stringstream filename;
+  //filename << "/tmp/transitions_" << i << ".png";
 
-    //Video::dumpTransitions( transitions[i], filename.str() );
+  //Video::dumpTransitions( transitions[i], filename.str() );
 
   return estimateOffset( transitions[0], transitions[1], windowFrames, maxDeltaFrames  );
 }
@@ -441,8 +444,8 @@ int SynchroKalmanFilter::predict( void )
 int SynchroKalmanFilter::update( int obs, int future )
 {
   // Generate a Y (observation) matrix
-   Matrix< double, 1, 1> y;
-   y(0,0) = obs;
+  Matrix< double, 1, 1> y;
+  y(0,0) = obs;
 
   // generate an H matrix
   RowVectorXd h( depth() );
@@ -467,7 +470,7 @@ int SynchroKalmanFilter::update( int obs, int future )
   _state = _state + kg * inno;
   _cov = ( MatrixXd::Identity( depth(), depth() ) - kg * h ) * _cov;
 
-//  cout << "States after prediction: " << endl << _state << endl;
+  //  cout << "States after prediction: " << endl << _state << endl;
 
   return 0;
 }

@@ -7,7 +7,7 @@ find_package( OpenCV REQUIRED )
 find_package( GSL REQUIRED )
 
 set( Boost_USE_MULTITHREADED ON )
-find_package( Boost REQUIRED COMPONENTS thread system )
+find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 
 
 
