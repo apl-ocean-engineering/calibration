@@ -20,11 +20,11 @@ struct Detection;
 
 class Board {
   public:
-    Board( Pattern pat, int w, int h, float squares, const string &nam )
+    Board( Pattern pat, int w, int h, float squares, const std::string &nam )
       : name(nam), pattern(pat), width(w), height(h), squareSize( squares )
     {;}
 
-    string name;
+    std::string name;
     Pattern pattern;
     int width, height;
     float squareSize;
@@ -32,7 +32,7 @@ class Board {
     cv::Size size( void ) const { return cv::Size( width,height ); }
 
     virtual Detection *detectPattern( const cv::Mat &gray, std::vector< cv::Point2f > &pointbuf );
-    static Board *load( const string &infile, const std::string &name );
+    static Board *load( const std::string &infile, const std::string &name );
 
     std::string patternString( void ) const {
       switch(pattern)
@@ -62,7 +62,7 @@ class Board {
 class AprilTagsBoard : public Board {
   public:
 
-    AprilTagsBoard( int w, int h, float squares, const string &name )
+    AprilTagsBoard( int w, int h, float squares, const std::string &name )
       : Board(  APRILTAGS, w, h, squares, name ), _tagCode( AprilTags::tagCodes36h11 )
     {;} 
 

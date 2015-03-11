@@ -1,6 +1,9 @@
 #ifndef __DETECTION_H__
 #define __DETECTION_H__
 
+#include <string>
+#include <vector>
+
 #include <opencv2/core/core.hpp>
 
 #include "board.h"
@@ -11,15 +14,15 @@ struct Detection
     : found(false), points(), corners() {;}
 
   bool found;
-  vector< cv::Point2f > points;
-  vector< cv::Point3f > corners;
+  std::vector< cv::Point2f > points;
+  std::vector< cv::Point3f > corners;
 
   virtual void calculateCorners( const Board &board );
   virtual void drawCorners(  const Board &board, cv::Mat &view ) const;
 
-  virtual void writeCache( const Board &board, const string &cacheFile );
+  virtual void writeCache( const Board &board, const std::string &cacheFile );
 
-  static Detection *load( const string &cacheFile );
+  static Detection *load( const std::string &cacheFile );
   
 
 

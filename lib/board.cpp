@@ -1,4 +1,9 @@
 
+#include <iostream>
+
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
 #include "board.h"
 #include "detection.h"
 
