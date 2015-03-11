@@ -146,28 +146,6 @@ struct AlignmentOptions
 
 
 
-#ifdef THREADED_APRILTAG_DETECTION
-struct AprilTagDetectorCallable
-{
-  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
-    : _detections( detections ),
-      _img( image ),
-      _detector( AprilTags::tagCodes36h11 )
-  {;}
-
-  vector<AprilTags::TagDetection> &_detections;
-  Mat &_img;
-  AprilTags::TagDetector _detector;
-
-  void operator()( void )
-  {
-    _detections = _detector.extractTags( _img );
-  }
-
-};
-#endif
-
-
 
 int main( int argc, char **argv )
 {

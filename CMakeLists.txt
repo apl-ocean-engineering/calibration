@@ -6,6 +6,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 find_package( OpenCV REQUIRED )
 find_package( GSL REQUIRED )
 
+set( Boost_USE_MULTITHREADED ON )
+find_package( Boost REQUIRED COMPONENTS thread system )
+
 
 
 include_directories( "/usr/local/include/eigen3" )

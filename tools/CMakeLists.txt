@@ -6,4 +6,5 @@ add_executable( align_streams align_streams.cpp )
 target_link_libraries( align_streams 
 	lib_camera_calibration ${OpenCV_LIBS} 
 	${GSL_LIBRARIES}
+	${Boost_LIBRARIES}
 	${APRILTAGS_LIBS} )

@@ -15,10 +15,18 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_cdf.h>
 
-#ifdef USE_FFTS
-#include <ffts.h>
+#define THREADED_APRILTAG_DETECTION
+#ifdef THREADED_APRILTAG_DETECTION
+#include <boost/thread.hpp>
 #endif
 
+#ifndef USE_APRILTAGS
+#error "Will only compile with Apriltags support."
+#endif
+
+#include "AprilTags/TagDetector.h"
+#include "AprilTags/TagFamily.h"
+#include "AprilTags/Tag36h11.h"
 
 #include "file_utils.h"
 #include "trendnet_time_code.h"
@@ -29,23 +37,31 @@
 using namespace cv;
 using namespace std;
 
-#define MAKE_NORMFILE
-#ifdef MAKE_NORMFILE
-ofstream normFile;
-#endif
-
-
 struct AlignmentOptions
 {
+
+  typedef enum { PLAYER, DETECTOR, NONE = -1 } Verb;
+
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
-  AlignmentOptions( void )
-    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2), offset(0),  waitKey(0), offsetGiven(false)
-  {;}
+  AlignmentOptions( int argc, char **argv )
+    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2),
+    minFractionOfSharedTags( 0.5 ),
+    seekTo(0), offset(0),  waitKey(0), offsetGiven(false),
+    verb( NONE )
+  {
+    string msg;
+    if( parseArgv( argc, argv, msg ) == false ) {
+      cout << msg << endl;
+      exit(-1);
+    }
+  }
 
 
-  float window, maxDelta, lookahead;
-  int offset, waitKey;
+  float window, maxDelta, lookahead, minFractionOfSharedTags;
+  int seekTo, offset, waitKey;
   bool offsetGiven;
+
+  Verb verb;
 
   string video1, video2;
 
@@ -53,6 +69,8 @@ struct AlignmentOptions
   {
     static struct option long_options[] = {
       { "window", true, NULL, 'w' },
+      { "shared-fraction", true, NULL, 'f' },
+      { "seek-to", true, NULL, 's' },
       { "wait-key", true, NULL, 'k' },
       { "max-delay", true, NULL, 'd'},
       { "offset", true, NULL, 'o'},
@@ -63,13 +81,19 @@ struct AlignmentOptions
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, ":w:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, ":w:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'd':
           maxDelta = atof(optarg);
           break;
         case 'w':
           window = atof( optarg );
+          break;
+        case 's':
+          seekTo = atoi( optarg );
+          break;
+        case 'f':
+          minFractionOfSharedTags = atof( optarg );
           break;
         case 'k':
           waitKey = atoi( optarg );
@@ -95,8 +119,19 @@ struct AlignmentOptions
 
     }
 
-    if( (argc - optind) < 2 ) {
-      msg = "Must specify two video files on command line";
+    if( (argc - optind) < 3 ) {
+      msg = "Must specify verb and two video files on command line";
+      return false;
+    }
+
+    string verbStr( argv[optind++]);
+
+    if( verbStr.compare( 0, 4, "play" ) == 0 ) {
+      verb = PLAYER;
+    } else if( verbStr.compare( "detect" ) == 0 ) {
+      verb = DETECTOR;
+    } else {
+      msg = "Don't understand the verb \"" + verbStr + "\"";
       return false;
     }
 
@@ -130,197 +165,180 @@ struct AlignmentOptions
 };
 
 
+#ifdef THREADED_APRILTAG_DETECTION
+struct AprilTagDetectorCallable
+{
+  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
+    : _detections( detections ),
+    _img( image ),
+    _detector( AprilTags::tagCodes36h11 )
+  {;}
+
+  vector<AprilTags::TagDetection> &_detections;
+  Mat &_img;
+  AprilTags::TagDetector _detector;
+
+  void operator()( void )
+  {
+    _detections = _detector.extractTags( _img );
+  }
+
+};
+#endif
+
+
+class AlignStreamsMain {
+  public:
+    AlignStreamsMain( int argc, char **argv )
+      : opts( argc, argv ),
+      video0( opts.video1, opts.lookahead ), 
+      video1( opts.video2, opts.lookahead ),
+      sync( video0, video1 )
+  {
+  }
+
+    int go( void )
+    {
+      string error;
+
+      if( opts.offsetGiven ) {
+        cout << "Using user-supplied offset of " << opts.offset << " frames" << endl;
+        sync.setOffset( opts.offset );
+      } else {
+        cout << "Estimating offset between videos" << endl;
+        sync.bootstrap( opts.window, opts.maxDelta );
+      }
+
+      sync.rewind();
+
+      if( opts.seekTo != 0 ) sync.seek( 0, opts.seekTo );
+
+      int retval;
+      switch( opts.verb ) {
+        case AlignmentOptions::PLAYER:
+          retval = doPlayer( );
+          break;
+        case AlignmentOptions::DETECTOR:
+          retval = doDetector( );
+          break;
+        case AlignmentOptions::NONE:
+        default:
+          cout << "No verb selected, oh well." << endl;
+          retval = 0;
+      }
+
+      return retval;
+    }
+
+    int doPlayer( void )
+    {
+      Mat img;
+      while( sync.nextCompositeFrame( img ) ) {
+        imshow( "Composite", img );
+
+        int ch;
+        ch = waitKey( opts.waitKey );
+
+        if( ch == 'q' )
+          break;
+        else if (ch == ',')
+          sync.scrub(-2);
+        else if (ch == '[')
+          sync.advanceToNextTransition( 0 );
+        else if (ch == ']')
+          sync.advanceToNextTransition( 1 );
+        else if (ch == 'R')
+          sync.rewind();
+        else if (ch == 'l')
+          sync.advanceOnly( 0 );
+        else if (ch == 'r')
+          sync.advanceOnly( 1 );
+      }
+
+      return 0;
+    }
+
+    int doDetector( )
+    {
+      Mat frame[2];
+      while( sync.nextSynchronizedFrames( frame[0], frame[1] ) ) {
+
+        Mat bw[2];
+        cvtColor( frame[0], bw[0], CV_BGR2GRAY );
+        cvtColor( frame[1], bw[1], CV_BGR2GRAY );
+
+        vector<AprilTags::TagDetection> tags[2];
+
+#ifdef THREADED_APRILTAG_DETECTION
+        boost::thread detector0( AprilTagDetectorCallable( tags[0], bw[0] ) ),
+          detector1( AprilTagDetectorCallable( tags[1], bw[1] ) );
+
+        detector0.join();
+        detector1.join();
+
+#else
+        AprilTags::TagDetector detector( AprilTags::tagCodes36h11 );
+        tags[0] = detector.extractTags( bw[0] );
+        tags[1] = detector.extractTags( bw[1] );
+#endif
+
+        const int tagCount = 35;
+
+        cout << "Found " << tags[0].size() << " and " << tags[1].size() << endl;
+
+
+        if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
+            ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
+          cout << "!!! I'm doing something" << endl;
+        }
+
+        for( int j = 0; j < 2; ++j ) {
+          for( int i = 0; i < tags[j].size(); ++i ) {
+            tags[j][i].draw( frame[j] );
+          }
+        }
+
+        Mat shrunk;
+        sync.compose( frame[0], frame[1], shrunk, 0.5 );
+        imshow( "Composite", shrunk );
+
+        int ch;
+        ch = waitKey( opts.waitKey );
+
+        if( ch == 'q' )
+          break;
+        //else if (ch == ',')
+        //  sync.scrub(-2);
+        //else if (ch == '[')
+        //  sync.advanceToNextTransition( 0 );
+        //else if (ch == ']')
+        //  sync.advanceToNextTransition( 1 );
+        //else if (ch == 'R')
+        //  sync.rewind();
+        //else if (ch == 'l')
+        //  sync.advanceOnly( 0 );
+        //else if (ch == 'r')
+        //  sync.advanceOnly( 1 );
+
+      }
+
+      return 0;
+    }
+
+
+  private:
+    AlignmentOptions opts;
+    VideoLookahead video0, video1;
+    KFSynchronizer sync;
+
+};
 
 int main( int argc, char **argv )
 {
-  string error;
-  AlignmentOptions opts;
-  if( opts.parseArgv( argc, argv, error ) != true ) {
-    if( !error.empty() ) cout << error  << endl;
-    exit(-1);
-  }
 
-#ifdef MAKE_NORMFILE
-  normFile.open("norms.txt");
-#endif
+  AlignStreamsMain main( argc, argv );
 
-  VideoLookahead video[2] = { VideoLookahead( opts.video1, opts.lookahead ), VideoLookahead( opts.video2, opts.lookahead ) };
-  TransitionVec transitions[2];
-
-  for( int i = 0; i < 2; ++i ) {
-    if( !video[i].capture.isOpened() ) {
-      cerr << "Can't open video " << i << endl;
-      exit(-1);
-    }
-
-    cout << video[i].dump() << endl;
-
-    video[i].initializeTransitionStatistics( 0, 2*opts.maxDelta * video[i].fps(), transitions[i] );
-
-    cout << "Found " << transitions[i].size() << " transitions" << endl;
-
-    stringstream filename;
-    filename << "/tmp/transitions_" << i << ".png";
-
-    Video::dumpTransitions( transitions[i], filename.str() );
-
-    if( i == 0 ) normFile << endl << endl;
-  }
-
-#ifdef MAKE_NORMFILE
-  normFile.close();
-#endif
-
-  KFSynchronizer sync( video[0], video[1] );
-  if( opts.offsetGiven )
-    sync.setOffset( opts.offset );
-  else
-    sync.estimateOffset( transitions[0], transitions[1], 
-        opts.window * video[0].fps(), opts.maxDelta * video[0].fps() );
-
-  sync.rewind();
-  sync.seek( 0, 151 );
-
-  Mat img;
-  while( sync.nextCompositeFrame( img )) {
-    int ch;
-    Mat shrunk;
-    resize( img, shrunk, Size(), 0.5, 0.5 );
-    imshow( "Composite", shrunk );
-    ch = waitKey( opts.waitKey );
-
-    if( ch == 'q' )
-      break;
-    else if (ch == ',')
-      sync.scrub(-2);
-    else if (ch == '[')
-      sync.advanceToNextTransition( 0 );
-    else if (ch == ']')
-      sync.advanceToNextTransition( 1 );
-    else if (ch == 'R')
-      sync.rewind();
-    else if (ch == 'l')
-      sync.advanceOnly( 0 );
-    else if (ch == 'r')
-      sync.advanceOnly( 1 );
-
-  }
-
-
-  exit(0);
+  exit( main.go() );
 }
 
 
-
-
-
-#ifdef FOURIER_APPROACH
-
-int normsSeconds( float start, float end, float **n )
-{  return norms( floor( start * fps() ), ceil( end * fps() ), n ); }
-
-int norms( int start, int end, float **n, int length = 0 )
-{
-  start = std::max( 0, std::min( frameCount(), start ) );
-  end = std::max( 0, std::min( frameCount(), end ) );
-
-  int window = end-start;
-  int len = std::max( length, window );
-
-  *n = (float *)valloc( len * sizeof(float) );
-
-  seek( start );
-
-  Mat prev;
-  for( int at = start; at < end; ++at ) {
-    Mat fullImage;
-    capture >> fullImage;
-
-    Mat timeCodeROI( fullImage, TimeCodeROI );
-
-    if( prev.empty() ) {
-      cv::cvtColor( timeCodeROI, prev, CV_BGR2GRAY );
-      continue;
-    }
-
-    Mat curr;
-    cv::cvtColor( timeCodeROI, curr, CV_BGR2GRAY );
-
-    (*n)[2*at] = cv::norm( prev, curr, NORM_L2 ); 
-    (*n)[2*at+1] = 0.0f;
-
-    prev = curr;
-  }
-
-  // Zero pad the remainder
-  memset( &(*n[window]), 0, (len - window) * sizeof(float) );
-
-  return window;
-}
-
-// Should be window floor'ed to nearest power of two or somesuch
-int windowLength = 128;
-float *norms0, *norms1;
-int count0 = video[0].norms( 0, windowLength, &norms0, windowLength*2 );
-int count1 = video[1].norms( 0, windowLength, &norms1, windowLength*2 );
-
-cout << "Got " << count0 << ", " << count1 << " norms" << endl;
-
-ffts_plan_t *forward0 = ffts_init_1d_real( 2*windowLength, -1 );
-ffts_plan_t *forward1 = ffts_init_1d_real( 2*windowLength, -1 );
-ffts_plan_t *backward = ffts_init_1d_real( 2*windowLength, 1 );
-
-// Real-to-complex transforms return (N/2 + 1) complex numbers
-// But I've zero-padded the input to 2*windowLength
-float fourierLength = (windowLength + 1);
-float __attribute__ ((aligned(32))) *fourier0 = (float *)valloc( fourierLength * 2 * sizeof(float) );
-float __attribute__ ((aligned(32))) *fourier1 = (float *)valloc( fourierLength * 2 * sizeof(float) );
-float __attribute__ ((aligned(32))) *fourierRes = (float *)valloc( fourierLength * 2 * sizeof(float) );
-float __attribute__ ((aligned(32))) *result = (float *)valloc( windowLength*2 * sizeof(float) );
-
-ffts_execute( forward0, norms0, fourier0 );
-ffts_execute( forward0, norms1, fourier1 );
-
-// Convolve
-float scale = 1.0 / fourierLength;
-for( int i = 0; i < fourierLength; ++i ) {
-  fourierRes[ 2*i ]   = (fourier0[ 2*i ]*fourier1[2*i]   + fourier0[2*i+1]*fourier1[2*i+1]) * scale;
-  fourierRes[ 2*i+1 ] = (fourier0[ 2*i+1 ]*fourier1[2*i] - fourier0[2*i]*fourier1[2*i+1]) * scale;
-}
-
-ffts_execute( backward, fourierRes, result );
-
-ofstream fst("correlation.txt");
-
-float max = 0;
-int maxIdx = -1;
-for( int i = 0; i < 2*windowLength; ++i ) {
-  if( maxIdx < 0 || result[i] >  max ) {
-    maxIdx = i;
-    max = result[i];
-  }
-
-  fst << i << " " << result[i] << endl;
-}
-
-fst.close();
-
-cout << "Max occurs are index " << maxIdx << " value " << max << endl;
-
-ffts_free( forward0 );
-ffts_free( forward1 );
-ffts_free( backward );
-
-free( fourier0 );
-free( fourier1 );
-free( fourierRes );
-free( result );
-
-
-free( norms0 );
-free( norms1 );
-
-// Try a cross-correlation based approach (how will this deal with missing data?)
-
-
-#endif
