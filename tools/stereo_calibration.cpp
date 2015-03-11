@@ -491,6 +491,8 @@ class Camera
     {; }
 
     const Mat &cameraMatrix( void ) const { return _cam; }
+    const Mat &cam( void ) const { return _cam; }
+
     const Mat &distCoeffs( void ) const { return _dist; }
 
     bool loadCache( const string &cacheFile )
@@ -541,7 +543,6 @@ int main( int argc, char** argv )
 
   Size imageSize;
   float aspectRatio = 1.f;
-  int flags = 0;
   bool writeExtrinsics = false, writePoints = false;
 
   vector< vector<Point2f> > imagePoints[2];
@@ -562,82 +563,189 @@ int main( int argc, char** argv )
       exit(-1);
     }
 
+  vector<Image> imagesUsed;
+  vector< pair< Image, Image > > images;
 
+  if( opts.ignoreCache ) cout << "Ignoring cached data." << endl;
 
+  for( int i = 0; i < opts.inFiles.size(); ++i ) {
+    cout << "Processing " << i << " : " << opts.inFiles[i] << endl;
+    Mat view, viewGray;
 
-    vector<Image> imagesUsed;
+    view = imread(opts.inFiles[i], 1);
 
-    if( opts.ignoreCache ) cout << "Ignoring cached data." << endl;
+    //imageSize = view.size();
 
-    for( int i = 0; i < opts.inFiles.size(); ++i ) {
-      cout << "Processing " << i << " : " << opts.inFiles[i] << endl;
-      Mat view, viewGray;
+    // Break out two ROIs
+    int roiWidth = view.size().width/2;
+    Size roiSize( roiWidth, view.size().height );
 
-      view = imread(opts.inFiles[i], 1);
+    Mat rois[2] = { Mat( view, Rect( Point(0, 0), roiSize ) ),
+      Mat( view, Rect( Point(roiWidth, 0), roiSize ) ) };
 
-      //imageSize = view.size();
+    Image img[2] = { Image( opts.inFiles[i] + "-left", rois[0] ),
+      Image( opts.inFiles[i] + "-right", rois[1] ) };
 
-      // Break out two ROIs
-      int roiWidth = view.size().width/2;
-      Size roiSize( roiWidth, view.size().height );
+    images.push_back( make_pair( img[0], img[1] ) );
 
-      Mat rois[2] = { Mat( view, Rect( Point(0, 0), roiSize ) ),
-        Mat( view, Rect( Point(roiWidth, 0), roiSize ) ) };
+    // Technically speaking you could eager load the images ... you don't even need them
+    //  if you're reading from the cache.
 
-      Image img[2] = { Image( opts.inFiles[i] + "-left", rois[0] ),
-        Image( opts.inFiles[i] + "-right", rois[1] ) };
+    // Check for cached data
+    bool doRegister = true;
+    Detection *detection[2] = { NULL, NULL };
 
-      // Check for cached data
-      bool doRegister = true;
-      Detection *detection[2] = { NULL, NULL };
+    for( int i = 0; i < 2; ++i ) {
 
-      for( int i = 0; i < 2; ++i ) {
-
-        if( !opts.ignoreCache && (detection[i] = Detection::load(  opts.imageCache( img[i].fileName() ) )) != NULL ) {
-          doRegister = false;
-          if( opts.retryUnregistered && detection[i] && (detection[i]->points.size() == 0) ) doRegister = true;
-        }
-
-        if( doRegister == false ) {
-          cout << "  ... loaded data from cache." << endl;
-        } else {
-
-          cout << "  No cached data, searching for calibration pattern." << endl;
-
-          //if( flipVertical )
-          //  flip( view, view, 0 );
-
-          vector<Point2f> pointbuf;
-          cvtColor(view, viewGray, COLOR_BGR2GRAY);
-
-          detection[i] = board->detectPattern( viewGray, pointbuf );
-
-          if( detection[i]->found )  
-            cout << "  Found calibration pattern." << endl;
-
-          detection[i]->writeCache( *board, opts.imageCache( img[i].fileName() ) );
-        }
+      if( !opts.ignoreCache && (detection[i] = Detection::loadCache(  opts.imageCache( img[i].fileName() ) )) != NULL ) {
+        doRegister = false;
+        if( opts.retryUnregistered && detection[i] && (detection[i]->points.size() == 0) ) doRegister = true;
       }
 
+      if( doRegister == false ) {
+        cout << "  ... loaded data from cache." << endl;
+      } else {
 
-      if( detection[0] == NULL || detection[1] == NULL ) continue;
-    } // For  each image
+        cout << "  No cached data, searching for calibration pattern." << endl;
 
-      //      if( detection->points.size() > 0 ) {
-      //        imagesUsed[i].push_back( img );
-      //        imagePoints[i].push_back( detection->points );
-      //        objectPoints[i].push_back( detection->corners );
-      //
-      //        detection->drawCorners(  *board, view );
-      //      }
-      //
-      //      string outfile( opts.tmpPath( img.basename() ) );
-      //      mkdir_p( outfile );
-      //      imwrite(  outfile, view );
-      //
-      //      delete detection;
-      //    }
-      //
+        //if( flipVertical )
+        //  flip( view, view, 0 );
+
+        vector<Point2f> pointbuf;
+        cvtColor(rois[i], viewGray, COLOR_BGR2GRAY);
+
+        detection[i] = board->detectPattern( viewGray, pointbuf );
+
+        if( detection[i]->found )  
+          cout << "  Found calibration pattern." << endl;
+
+        detection[i]->writeCache( *board, opts.imageCache( img[i].fileName() ) );
+      }
+    }
+
+    if( detection[0] != NULL || detection[1] != NULL ) {
+      // Find the overlapping tags between each
+
+      SharedPoints shared( AprilTagsDetection::sharedWith( *detection[0], *detection[1] ) );
+
+      assert( (shared.worldPoints.size() != shared.aPoints.size()) ||
+          (shared.worldPoints.size() == shared.bPoints.size() ) );
+
+      if( shared.worldPoints.size() > 0 ) {
+        objectPoints.push_back( shared.worldPoints );
+        imagePoints[0].push_back( shared.aPoints );
+        imagePoints[1].push_back( shared.bPoints );
+
+//        for( int j = 0; j < shared.worldPoints.size(); ++j ) {
+//cout << shared.worldPoints[j] << shared.aPoints[j] << shared.bPoints[j] << endl;
+//        }
+      }
+
+    }
+
+    if( detection[0] ) delete detection[0];
+    if( detection[1] ) delete detection[1];
+  } // For  each image
+
+  cout << "Calibrating stereo pair with " << objectPoints.size() << " sets of points." << endl;
+
+  double reprojError;
+  Mat r, t, e, f;
+
+  // Local copies as they might be changed in the calibration
+  Mat cam0( cameras[0].cam() ), cam1( cameras[1].cam() );
+  Mat dist0( cameras[0].distCoeffs() ), dist1( cameras[1].distCoeffs() );
+
+  cout << "cam0: " << endl << cam0 << endl;
+  cout << "cam1: " << endl << cam1 << endl;
+
+  cout << "dist0: " << endl << dist0 << endl;
+  cout << "dist1: " << endl << dist1 << endl;
+
+  int flags = CALIB_FIX_INTRINSIC;
+  reprojError = stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
+      cam0, dist0, cam1, dist1,
+      imageSize, r, t, e, f, 
+      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+      flags );
+
+
+  cout << "R: " << endl << r << endl;
+  cout << "T: " << endl << t << endl;
+  cout << "E: " << endl << e << endl;
+  cout << "F: " << endl << f << endl;
+
+
+  Mat qx, qy, qz;
+  Mat Rq, Qq;
+
+  RQDecomp3x3( r, Rq, Qq, qx, qy, qz );
+  cout << "qx: " << endl << qx << endl;
+  cout << "qy: " << endl << qy << endl;
+  cout << "qz: " << endl << qz << endl;
+
+  cout << "Euler around x: " << acos( qx.at<double>(1,1) ) * 180.0/M_PI << endl;
+  cout << "Euler around y: " << acos( qy.at<double>(0,0) ) * 180.0/M_PI << endl;
+  cout << "Euler around z: " << acos( qz.at<double>(0,0) ) * 180.0/M_PI << endl;
+
+
+  Mat r0, r1, p0, p1, disparity;
+  Rect validROI[2];
+  stereoRectify( cam0, dist0, cam1, dist1, imageSize, r, t,
+      r0, r1, p0, p1,  disparity, CALIB_ZERO_DISPARITY, -1, imageSize, &validROI[0], &validROI[1] );
+
+  cout << "r0: " << endl << r0 << endl;
+  cout << "p0: " << endl << p0 << endl;
+  cout << "r1: " << endl << r1 << endl;
+  cout << "p1: " << endl << p1 << endl;
+
+  Mat map01, map02;
+  Mat map11, map12;
+
+  initUndistortRectifyMap(cam0, dist0, r0, p0,
+      imageSize, CV_16SC2, map01, map02);
+
+  initUndistortRectifyMap(cam1, dist1, r1, p1,
+      imageSize, CV_16SC2, map11, map12);
+
+  cout << "map01: " << endl << map01 << endl;
+  cout << "map02: " << endl << map02 << endl;
+  cout << "map11: " << endl << map11 << endl;
+  cout << "map12: " << endl << map12 << endl;
+
+  for( int i = 0; i < images.size(); ++i ) {
+
+    Mat canvas( std::max( images[i].first.size().height, images[i].second.size().height ),
+        images[i].first.size().width + images[i].second.size().width,
+        images[i].first.img().type() );
+    Mat rectified[2] = {
+      Mat( canvas, Rect( Point(0,0), images[i].first.size()) ),
+      Mat( canvas, Rect(Point( images[i].first.size().width, 0 ), images[i].second.size() )) };
+
+    remap( images[i].first.img(), rectified[0], map01, map02, INTER_LINEAR );
+    remap( images[i].second.img(), rectified[1], map11, map12, INTER_LINEAR );
+
+    string outfile( opts.tmpPath( String("rectified/") +  images[i].first.basename() ) );
+    mkdir_p( outfile );
+    imwrite(  outfile, canvas );
+
+  }
+
+  //      if( detection->points.size() > 0 ) {
+  //        imagesUsed[i].push_back( img );
+  //        imagePoints[i].push_back( detection->points );
+  //        objectPoints[i].push_back( detection->corners );
+  //
+  //        detection->drawCorners(  *board, view );
+  //      }
+  //
+  //      string outfile( opts.tmpPath( img.basename() ) );
+  //      mkdir_p( outfile );
+  //      imwrite(  outfile, view );
+  //
+  //      delete detection;
+  //    }
+  //
 
   //
   //
@@ -667,7 +775,7 @@ int main( int argc, char** argv )
   //        totalAvgErr );
   //  }
 
-  delete board;
+delete board;
 
-  return 0;
+return 0;
 }

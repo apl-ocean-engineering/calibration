@@ -15,6 +15,8 @@ class Image {
     const std::string &fileName( void ) const { return _fileName; }
     const cv::Mat    &img( void )      const { return _img; }
 
+    const cv::Size size( void ) const { return _img.size(); }
+
     std::string basename( void )
     {
       size_t sep = _fileName.find_last_of( '/' );

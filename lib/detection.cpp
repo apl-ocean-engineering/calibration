@@ -51,10 +51,11 @@ void Detection::writeCache( const Board &board, const string &cacheFile )
   fs << "board_name" << board.name;
   fs << "image_points" << Mat( points );
   fs << "world_points" << Mat( corners );
+  fs << "ids" << Mat( ids );
 }
 
 
-Detection *Detection::load( const string &cacheFile )
+Detection *Detection::loadCache( const string &cacheFile )
 {
   if( !file_exists( cacheFile ) ) {
     cout << "Unable to find cache file \"" << cacheFile << "\"" << endl;
@@ -80,8 +81,34 @@ Detection *Detection::load( const string &cacheFile )
   for( int i = 0; i < pts.rows; ++i ) {
     detection->corners.push_back( Point3f(pts.at<float>(i,0), pts.at<float>(i,1), pts.at<float>(i,2) ) );
   }
-
+  
+  fs["ids"] >> pts;
+ for( int i = 0; i < pts.rows; ++i ) {
+    detection->ids.push_back( pts.at<int>(i,0) );
+  }
+  
   return detection;
+}
+
+SharedPoints Detection::sharedWith( Detection &a, Detection &b )
+{
+  SharedPoints shared;
+
+  for( int i = 0; i < a.size(); ++i ) {
+    for( int j = 0; j < b.size(); ++j ) {
+
+      if( a.ids[i] == b.ids[j] ) {
+//      cout << "Comparing " << a.ids[i] << " to " << b.ids[j] << endl;
+//      cout << a.points[i] << b.points[j] << a.corners[i] << endl;
+        shared.aPoints.push_back( a.points[i] );
+        shared.bPoints.push_back( b.points[j] );
+        shared.worldPoints.push_back( a.corners[i] );
+        break;
+      }
+    }
+  }
+
+  return shared;
 }
 
 
@@ -95,6 +122,7 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
   
   points.clear();
   corners.clear();
+  ids.clear();
 
   for( int i = 0; i < _det.size(); ++i ) {
 
@@ -105,6 +133,7 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 
       points.push_back( Point2f( _det[i].cxy.first, _det[i].cxy.second ) );
       corners.push_back( board.worldLocation( loc ) );
+      ids.push_back( _det[i].id );
 
     } else {
       cerr << "Couldn't find tag \'" << _det[i].id << "\'" << endl;

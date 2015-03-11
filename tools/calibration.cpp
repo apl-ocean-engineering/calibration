@@ -470,7 +470,7 @@ int main( int argc, char** argv )
     string detectionCache = opts.imageCache( img.fileName() );
     bool doRegister = true;
 
-    if( !opts.ignoreCache && (detection = Detection::load( detectionCache )) != NULL ) {
+    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCache )) != NULL ) {
       doRegister = false;
       if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
     }
