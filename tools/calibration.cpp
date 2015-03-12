@@ -19,9 +19,6 @@
 using namespace cv;
 using namespace std;
 
-
-
-
 class CalibrationOpts {
   public:
     CalibrationOpts()

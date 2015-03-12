@@ -6,6 +6,8 @@ link_libraries(	lib_camera_calibration ${OpenCV_LIBS}
 	${Boost_LIBRARIES}
 	${APRILTAGS_LIBS} )
 
+add_executable( extract extract.cpp )
+
 add_executable( align_streams align_streams.cpp )
 
 add_executable( calibration calibration.cpp )

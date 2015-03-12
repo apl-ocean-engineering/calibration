@@ -54,6 +54,9 @@ class Board {
     }
 
 
+  protected:
+
+    virtual void loadCallback( cv::FileStorage &fs ) {;}
 
   private:
 };
@@ -71,9 +74,13 @@ class AprilTagsBoard : public Board {
     bool find( const int id, cv::Point2i &xy  ) const;
     cv::Point3f worldLocation( const cv::Point2i &xy ) const;
 
+  protected:
+
+    virtual void loadCallback( cv::FileStorage &fs );
+
   private:
 
-    static const int _ids[];
+    cv::Mat _ids;
 
     AprilTags::TagCodes _tagCode;
 };

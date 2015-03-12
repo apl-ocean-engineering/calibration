@@ -58,31 +58,38 @@ Board *Board::load( const string &infile, const string &name )
   fs["height"] >> height;
   fs["squareSize"] >> squares;
 
+  Board *board = NULL;
   if( type_s.compare("chessboard" ) == 0 ) {
-    return new Board( CHESSBOARD, width, height, squares, name );
+    board = new Board( CHESSBOARD, width, height, squares, name );
   } else if( type_s.compare("apriltags_36h11" ) == 0) {
-#ifndef USE_APRILTAGS
+#ifdef USE_APRILTAGS
+    board = new AprilTagsBoard( width, height, squares, name );
+#else
     cout << "Not compiled for Apriltags." << endl;
-    exit(-1);
 #endif
-    return new AprilTagsBoard( width, height, squares, name );
-
   } else {
     cout << "Don't know how to handle board type \"" << type_s << "\"" << endl;
-    exit(-1);
   }
 
+  board->loadCallback( fs );
+
+  return board;
 }
 
 //===========================================================================
 //  AprilTagsBoard
 //===========================================================================
 
-const int AprilTagsBoard::_ids[] = { 0,1,2,3,4,5,6,
-  24,25,26,27,28,29,30,
-  48,49,50,51,52,53,54,
-  72,73,74,75,76,77,78,
-  96,97,98,99,100,101,102 };
+//const int AprilTagsBoard::_ids[] = { 0,1,2,3,4,5,6,
+//  24,25,26,27,28,29,30,
+//  48,49,50,51,52,53,54,
+//  72,73,74,75,76,77,78,
+//  96,97,98,99,100,101,102 };
+
+void AprilTagsBoard::loadCallback( FileStorage &fs )
+{
+  fs["ids"] >> _ids;
+}
 
 Detection *AprilTagsBoard::detectPattern( const cv::Mat &gray, vector< cv::Point2f > &pointbuf )
 {
@@ -100,7 +107,7 @@ bool AprilTagsBoard::find( const int id, cv::Point2i &xy  ) const
 {
   for( int x = 0; x < width; ++x ) 
     for( int y = 0; y < height; ++y ) 
-      if( _ids[y*width + x] == id ) 
+      if( _ids.at<int>(y,x) == id ) 
       {
         xy.x = x; xy.y = y;
         return true;
@@ -113,3 +120,4 @@ cv::Point3f AprilTagsBoard::worldLocation( const cv::Point2i &xy ) const
 {
   return Point3f( xy.x * squareSize, xy.y * squareSize, 0 );
 }
+

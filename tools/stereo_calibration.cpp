@@ -636,9 +636,34 @@ int main( int argc, char** argv )
         imagePoints[0].push_back( shared.aPoints );
         imagePoints[1].push_back( shared.bPoints );
 
-//        for( int j = 0; j < shared.worldPoints.size(); ++j ) {
-//cout << shared.worldPoints[j] << shared.aPoints[j] << shared.bPoints[j] << endl;
-//        }
+
+    Mat canvas( std::max( images[i].first.size().height, images[i].second.size().height ),
+        images[i].first.size().width + images[i].second.size().width,
+        images[i].first.img().type() );
+    Mat rectified[2] = {
+      Mat( canvas, Rect( Point(0,0), images[i].first.size()) ),
+      Mat( canvas, Rect(Point( images[i].first.size().width, 0 ), images[i].second.size() )) };
+
+    images[i].first.img().copyTo( rectified[0] );
+    images[i].second.img().copyTo( rectified[1] );
+
+        for( int j = 0; j < shared.worldPoints.size(); ++j ) {
+          //cout << shared.worldPoints[j] << shared.aPoints[j] << shared.bPoints[j] << endl;
+          float i = (float)j / shared.worldPoints.size();
+          Scalar color( 255*i, 0, (1-i)*255);
+
+          cv::circle( rectified[0], shared.aPoints[j], 5, color, -1 );
+          cv::circle( rectified[1], shared.bPoints[j], 5, color, -1 );
+
+          cv::line(  canvas, shared.aPoints[j], shared.bPoints[j] + Point2f( images[i].first.size().width, 0 ),
+              color, 1 );
+        }
+
+    string outfile( opts.tmpPath( String("annotated/") +  images[i].first.basename() + ".jpg" ) );
+    mkdir_p( outfile );
+    imwrite(  outfile, canvas );
+
+
       }
 
     }
@@ -656,18 +681,27 @@ int main( int argc, char** argv )
   Mat cam0( cameras[0].cam() ), cam1( cameras[1].cam() );
   Mat dist0( cameras[0].distCoeffs() ), dist1( cameras[1].distCoeffs() );
 
-  cout << "cam0: " << endl << cam0 << endl;
-  cout << "cam1: " << endl << cam1 << endl;
+  cout << "cam0 before: " << endl << cam0 << endl;
+  cout << "cam1 before: " << endl << cam1 << endl;
 
-  cout << "dist0: " << endl << dist0 << endl;
-  cout << "dist1: " << endl << dist1 << endl;
+  cout << "dist0 before: " << endl << dist0 << endl;
+  cout << "dist1 before: " << endl << dist1 << endl;
 
-  int flags = CALIB_FIX_INTRINSIC;
+  int flags = CV_CALIB_FIX_INTRINSIC;
+  //int flags = CALIB_USE_INTRINSIC_GUESS;
+
   reprojError = stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
       cam0, dist0, cam1, dist1,
       imageSize, r, t, e, f, 
       TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
       flags );
+
+cout << "cam0 after: " << endl << cam0 << endl;
+  cout << "cam1 after: " << endl << cam1 << endl;
+
+  cout << "dist0 after: " << endl << dist0 << endl;
+  cout << "dist1 after: " << endl << dist1 << endl;
+
 
 
   cout << "R: " << endl << r << endl;
@@ -687,12 +721,32 @@ int main( int argc, char** argv )
   cout << "Euler around x: " << acos( qx.at<double>(1,1) ) * 180.0/M_PI << endl;
   cout << "Euler around y: " << acos( qy.at<double>(0,0) ) * 180.0/M_PI << endl;
   cout << "Euler around z: " << acos( qz.at<double>(0,0) ) * 180.0/M_PI << endl;
-
-
+  
   Mat r0, r1, p0, p1, disparity;
-  Rect validROI[2];
-  stereoRectify( cam0, dist0, cam1, dist1, imageSize, r, t,
-      r0, r1, p0, p1,  disparity, CALIB_ZERO_DISPARITY, -1, imageSize, &validROI[0], &validROI[1] );
+
+  // Hartley method...
+  //
+  // NEEDS undistorted points
+  vector<Point2f> allimgpt[2];
+  for( int k = 0; k < 2; ++k )
+    for( int  i = 0; i < imagePoints[k].size(); i++ )
+      std::copy(imagePoints[k][i].begin(), imagePoints[k][i].end(), back_inserter(allimgpt[k]));
+
+  f = findFundamentalMat(Mat(allimgpt[0]), Mat(allimgpt[1]), FM_8POINT, 0, 0);
+  Mat H1, H2;
+  stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), f, imageSize, H1, H2, 3);
+
+cout << "Hartley F: " << endl << f << endl;
+
+  r0 = cam0.inv()*H1*cam0;
+  r1 = cam1.inv()*H2*cam1;
+  p0 = cam0;
+  p1 = cam1;
+
+
+//  Rect validROI[2];
+//  stereoRectify( cam0, dist0, cam1, dist1, imageSize, r, t,
+//      r0, r1, p0, p1,  disparity, CALIB_ZERO_DISPARITY, -1, imageSize, &validROI[0], &validROI[1] );
 
   cout << "r0: " << endl << r0 << endl;
   cout << "p0: " << endl << p0 << endl;
@@ -725,7 +779,7 @@ int main( int argc, char** argv )
     remap( images[i].first.img(), rectified[0], map01, map02, INTER_LINEAR );
     remap( images[i].second.img(), rectified[1], map11, map12, INTER_LINEAR );
 
-    string outfile( opts.tmpPath( String("rectified/") +  images[i].first.basename() ) );
+    string outfile( opts.tmpPath( String("rectified/") +  images[i].first.basename() + ".jpg" ) );
     mkdir_p( outfile );
     imwrite(  outfile, canvas );
 
