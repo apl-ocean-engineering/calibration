@@ -23,21 +23,24 @@ enum Mode { PRETRIGGER, ARMED, WAIT };
 struct ExtractOpts {
   public:
     ExtractOpts()
-      : seekTo(-1),
+      : seekTo(-1), intervalFrames(-1), waitKey( 1 ), 
+      intervalSeconds( -1 ),
       dataDir("data"),
       boardName(), 
+      doDisplay( false ), yes( false ),
       verb( NONE )
   {;}
 
 
-    typedef enum {EXTRACT_SINGLE, NONE = -1} Verbs;
+    typedef enum {EXTRACT_SINGLE, EXTRACT_INTERVAL,  NONE = -1} Verbs;
 
-    int seekTo;
+    int seekTo, intervalFrames, waitKey;
+    float intervalSeconds;
     string dataDir;
     string boardName;
+    bool doDisplay, yes;
     Verbs verb;
     vector< string > inFiles;
-    bool ignoreCache, retryUnregistered;
 
     const string boardPath( void )
     { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -91,6 +94,10 @@ struct ExtractOpts {
         { "data_directory", true, NULL, 'd' },
         { "board", true, NULL, 'b' },
         { "seek-to", true, NULL, 's' },
+        { "interval-frames", true, NULL, 'i' },
+        { "interval-seconds", true, NULL, 'I' },
+        { "do-display", no_argument,  NULL, 'x' },
+        { "yes", no_argument, NULL, 'y' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -104,7 +111,7 @@ struct ExtractOpts {
 
       int indexPtr;
       int optVal;
-      while( (optVal = getopt_long( argc, argv, "b:c:d:s:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "b:c:d:i:s:x?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
@@ -112,8 +119,20 @@ struct ExtractOpts {
           case 'b':
             boardName = optarg;
             break;
+          case 'i':
+            intervalFrames = atoi( optarg );
+            break;
+          case 'I':
+            intervalSeconds = atof( optarg );
+            break;
           case 's':
             seekTo = atoi( optarg );
+            break;
+          case 'x':
+            doDisplay = true;
+            break;
+          case 'y':
+            yes = true;
             break;
           case '?': 
             msg = help();
@@ -143,7 +162,20 @@ struct ExtractOpts {
 
           return false;
         }
+      } else if( verbIn.compare("interval") == 0 ) {
+verb = EXTRACT_INTERVAL;
 
+        if( inFiles.size() < 2 ) {
+          msg = "Need to specify a video file and a destination directory on the command line.\n"
+            "    usage:   extract single <video_file> <dest_directory>";
+
+          return false;
+        }
+
+        if( intervalFrames > 0 && intervalSeconds > 0 ) {
+          msg = "Can't specify both interval frames and interval seconds at the same time.";
+          return false;
+        }
       } else {
         msg = "Don't understand \"" + verbIn +  "\"";
         return false;
@@ -171,9 +203,13 @@ class ExtractMain
 
 
     int run( void ) {
+      if( opts.doDisplay ) namedWindow( "Extract" );
+
       switch( opts.verb ) {
         case ExtractOpts::EXTRACT_SINGLE:
           return doExtractSingle();
+          case ExtractOpts::EXTRACT_INTERVAL:
+return doExtractInterval();
         default:
           return -1;
       }
@@ -212,6 +248,55 @@ class ExtractMain
       return 0;
     }
 
+    int doExtractInterval( void )
+    {
+      string videoSource( opts.inFiles[0] );
+      fs::path directoryOut( opts.inFiles[1] );
+
+      VideoCapture vid( videoSource );
+
+      if( !vid.isOpened() ) {
+        cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
+        return -1;
+      }
+
+      double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
+      int digits = ceil( log10( vidLength ) );
+
+      if( opts.intervalSeconds > 0 ) opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
+
+      if( (opts.intervalFrames > 0) && (vidLength / opts.intervalFrames > 1000) ) {
+        cerr << "This interval will result in " << vidLength / opts.intervalFrames << "images being extracted.  Please confirm you want this with the '--yes' option." << endl;
+        return -1;
+      }
+
+
+      if( !fs::is_directory( directoryOut ) ) fs::create_directories( directoryOut );
+
+      Mat img;
+      while( vid.read( img ) ) {
+        char filename[40];
+        int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
+        snprintf( filename, 39, "frame_%0*d.png", digits, currentFrame );
+        fs::path fullPath( directoryOut );
+        fullPath /= filename;
+
+        cout << "Output frame " << currentFrame << " to " << fullPath.string() << endl;
+        imwrite( fullPath.c_str(), img );
+
+        if( opts.doDisplay ) {
+          imshow("Extract",img );
+          waitKey( opts.waitKey );
+        }
+
+
+        if( opts.intervalFrames > 1 ) vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
+      }
+
+      return 0;
+
+
+    }
 
 
 
