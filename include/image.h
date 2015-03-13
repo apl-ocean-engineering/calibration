@@ -23,7 +23,7 @@ class Image {
 
     const std::string &hash( void ) const;
 
-    std::string basename( void )
+    std::string basename( void ) const
     {
       return _fileName.filename().string();
       //size_t sep = _fileName.find_last_of( '/' );

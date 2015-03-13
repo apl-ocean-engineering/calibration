@@ -48,7 +48,7 @@ struct AlignmentOptions
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( int argc, char **argv )
     : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2),
-    minFractionOfSharedTags( 0.25 ),
+    minSharedTags( 10 ),
     seekTo(0), offset(0),  waitKey(0), 
     standoffFrames( 100 ),
     offsetGiven(false),
@@ -64,8 +64,8 @@ struct AlignmentOptions
   }
 
 
-  float window, maxDelta, lookahead, minFractionOfSharedTags;
-  int seekTo, offset, waitKey, standoffFrames;
+  float window, maxDelta, lookahead;
+  int minSharedTags, seekTo, offset, waitKey, standoffFrames;
   bool offsetGiven, doExtract;
   string extractPath;
 
@@ -79,10 +79,10 @@ struct AlignmentOptions
       { "do-extract", optional_argument, NULL, 'e' },
       { "window", required_argument, NULL, 'w' },
       { "seek-to", required_argument, NULL, 's' },
-      { "shared-fraction", required_argument, NULL, 'f' },
-      { "standoff_frames", required_argument, NULL, 'y' },
+      { "shared-tags", required_argument, NULL, 'f' },
+      { "standoff-frames", required_argument, NULL, 'y' },
       { "wait-key", required_argument, NULL, 'k' },
-      { "max-delay", required_argument, NULL, 'd'},
+      { "max-delta", required_argument, NULL, 'd'},
       { "offset", required_argument, NULL, 'o'},
       { "lookahead", required_argument, NULL, 'l'},
       { "help", no_argument, NULL, '?' },
@@ -110,7 +110,7 @@ struct AlignmentOptions
           seekTo = atoi( optarg );
           break;
         case 'f':
-          minFractionOfSharedTags = atof( optarg );
+          minSharedTags = atoi( optarg );
           break;
         case 'k':
           waitKey = atoi( optarg );
@@ -147,6 +147,9 @@ struct AlignmentOptions
       verb = PLAYER;
     } else if( verbStr.compare( "detect" ) == 0 ) {
       verb = DETECTOR;
+    } else if( verbStr.compare( "extract" ) == 0 ) {
+      verb = DETECTOR;
+      doExtract = true;
     } else {
       msg = "Don't understand the verb \"" + verbStr + "\"";
       return false;
@@ -201,12 +204,12 @@ class AlignStreamsMain {
         sync.setOffset( opts.offset );
       } else {
         cout << "Estimating offset between videos" << endl;
-        sync.bootstrap( opts.window, opts.maxDelta );
+        sync.bootstrap( opts.window, opts.maxDelta, opts.seekTo );
       }
 
       sync.rewind();
 
-      if( opts.seekTo != 0 ) sync.seek( 0, opts.seekTo );
+      if( opts.seekTo > 0 ) sync.seek( 0, opts.seekTo );
 
       int retval;
       switch( opts.verb ) {
@@ -277,7 +280,7 @@ class AlignStreamsMain {
         tags[1] = detector.extractTags( bw[1] );
 #endif
 
-        const int tagCount = 35;
+        //const int tagCount = 80;
 
 
         // Calculate the number of tags in common
@@ -291,7 +294,7 @@ class AlignStreamsMain {
           //          if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
           //              ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
 
-          if ( ( (float)pairs.size() / tagCount) > opts.minFractionOfSharedTags  ) {
+          if ( pairs.size() >= opts.minSharedTags  ) {
             cout << "!!! I'm doing something" << endl;
             extracted = true;
 

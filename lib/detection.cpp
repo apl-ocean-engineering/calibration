@@ -100,8 +100,10 @@ SharedPoints Detection::sharedWith( Detection &a, Detection &b )
       if( a.ids[i] == b.ids[j] ) {
 //      cout << "Comparing " << a.ids[i] << " to " << b.ids[j] << endl;
 //      cout << a.points[i] << b.points[j] << a.corners[i] << endl;
-        shared.aPoints.push_back( a.points[i] );
-        shared.bPoints.push_back( b.points[j] );
+        shared.imagePoints[0].push_back( a.points[i] );
+        shared.imagePoints[1].push_back( b.points[j] );
+
+        assert( a.corners[i] == b.corners[j] );
         shared.worldPoints.push_back( a.corners[i] );
         break;
       }

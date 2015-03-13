@@ -290,7 +290,15 @@ return doExtractInterval();
         }
 
 
-        if( opts.intervalFrames > 1 ) vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
+        if( opts.intervalFrames > 1 ) {
+          int destFrame = currentFrame + opts.intervalFrames - 1;
+          if( destFrame < vidLength ) {
+            vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
+          } else {
+            // Done
+            break;
+          }
+        }
       }
 
       return 0;

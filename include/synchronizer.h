@@ -45,9 +45,9 @@ class Synchronizer
     };
 
     virtual int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
-        float window, float maxDelta ) ;
+        float window, float maxDelta, int seekTo = 0 ) ;
 
-    int bootstrap( float windowFrames, float maxDeltaFrames );
+    int bootstrap( float windowFrames, float maxDeltaFrames, int seekTo = 0 );
 
   protected:
     Video & _video0, &_video1;
@@ -89,7 +89,7 @@ class KFSynchronizer : public Synchronizer
     virtual bool nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 );
 
     virtual int estimateOffset(  const TransitionVec &transitions0, const TransitionVec &transitions1,
-        float window, float maxDelta ) ;
+        float window, float maxDelta, int seekTo ) ;
 
   private:
     VideoLookahead &_lvideo0, &_lvideo1;

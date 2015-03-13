@@ -99,7 +99,7 @@ class Video
     void rewind( void ) { seek( 0 ); }
     virtual bool read( cv::Mat &mat );
 
-    void initializeTransitionStatistics( int start, int end, TransitionVec &transitions );
+    void initializeTransitionStatistics( int start, int length, TransitionVec &transitions );
 
     bool detectTransition( float norm, int dt = -1);
     bool detectTransition( const cv::Mat &before, const cv::Mat &after, int dt = -1 );

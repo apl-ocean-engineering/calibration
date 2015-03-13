@@ -1,7 +1,14 @@
 cmake_minimum_required (VERSION 3.1)
 project (camera_calibration)
-
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+
+set(MAKE_C_FLAGS, "-Wall")
+set(MAKE_CXX_FLAGS, "-Wall")
+
+set(MAKE_C_FLAGS_RELEASE, "-Werror")
+set(MAKE_CXX_FLAGS_RELEASE, "-Werror")
+
 
 find_package( OpenCV REQUIRED )
 find_package( GSL REQUIRED )

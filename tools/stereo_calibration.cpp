@@ -85,8 +85,8 @@ class StereoCalibrationOpts {
     const string cachePath( void )
     { return dataDir + "/cache"; }
 
-    const string imageCache( const string &image )
-    { return cachePath() + "/" + image + ".yml"; }
+    const string imageCache( const Image &image, const string &suffix="" )
+    { return cachePath() + "/" + image.hash() + suffix + ".yml"; }
 
     const string tmpPath( const string &file )
     { return dataDir + "/tmp/" + file; }
@@ -534,6 +534,62 @@ static string mkStereoPairFileName( void )
 }
 
 
+class ImagePair
+{
+  public:
+    ImagePair( const Image &a, const Image &b )
+      : _a(a), _b(b) {;}
+
+    const Image &operator[](int i) {
+      switch(i) {
+        case 0: return _a; break;
+        case 1: return _b; break;
+      }
+    }
+
+  private:
+    Image _a, _b;
+};
+
+struct CompositeCanvas
+{
+  CompositeCanvas( const ImagePair &pair )
+    : _pair( pair ) 
+  {
+    // I really should do this with undistorted images...
+    canvas.create( std::max( _pair[0].size().height, _pair[1].size().height ),
+        _pair[0].size().width + _pair[1].size().width,
+        _pair[0].img().type() );
+
+    origin[0] = Point2f(0,0);
+    origin[1] = Point2f( _pair[0].size().width, 0 );
+    roi[0] = Mat( canvas, Rect( origin[0], _pair[0].size()) );
+    roi[1] = Mat( canvas, Rect( origin[1], _pair[1].size()) );
+  }
+
+  operator Mat &() { return canvas; }
+  operator _InputArray() { return _InputArray(canvas); }
+
+
+  ImagePair _pair;
+  Mat canvas, roi[2];
+  Point2f origin[2];
+};
+
+
+struct PointCalibrator {
+  PointCalibrator( Mat &kinv )
+    : _kinv(kinv) {;}
+
+  Point2f operator()( const Point2f &pt ) { 
+    Mat v = _kinv * (Mat_<double>(3,1) << pt.x, pt.y, 1); 
+    return Point2f( v.at<double>(0,0)/v.at<double>(0,2),
+                    v.at<double>(1,0)/v.at<double>(2,0) );
+  }
+
+  Mat _kinv;
+};
+
 int main( int argc, char** argv )
 {
 
@@ -541,11 +597,11 @@ int main( int argc, char** argv )
 
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
-  Size imageSize;
   float aspectRatio = 1.f;
   bool writeExtrinsics = false, writePoints = false;
 
   vector< vector<Point2f> > imagePoints[2];
+  vector< vector<Point2f> > undistortedImagePoints[2];
   vector< vector<Point3f> > objectPoints;
 
   if( opts.inFiles.size() < 1 ) {
@@ -563,8 +619,8 @@ int main( int argc, char** argv )
       exit(-1);
     }
 
-  vector<Image> imagesUsed;
-  vector< pair< Image, Image > > images;
+  vector< ImagePair > pairsUsed;
+  vector< ImagePair > pairs;
 
   if( opts.ignoreCache ) cout << "Ignoring cached data." << endl;
 
@@ -574,7 +630,6 @@ int main( int argc, char** argv )
 
     view = imread(opts.inFiles[i], 1);
 
-    //imageSize = view.size();
 
     // Break out two ROIs
     int roiWidth = view.size().width/2;
@@ -583,10 +638,11 @@ int main( int argc, char** argv )
     Mat rois[2] = { Mat( view, Rect( Point(0, 0), roiSize ) ),
       Mat( view, Rect( Point(roiWidth, 0), roiSize ) ) };
 
-    Image img[2] = { Image( opts.inFiles[i] + "-left", rois[0] ),
-      Image( opts.inFiles[i] + "-right", rois[1] ) };
+    Image compositeImage( opts.inFiles[i], view );
 
-    images.push_back( make_pair( img[0], img[1] ) );
+    ImagePair pair( Image( opts.inFiles[i] + "-left", rois[0] ),
+        Image( opts.inFiles[i] + "-right", rois[1] ) );
+    pairs.push_back( pair );
 
     // Technically speaking you could eager load the images ... you don't even need them
     //  if you're reading from the cache.
@@ -597,7 +653,8 @@ int main( int argc, char** argv )
 
     for( int i = 0; i < 2; ++i ) {
 
-      if( !opts.ignoreCache && (detection[i] = Detection::loadCache(  opts.imageCache( img[i].fileName() ) )) != NULL ) {
+      string suffix = (i==0 ? "-left" : "-right");
+      if( !opts.ignoreCache && (detection[i] = Detection::loadCache(  opts.imageCache( compositeImage, suffix ) )) != NULL ) {
         doRegister = false;
         if( opts.retryUnregistered && detection[i] && (detection[i]->points.size() == 0) ) doRegister = true;
       }
@@ -619,49 +676,63 @@ int main( int argc, char** argv )
         if( detection[i]->found )  
           cout << "  Found calibration pattern." << endl;
 
-        detection[i]->writeCache( *board, opts.imageCache( img[i].fileName() ) );
+        detection[i]->writeCache( *board, opts.imageCache( compositeImage, suffix ) );
       }
     }
 
     if( detection[0] != NULL || detection[1] != NULL ) {
       // Find the overlapping tags between each
 
-      SharedPoints shared( AprilTagsDetection::sharedWith( *detection[0], *detection[1] ) );
+      SharedPoints shared( Detection::sharedWith( *detection[0], *detection[1] ) );
 
-      assert( (shared.worldPoints.size() != shared.aPoints.size()) ||
-          (shared.worldPoints.size() == shared.bPoints.size() ) );
+      assert( (shared.worldPoints.size() != shared.imagePoints[0].size()) ||
+          (shared.worldPoints.size() == shared.imagePoints[1].size() ) );
 
       if( shared.worldPoints.size() > 0 ) {
         objectPoints.push_back( shared.worldPoints );
-        imagePoints[0].push_back( shared.aPoints );
-        imagePoints[1].push_back( shared.bPoints );
 
+        vector< Point2f > undistortedPoints[2] = {
+          vector< Point2f >( shared.imagePoints[0].size() ), 
+          vector< Point2f >( shared.imagePoints[1].size() )  };
 
-    Mat canvas( std::max( images[i].first.size().height, images[i].second.size().height ),
-        images[i].first.size().width + images[i].second.size().width,
-        images[i].first.img().type() );
-    Mat rectified[2] = {
-      Mat( canvas, Rect( Point(0,0), images[i].first.size()) ),
-      Mat( canvas, Rect(Point( images[i].first.size().width, 0 ), images[i].second.size() )) };
+        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
+          imagePoints[imgIdx].push_back( shared.imagePoints[imgIdx] );
 
-    images[i].first.img().copyTo( rectified[0] );
-    images[i].second.img().copyTo( rectified[1] );
+          // Generate undistorted image points as well
+          undistortPoints( shared.imagePoints[imgIdx], undistortedPoints[imgIdx], 
+              cameras[imgIdx].cam(), cameras[imgIdx].distCoeffs(), noArray(), cameras[imgIdx].cam() );
+          undistortedImagePoints[imgIdx].push_back( undistortedPoints[imgIdx] );
+        }
+
+        ImagePair &thisPair( pairs[i] );
+        CompositeCanvas canvas( thisPair );
+
+        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
+          undistort( thisPair[imgIdx].img(), canvas.roi[imgIdx], 
+              cameras[imgIdx].cam(), cameras[imgIdx].distCoeffs() );
+        }
+
+        //thisPair[0].img().copyTo( rectified[0] );
+        //images[i].second.img().copyTo( rectified[1] );
+
 
         for( int j = 0; j < shared.worldPoints.size(); ++j ) {
+          //cout << shared.worldPoints[j] << undistortedPoints[0][j] << undistortedPoints[1][j] << endl;
           //cout << shared.worldPoints[j] << shared.aPoints[j] << shared.bPoints[j] << endl;
           float i = (float)j / shared.worldPoints.size();
           Scalar color( 255*i, 0, (1-i)*255);
 
-          cv::circle( rectified[0], shared.aPoints[j], 5, color, -1 );
-          cv::circle( rectified[1], shared.bPoints[j], 5, color, -1 );
+          cv::circle( canvas.roi[0], undistortedPoints[0][j], 5, color, -1 );
+          cv::circle( canvas.roi[1], undistortedPoints[1][j], 5, color, -1 );
 
-          cv::line(  canvas, shared.aPoints[j], shared.bPoints[j] + Point2f( images[i].first.size().width, 0 ),
+          cv::line(  canvas, undistortedPoints[0][j], undistortedPoints[1][j] +  canvas.origin[1],
               color, 1 );
         }
 
-    string outfile( opts.tmpPath( String("annotated/") +  images[i].first.basename() + ".jpg" ) );
-    mkdir_p( outfile );
-    imwrite(  outfile, canvas );
+        string outfile( opts.tmpPath( String("annotated/") +  pairs[i][0].basename() + ".jpg" ) );
+        mkdir_p( outfile );
+        imwrite(  outfile, canvas );
+
 
 
       }
@@ -676,110 +747,226 @@ int main( int argc, char** argv )
 
   double reprojError;
   Mat r, t, e, f;
+  Mat R[2], P[2], disparity;
+  Rect validROI[2];
+
+  Size imageSize( pairs[0][0].size( ) );
+  //cout << "image size: " <<  imageSize << endl;
 
   // Local copies as they might be changed in the calibration
-  Mat cam0( cameras[0].cam() ), cam1( cameras[1].cam() );
-  Mat dist0( cameras[0].distCoeffs() ), dist1( cameras[1].distCoeffs() );
+  Mat cam[2] = { cameras[0].cam(), cameras[1].cam() };
+  Mat dist[2] = { cameras[0].distCoeffs(), cameras[1].distCoeffs() };
 
-  cout << "cam0 before: " << endl << cam0 << endl;
-  cout << "cam1 before: " << endl << cam1 << endl;
+  cout << "cam0 before: " << endl << cam[0] << endl;
+  cout << "cam1 before: " << endl << cam[1] << endl;
 
-  cout << "dist0 before: " << endl << dist0 << endl;
-  cout << "dist1 before: " << endl << dist1 << endl;
+  cout << "dist0 before: " << endl << dist[0] << endl;
+  cout << "dist1 before: " << endl << dist[1] << endl;
 
-  int flags = CV_CALIB_FIX_INTRINSIC;
-  //int flags = CALIB_USE_INTRINSIC_GUESS;
+  enum { STEREO_CALIBRATE, HARTLEY } method = HARTLEY;
 
-  reprojError = stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
-      cam0, dist0, cam1, dist1,
-      imageSize, r, t, e, f, 
-      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
-      flags );
+  if( method == HARTLEY ) {
+    cout << "!!! Using Hartley !!!" << endl;
 
-cout << "cam0 after: " << endl << cam0 << endl;
-  cout << "cam1 after: " << endl << cam1 << endl;
+    // Hartley method calculated F directly.  Then decomposes that into E and decomposes
+    // that into T and R
+    //
+    // NEEDS undistorted points
+    // Try with calibrated points
+    Mat camInv[2] = { cam[0].inv(), cam[1].inv() };
+    vector<Point2f> calimgpt[2], allimgpt[2];
 
-  cout << "dist0 after: " << endl << dist0 << endl;
-  cout << "dist1 after: " << endl << dist1 << endl;
+    for( int k = 0; k < 2; ++k )
+      for( int  i = 0; i < undistortedImagePoints[k].size(); i++ )  {
+        std::copy(undistortedImagePoints[k][i].begin(), undistortedImagePoints[k][i].end(), 
+            back_inserter(allimgpt[k]));
+        std::transform(undistortedImagePoints[k][i].begin(), undistortedImagePoints[k][i].end(), 
+            back_inserter(calimgpt[k]), PointCalibrator( camInv[k] )  );
+      }
+
+    //        for( int j = 0; j < undistortedImagePoints[k][i].size(); ++j ) 
+//        {
+//          // Currently unsightly...
+//          Mat uncal( camInv[k]  * Mat( Vec3d( undistortedImagePoints[k][i][j].x, undistortedImagePoints[k][i][j].y, 1.0 ) ) );
+//          allimgpt[k].push_back(  Point2f( uncal.at<double>(0,0) / uncal.at<double>(2,0), uncal.at<double>(1,0) / uncal.at<double>(2,0) ) );
+//        }
+
+    Mat status, estE;
+    estE = findFundamentalMat(Mat(calimgpt[0]), Mat(calimgpt[1]), FM_RANSAC, 3. / 1600., 0.99, status);
+
+    cout << "estimated e: " << endl << estE << endl;
+    // Normalize e
+    SVD svdE( estE );
+    Matx33d idealSigma( 1,0,0,
+        0,1,0,
+        0,0,0 );
+    e = svdE.u * Mat(idealSigma) * svdE.vt;
+    e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
+    cout << "ideal e: " << e << endl;
 
 
+    int count = 0;
+    for( int i = 0; i < status.size().area(); ++i ) 
+      if( status.at<unsigned int>(i,0) > 0 ) ++count;
+    cout << count << "/" << allimgpt[0].size() << " points considered inlier." << endl;
+
+    // Calculate the mean reprojection error under this f
+    double error = 0;
+    for( int i = 0; i < calimgpt[0].size(); ++i ) {
+      if( status.data[i] > 0 ) {
+        Mat err( Mat(Vec3d( calimgpt[1][i].x, calimgpt[1][i].y, 1.0 )).t() *
+            e * Mat(Vec3d( calimgpt[0][i].x, calimgpt[0][i].y, 1.0 ) ) );
+        error += pow(err.at<double>(0,0),2);
+      }
+    }
+
+    error /= count;
+    cout << "Mean E reproj error " << error << endl;
+
+    // Calculate f
+    f = camInv[1].t() * e * camInv[0];
+    f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
+
+    // Calculate the mean reprojection error under this f
+    error = 0.0;
+    for( int i = 0; i < allimgpt[0].size(); ++i ) {
+      if( status.data[i] > 0 ) {
+        Mat err(  Mat(Vec3d( allimgpt[1][i].x, allimgpt[1][i].y, 1.0 ) ) .t() *
+            f * Mat(Vec3d( allimgpt[0][i].x, allimgpt[0][i].y, 1.0 ) ) );
+        error += pow(err.at<double>(0,0),2);
+      }
+    }
+
+    error /= count;
+    cout << "Mean F reproj error " << error << endl;
+
+    // Disambiguate the four solutions by:
+    // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
+    Mat W( Matx33d(0,-1,0,
+        1,0,0,
+        0,0,1) );
+    Mat u( svdE.u ), vt( svdE.vt );
+    if( determinant(u) < 0 )  u*= -1;
+    if( determinant(vt) < 0 ) vt *= -1;
+    Mat rcand = u * W * vt;
+    Mat tcand = u.col(2);
+
+    bool done = false;
+    while( !done ) {
+      Mat M = rcand.t() * tcand;
+      double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
+      Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
+
+      Point3d x1( calimgpt[0][0].x, calimgpt[0][0].y, 1.0 ),
+              x2( calimgpt[1][0].x, calimgpt[1][0].y, 1.0 );
+
+      Mat X1 = Mx * Mat(x1),
+          X2 = Mx * rcand.t() * Mat(x2);
+
+      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+        rcand = u * W.t() * vt;
+      else if (X1.at<double>(2) < 0) 
+        tcand *= -1;
+      else 
+        done = true;
+    }
+
+
+    r = rcand;
+    t = tcand;
+
+    //Mat H[2];
+    //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
+
+    //for( int k = 0; k < 2; ++k ) {
+    //  R[k] = cam[k].inv()*H[k]*cam[k];
+    //  P[k] = cam[k];
+    //}
+
+  } else if( method == STEREO_CALIBRATE ) {
+    cout << "!!! Using stereoCalibrate !!!" << endl;
+
+    int flags = CV_CALIB_FIX_INTRINSIC | CV_CALIB_RATIONAL_MODEL; 
+
+    // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
+    // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
+    // Then computes E directly (as [T]x R) then F = K^-T E F^-1
+    reprojError = stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
+        cam[0], dist[0], cam[1], dist[1],
+        imageSize, r, t, e, f, 
+        TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+        flags );
+
+    SVD svd(e);
+    cout << "sigma: " << svd.w << endl;
+
+    //cout << "cam0 after: " << endl << cam0 << endl;
+    //  cout << "cam1 after: " << endl << cam1 << endl;
+    //
+    //  cout << "dist0 after: " << endl << dist0 << endl;
+    //  cout << "dist1 after: " << endl << dist1 << endl;
+
+    cout << "Reprojection error: " << reprojError << endl;
+  } else {
+    cout << "No method specified.  Stopping..." << endl;
+    exit(0);
+  }
+
+  float alpha = -1;
+  stereoRectify( cam[0], dist[0], cam[1], dist[1], imageSize, r, t,
+      R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+      alpha, imageSize, &validROI[0], &validROI[1] );
 
   cout << "R: " << endl << r << endl;
   cout << "T: " << endl << t << endl;
+  cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
   cout << "E: " << endl << e << endl;
   cout << "F: " << endl << f << endl;
 
 
-  Mat qx, qy, qz;
-  Mat Rq, Qq;
+  Mat qx, qy, qz, Rq, Qq;
 
   RQDecomp3x3( r, Rq, Qq, qx, qy, qz );
-  cout << "qx: " << endl << qx << endl;
-  cout << "qy: " << endl << qy << endl;
-  cout << "qz: " << endl << qz << endl;
+  //  cout << "qx: " << endl << qx << endl;
+  //  cout << "qy: " << endl << qy << endl;
+  //  cout << "qz: " << endl << qz << endl;
 
   cout << "Euler around x: " << acos( qx.at<double>(1,1) ) * 180.0/M_PI << endl;
   cout << "Euler around y: " << acos( qy.at<double>(0,0) ) * 180.0/M_PI << endl;
   cout << "Euler around z: " << acos( qz.at<double>(0,0) ) * 180.0/M_PI << endl;
-  
-  Mat r0, r1, p0, p1, disparity;
+  Mat map[2][2];
 
-  // Hartley method...
-  //
-  // NEEDS undistorted points
-  vector<Point2f> allimgpt[2];
-  for( int k = 0; k < 2; ++k )
-    for( int  i = 0; i < imagePoints[k].size(); i++ )
-      std::copy(imagePoints[k][i].begin(), imagePoints[k][i].end(), back_inserter(allimgpt[k]));
+  cout << "r0: " << endl << R[0] << endl;
+  cout << "p0: " << endl << P[0] << endl;
+  cout << "r1: " << endl << R[1] << endl;
+  cout << "p1: " << endl << P[1] << endl;
 
-  f = findFundamentalMat(Mat(allimgpt[0]), Mat(allimgpt[1]), FM_8POINT, 0, 0);
-  Mat H1, H2;
-  stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), f, imageSize, H1, H2, 3);
+  // Generate undistorted images
 
-cout << "Hartley F: " << endl << f << endl;
+  for( int k = 0; k < 2; ++k ) {
+    initUndistortRectifyMap(cam[k], dist[k], R[k], P[k],
+        imageSize, CV_32FC1, map[k][0], map[k][1] );
+    //cout << "map" << k << "0: " << endl << map[k][0] << endl;
+    //cout << "map" << k << "1: " << endl << map[k][1] << endl;
+  }
 
-  r0 = cam0.inv()*H1*cam0;
-  r1 = cam1.inv()*H2*cam1;
-  p0 = cam0;
-  p1 = cam1;
+  for( int i = 0; i < pairs.size(); ++i ) {
 
+    ImagePair &thisPair( pairs[i] );
+    CompositeCanvas canvas( thisPair );
 
-//  Rect validROI[2];
-//  stereoRectify( cam0, dist0, cam1, dist1, imageSize, r, t,
-//      r0, r1, p0, p1,  disparity, CALIB_ZERO_DISPARITY, -1, imageSize, &validROI[0], &validROI[1] );
+    for( int idx = 0; idx < 2; ++idx ) {
+      remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
 
-  cout << "r0: " << endl << r0 << endl;
-  cout << "p0: " << endl << p0 << endl;
-  cout << "r1: " << endl << r1 << endl;
-  cout << "p1: " << endl << p1 << endl;
+      Scalar roiBorder( 0,255,0 );
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 5 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 5 ); 
 
-  Mat map01, map02;
-  Mat map11, map12;
+    }
 
-  initUndistortRectifyMap(cam0, dist0, r0, p0,
-      imageSize, CV_16SC2, map01, map02);
-
-  initUndistortRectifyMap(cam1, dist1, r1, p1,
-      imageSize, CV_16SC2, map11, map12);
-
-  cout << "map01: " << endl << map01 << endl;
-  cout << "map02: " << endl << map02 << endl;
-  cout << "map11: " << endl << map11 << endl;
-  cout << "map12: " << endl << map12 << endl;
-
-  for( int i = 0; i < images.size(); ++i ) {
-
-    Mat canvas( std::max( images[i].first.size().height, images[i].second.size().height ),
-        images[i].first.size().width + images[i].second.size().width,
-        images[i].first.img().type() );
-    Mat rectified[2] = {
-      Mat( canvas, Rect( Point(0,0), images[i].first.size()) ),
-      Mat( canvas, Rect(Point( images[i].first.size().width, 0 ), images[i].second.size() )) };
-
-    remap( images[i].first.img(), rectified[0], map01, map02, INTER_LINEAR );
-    remap( images[i].second.img(), rectified[1], map11, map12, INTER_LINEAR );
-
-    string outfile( opts.tmpPath( String("rectified/") +  images[i].first.basename() + ".jpg" ) );
+    string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
     mkdir_p( outfile );
     imwrite(  outfile, canvas );
 

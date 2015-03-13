@@ -26,20 +26,21 @@ void Synchronizer::rewind( void )
   cout << "Rewind to frames: " << _video0.frame() << ' ' << _video1.frame() << endl;
 }
 
-bool Synchronizer::seek( int which, int dest )
+bool Synchronizer::seek( int which, int dest0 )
 {
   if( which == 0 ) {
-    int dest1 = dest + _offset;
+    int dest1 = dest0 + _offset;
 
-    if( dest >= 0 && dest < _video0.frameCount() && 
+    if( dest0 >= 0 && dest0 < _video0.frameCount() && 
         dest1 >= 0 && dest1 < _video1.frameCount() ) {
-      _video0.seek(dest);
+      _video0.seek(dest0);
       _video1.seek(dest1);
+      cout << "Seeking to: " << _video0.frame() << ' ' << _video1.frame() << endl;
       return true;
     } 
 
   } else {
-    return seek( 0, dest - _offset );
+    return seek( 0, dest0 - _offset );
   }
 
   return  false;
@@ -251,21 +252,13 @@ float Synchronizer::compareSpans( const TransitionVec &thisTransitions,  IndexPa
   return total;
 }
 
-struct OffsetResult {
-  OffsetResult( IndexPair vid0, IndexPair vid1 )
-    : v0( vid0 ), v1( vid1 )
-  {;}
-
-  IndexPair v0, v1;
-};
-
-int Synchronizer::estimateOffset( const TransitionVec &trans0,  const TransitionVec &trans1, float windowFrames, float maxDeltaFrames ) 
+int Synchronizer::estimateOffset( const TransitionVec &trans0,  const TransitionVec &trans1, float windowFrames, float maxDeltaFrames, int seekTo ) 
 {
   // TODO:  Currently assumes both videos have same FPS
   map <float, OffsetResult> results;
 
-  IndexPair thisSpan( getSpan( trans0,  0, windowFrames ) );
-  IndexPair otherSpan( getSpan(  trans1, maxDeltaFrames, windowFrames ) );
+  IndexPair thisSpan( getSpan( trans0,  seekTo, windowFrames ) );
+  IndexPair otherSpan( getSpan(  trans1, seekTo+maxDeltaFrames, windowFrames ) );
 
   cout << "Getting span with max delta " << maxDeltaFrames << "  length " << windowFrames << endl;
   cout << " Got " << thisSpan.first << ' ' << thisSpan.second << endl;
@@ -291,17 +284,22 @@ int Synchronizer::estimateOffset( const TransitionVec &trans0,  const Transition
 
   // Calculate offset from end of spans...
   // Need to handle case where spans are different length
-  int dt = std::min( best.v0.second-best.v0.first, best.v1.second-best.v1.first ) - 1;
-  _offset = trans1[ dt ].frame - trans0[ dt ].frame;
+  //int dt = std::min( best.v0.second-best.v0.first, best.v1.second-best.v1.first ) - 1;
+  //_offset = trans1[ dt ].frame - trans0[ dt ].frame;
+  thisSpan = results.begin()->second.v0;
+  otherSpan = results.begin()->second.v1;
+  int thisFrame = trans0[ thisSpan.first ].frame,
+      otherFrame = trans1[ otherSpan.first ].frame;
+  _offset = otherFrame - thisFrame;
 
   cout << "Best alignment has score " << results.begin()->first << endl;
-  cout << "With frames " << trans0[ best.v0.second-1 ].frame << " " << trans1[ best.v1.second-1 ].frame << endl;
+  cout << "With frames " << thisFrame << " " << otherFrame << endl;
   cout << "With video1 offset to video0 by " << _offset << endl;
 
   return _offset;
 }
 
-int Synchronizer::bootstrap( float window, float maxDelta )
+int Synchronizer::bootstrap( float window, float maxDelta, int seekTo )
 {
   TransitionVec transitions[2];
   int windowFrames = window * _video0.fps(),
@@ -319,8 +317,8 @@ int Synchronizer::bootstrap( float window, float maxDelta )
   cout << _video0.dump() << endl;
   cout << _video1.dump() << endl;
 
-  _video0.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[0] );
-  _video1.initializeTransitionStatistics( 0, 2*maxDeltaFrames, transitions[1] );
+  _video0.initializeTransitionStatistics( seekTo, 2*maxDeltaFrames, transitions[0] );
+  _video1.initializeTransitionStatistics( seekTo, 2*maxDeltaFrames, transitions[1] );
 
   //cout << "Found " << transitions[i].size() << " transitions" << endl;
 
@@ -329,7 +327,7 @@ int Synchronizer::bootstrap( float window, float maxDelta )
 
   //Video::dumpTransitions( transitions[i], filename.str() );
 
-  return estimateOffset( transitions[0], transitions[1], windowFrames, maxDeltaFrames  );
+  return estimateOffset( transitions[0], transitions[1], windowFrames, maxDeltaFrames, seekTo  );
 }
 
 
@@ -397,9 +395,9 @@ bool KFSynchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
   return result;
 }
 
-int KFSynchronizer::estimateOffset( const TransitionVec &trans0,  const TransitionVec &trans1, float windowFrames, float maxDeltaFrames ) 
+int KFSynchronizer::estimateOffset( const TransitionVec &trans0,  const TransitionVec &trans1, float windowFrames, float maxDeltaFrames, int seekTo ) 
 {
-  int out = Synchronizer::estimateOffset( trans0, trans1, windowFrames, maxDeltaFrames );
+  int out = Synchronizer::estimateOffset( trans0, trans1, windowFrames, maxDeltaFrames, seekTo );
   _kf.setOffset( _offset );
   return out;
 }
@@ -436,7 +434,7 @@ int SynchroKalmanFilter::predict( void )
   _state = _f * _state;
   _cov = _f * _cov * _f.transpose() + _q;
 
-  //cout << _state << endl;
+  //cout << _state.transpose() << endl;
 
   return lround( _state(0) );
 }

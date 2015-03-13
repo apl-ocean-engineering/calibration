@@ -11,7 +11,7 @@
 
 struct SharedPoints
 {
-  std::vector< cv::Point2f > aPoints, bPoints;
+  std::vector< cv::Point2f > imagePoints[2];
   std::vector< cv::Point3f > worldPoints;
 };
 

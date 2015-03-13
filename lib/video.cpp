@@ -31,14 +31,12 @@ void Video::seek( int frame )
   //capture.set( CV_CAP_PROP_POS_FRAMES, frame);
 }
 
-void Video::initializeTransitionStatistics( int start, int end, TransitionVec &transitions )
+void Video::initializeTransitionStatistics( int start, int length, TransitionVec &transitions )
 {
   start = std::max( 0, std::min( frameCount(), start ) );
-  end = std::max( 0, std::min( frameCount(), end ) );
-  int length = end-start;
-  cout << "Looking over " << length << " frames";
+  cout << "Looking over frames " << start << " to " << start+length << endl;
 
-  rewind();
+  seek( start );
 
   vector < float > norms(length, 0);
   float meanNorm = 0;
@@ -90,7 +88,7 @@ void Video::initializeTransitionStatistics( int start, int end, TransitionVec &t
     int dt = (prevIdx >= 0 ) ? (i-prevIdx) : -1;
     if( detectTransition( norms[i], dt ) ) {
       // The frames are numbered from 1 hence the "+1"
-      transitions.push_back( TimecodeTransition( i+1, timecodes[i-1], timecodes[i] ) );
+      transitions.push_back( TimecodeTransition( start+i+1, timecodes[i-1], timecodes[i] ) );
       prevIdx = i;
     }
   }
@@ -106,7 +104,7 @@ cout << "Have " << transitions.size() << " transitions" << endl;
 
 bool Video::detectTransition( float norm, int dt )
 {
-  float pThreshold = (dt > 0) ? 0.6 : 0.9;
+  float pThreshold = (dt > 0) ? 0.5 : 0.9;
 
   float p_norm = _distTimecodeNorm.p( norm );
   float p_dt = 1.0;
