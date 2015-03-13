@@ -1,5 +1,6 @@
 add_library( lib_camera_calibration 
 	board.cpp 
+        image.cpp
 	video.cpp 
 	detection.cpp 
 	april_tag_board_generator.cpp 

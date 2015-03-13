@@ -11,5 +11,6 @@ add_executable( extract extract.cpp )
 add_executable( align_streams align_streams.cpp )
 
 add_executable( calibration calibration.cpp )
+target_link_libraries( calibration cryptopp )
 
 add_executable( stereo_calibration stereo_calibration.cpp )

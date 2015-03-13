@@ -48,8 +48,8 @@ class CalibrationOpts {
     const string cachePath( void )
     { return dataDir + "/cache"; }
 
-    const string imageCache( const string &image )
-    { return cachePath() + "/" + image + ".yml"; }
+    const string imageCache( const Image &image )
+    { return cachePath() + "/" + image.hash() + ".yml"; }
 
     const string tmpPath( const string &file )
     { return dataDir + "/tmp/" + file; }
@@ -464,10 +464,10 @@ int main( int argc, char** argv )
     Detection *detection = NULL;
 
     // Check for cached data
-    string detectionCache = opts.imageCache( img.fileName() );
+    string detectionCacheFile = opts.imageCache( img );
     bool doRegister = true;
 
-    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCache )) != NULL ) {
+    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCacheFile )) != NULL ) {
       doRegister = false;
       if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
     }
@@ -489,10 +489,10 @@ int main( int argc, char** argv )
       if( detection->found )  
         cout << "  Found calibration pattern." << endl;
 
-      detection->writeCache( *board, opts.imageCache( img.fileName() ) );
+      detection->writeCache( *board, detectionCacheFile );
     }
 
-    if( detection->points.size() > 0 ) {
+    if( detection->points.size() > 3 ) {
       imagesUsed.push_back( img );
       imagePoints.push_back( detection->points );
       objectPoints.push_back( detection->corners );
