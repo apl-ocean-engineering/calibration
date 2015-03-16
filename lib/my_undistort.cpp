@@ -35,8 +35,8 @@ int distortionError( const gsl_vector *xy, void *params, gsl_vector *err )
   double xest = dist * x + deltaX;
   double yest = dist * y + deltaY;
 
-  gsl_vector_set( err, 0, xest - p->xd );
-  gsl_vector_set( err, 1, yest - p->yd );
+  gsl_vector_set( err, 0, (xest - p->xd)*(xest-p->xd) );
+  gsl_vector_set( err, 1, (yest - p->yd)*(yest-p->yd) );
 
   return GSL_SUCCESS;
 }
@@ -198,12 +198,14 @@ void myUndistortPoints( InputArray _src, OutputArray _dst,
     gsl_multiroot_fsolver_set (s, &f, states);
 
     int iter = 0, status;
+
+    //printState( iter, s );
     do {
       iter++;
 
       status = gsl_multiroot_fsolver_iterate(s);
 
-      printState( iter, s );
+      //printState( iter, s );
       if( status ) break;
 
       status = gsl_multiroot_test_residual( s->f, 1e-7 );

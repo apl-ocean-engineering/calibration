@@ -11,6 +11,8 @@
 
 #include <iostream>
 
+#include "my_undistort.h"
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -270,13 +272,18 @@ static double computeReprojectionErrors(
 
   for( i = 0; i < (int)objectPoints.size(); i++ )
   {
-    projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
-        cameraMatrix, distCoeffs, imagePoints2);
-    err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
-    int n = (int)objectPoints[i].size();
-    perViewErrors[i] = (float)std::sqrt(err*err/n);
-    totalErr += err*err;
-    totalPoints += n;
+    if( objectPoints[i].size() > 0 ) {
+      //fisheye::projectPoints( Mat( objectPoints[i] ), imagePoints2, rvecs[i], tvecs[i],
+      //    cameraMatrix, distCoeffs );
+      projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i],
+          cameraMatrix, distCoeffs, imagePoints2);
+
+      err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
+      int n = (int)objectPoints[i].size();
+      perViewErrors[i] = (float)std::sqrt(err*err/n);
+      totalErr += err*err;
+      totalPoints += n;
+    }
   }
 
   return std::sqrt(totalErr/totalPoints);
@@ -295,10 +302,12 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
   if( flags & CV_CALIB_FIX_ASPECT_RATIO )
     cameraMatrix.at<double>(0,0) = aspectRatio;
 
-  distCoeffs = Mat::zeros(8, 1, CV_64F);
+  //distCoeffs = Mat::zeros(8, 1, CV_64F);
+  distCoeffs.create(0,0,CV_64F);
 
-  double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
-      distCoeffs, rvecs, tvecs, flags|CV_CALIB_RATIONAL_MODEL);
+  double rms = calibrateCamera(objectPoints, imagePoints, 
+      imageSize, cameraMatrix, distCoeffs, 
+      rvecs, tvecs, flags );
 
   ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
   printf("RMS error reported by calibrateCamera: %g\n", rms);
@@ -364,24 +373,24 @@ static void saveCameraParams( const string& filename,
   if( !reprojErrs.empty() )
     out << "per_view_reprojection_errors" << Mat(reprojErrs);
 
-  if( !rvecs.empty() && !tvecs.empty() )
-  {
-    CV_Assert(rvecs[0].type() == tvecs[0].type());
-    Mat bigmat((int)rvecs.size(), 6, rvecs[0].type());
-    for( int i = 0; i < (int)rvecs.size(); i++ )
-    {
-      Mat r = bigmat(Range(i, i+1), Range(0,3));
-      Mat t = bigmat(Range(i, i+1), Range(3,6));
-
-      CV_Assert(rvecs[i].rows == 3 && rvecs[i].cols == 1);
-      CV_Assert(tvecs[i].rows == 3 && tvecs[i].cols == 1);
-      //*.t() is MatExpr (not Mat) so we can use assignment operator
-      r = rvecs[i].t();
-      t = tvecs[i].t();
-    }
-    cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
-    out   << "extrinsic_parameters" << bigmat;
-  }
+//  if( !rvecs.empty() && !tvecs.empty() )
+//  {
+//    CV_Assert(rvecs[0].type() == tvecs[0].type());
+//    Mat bigmat((int)rvecs.size(), 6, rvecs[0].type());
+//    for( int i = 0; i < (int)rvecs.size(); i++ )
+//    {
+//      Mat r = bigmat(Range(i, i+1), Range(0,3));
+//      Mat t = bigmat(Range(i, i+1), Range(3,6));
+//
+//      CV_Assert(rvecs[i].rows == 3 && rvecs[i].cols == 1);
+//      CV_Assert(tvecs[i].rows == 3 && tvecs[i].cols == 1);
+//      //*.t() is MatExpr (not Mat) so we can use assignment operator
+//      r = rvecs[i].t();
+//      t = tvecs[i].t();
+//    }
+//    cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
+//    out   << "extrinsic_parameters" << bigmat;
+//  }
 
   out << "images_used" << "[";
   for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
@@ -427,7 +436,6 @@ int main( int argc, char** argv )
 
   Size imageSize;
   float aspectRatio = 1.f;
-  int flags = 0;
   Mat cameraMatrix, distCoeffs;
   bool writeExtrinsics = false, writePoints = false;
 
@@ -511,19 +519,16 @@ int main( int argc, char** argv )
   cout << "Using points from " << imagePoints.size() << "/" << opts.inFiles.size() << " images" << endl;
 
   string cameraFile( opts.cameraPath(mkCameraFileName() ) );
-  vector<Mat> rvecs, tvecs;
+  vector< Mat > rvecs, tvecs;
   vector<float> reprojErrs;
   double totalAvgErr = 0;
+
+  int flags = CV_CALIB_ZERO_TANGENT_DIST;
 
   bool ok = runCalibration(imagePoints, objectPoints,
       imageSize, aspectRatio, flags, cameraMatrix, distCoeffs,
       rvecs, tvecs, reprojErrs, totalAvgErr);
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
-
   if( ok ) {
-    cout << "Writing results to " << cameraFile << endl;
   saveCameraParams( cameraFile, imageSize,
       *board, imagesUsed, aspectRatio,
       flags, cameraMatrix, distCoeffs,
@@ -538,37 +543,71 @@ int main( int argc, char** argv )
 
 
   // Redraw each image with rectified points
-  Mat map1, map2;
-  double alpha = 0;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
+  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
                       //                alpha = 1 means all source image pixels are included
                       //
-  Mat optimalCameraMatrix( getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, alpha, imageSize, NULL ) );
+  Mat optimalCameraMatrix = getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, alpha, 
+        Size(), NULL );
+  //optimalCameraMatrix = cameraMatrix;
+  
+  cout << "Distortion coefficients: " << endl << distCoeffs << endl;
+  cout << "Calculated camera matrix: " << endl << cameraMatrix << endl;
+  cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
 
-  initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), cameraMatrix,
+  Mat map1, map2;
+  initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), optimalCameraMatrix,
       imageSize, CV_16SC2, map1, map2);
+  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
+  //    imageSize, CV_16SC2, map1, map2);
 
   for( int i = 0; i < imagesUsed.size(); ++i ) {
 
-    vector<Point2f> imagePoints2;
+    string outfile;
+    if( objectPoints[i].size() > 0 ) {
+      vector<Point2f> imagePoints2;
+      Mat out;
+      //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
+       //   cameraMatrix, distCoeffs);
+      projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
+          cameraMatrix, distCoeffs, imagePoints2);
 
-    projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
-        cameraMatrix, distCoeffs, imagePoints2);
+      imagesUsed[i].img().copyTo( out );
+      for( int j = 0; j < imagePoints[i].size(); ++j ) {
+        circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
 
-    Mat out;
-    imagesUsed[i].img().copyTo( out );
-    for( int j = 0; j < imagePoints[i].size(); ++j ) {
-      circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
+        circle( out, imagePoints2[j], 5, Scalar(0,255,0), 1 );
+      }
 
-      circle( out, imagePoints2[j], 5, Scalar(0,255,0), 1 );
+
+      outfile  = opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() );
+      mkdir_p( outfile );
+      imwrite(  outfile, out );
     }
-
-
-    string outfile( opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() ) );
-    mkdir_p( outfile );
-    imwrite(  outfile, out );
    
     Mat rview;
     remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
+
+    const int N = 9;
+    int x, y, k;
+    vector< Point2f > pts, undPts;
+
+    for( y = k = 0; y < N; y++ )
+      for( x = 0; x < N; x++ )
+        pts.push_back( Point2f((float)x*imageSize.width/(N-1),
+                           (float)y*imageSize.height/(N-1)) );
+
+    myUndistortPoints(pts, undPts, cameraMatrix, distCoeffs, noArray(), optimalCameraMatrix );
+
+    for( y = k = 0; y < N; y++ )
+      for( x = 0; x < N; x++ ) {
+//        cout << pts[k] <<  "  " << undPts[k] << endl;
+        Point2f thisPt( undPts[k++] );
+        if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
+            thisPt.y >=0 && thisPt.y <= rview.size().height )
+          circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
+      }
+
+
     outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
     mkdir_p( outfile );
     imwrite(  outfile, rview );
@@ -621,6 +660,13 @@ int main( int argc, char** argv )
   //        }
   //    }
   //
+
+  // Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
+  // error messages
+  printf("%s. avg reprojection error = %.2f\n",
+      ok ? "Calibration succeeded" : "Calibration failed",
+      totalAvgErr);
+    cout << "Writing results to " << cameraFile << endl;
 
   delete board;
 

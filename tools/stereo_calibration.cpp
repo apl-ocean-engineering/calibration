@@ -914,7 +914,7 @@ int main( int argc, char** argv )
 
   float alpha = -1;
   stereoRectify( cam[0], dist[0], cam[1], dist[1], imageSize, r, t,
-      R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+      R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
       alpha, imageSize, &validROI[0], &validROI[1] );
 
   cout << "R: " << endl << r << endl;
