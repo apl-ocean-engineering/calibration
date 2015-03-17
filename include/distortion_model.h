@@ -129,6 +129,8 @@ namespace Distortion {
 
     protected: 
 
+  static Matx33d InitialCameraEstimate( const Size &image_size );
+
       void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
           const ImagePointsVecVec &imagePoints,
           const IntrinsicParams& param, const int check_cond,

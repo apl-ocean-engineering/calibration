@@ -87,16 +87,21 @@ namespace Distortion {
       int flags, 
       cv::TermCriteria criteria)
   {
-    float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
-    // If you're calling the static function, you aren't providing an initial estimate
-    Matx33d kInitial( fEstimate, 0, image_size.width/2.0 - 0.5,
-        0, fEstimate, image_size.height/2.0 - 0.5,
-        0, 0, 1. );
-
-      Fisheye fe( Vec4d(0.0, 0.0, 0.0, 0.0), kInitial );
+    Fisheye fe( Vec4d(0.0, 0.0, 0.0, 0.0), InitialCameraEstimate( image_size ) );
     fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
   }
+
+  Matx33d Fisheye::InitialCameraEstimate( const Size &image_size )
+  {
+    float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
+    // If you're calling the static function, you aren't providing an initial estimate
+    return Matx33d( fEstimate, 0, image_size.width/2.0 - 0.5,
+        0, fEstimate, image_size.height/2.0 - 0.5,
+        0, 0, 1. );
+  }
+
+
 
   double Fisheye::calibrate(
       const ObjectPointsVecVec &objectPoints, 
@@ -113,6 +118,11 @@ namespace Distortion {
     //    CV_Assert(((flags & CALIB_USE_INTRINSIC_GUESS) && !K.empty() && !D.empty()) || !(flags & CALIB_USE_INTRINSIC_GUESS));
 
     //-------------------------------Initialization
+
+    // Check and see if the camera matrix has been initialized
+    if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
+      setCamera( InitialCameraEstimate( image_size ) );
+
     Matx33d _K( matx() );
 
     // The current values of the instance are always used as an initial guess, either
@@ -185,14 +195,14 @@ namespace Distortion {
 
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;
-    
+
     rvecs = omc;
     tvecs = Tc;
 
-//rvecs.resize( omc.size() );
-//    std::copy( omc.begin(), omc.end(), rvecs.begin() );
-///    tvecs.resize( Tc.size() );
-///    std::copy( Tc.begin(), Tc.end(), tvecs.begin() );
+    //rvecs.resize( omc.size() );
+    //    std::copy( omc.begin(), omc.end(), rvecs.begin() );
+    ///    tvecs.resize( Tc.size() );
+    ///    std::copy( Tc.begin(), Tc.end(), tvecs.begin() );
     return rms;
   }
 
@@ -468,7 +478,7 @@ namespace Distortion {
 
       computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, 
           maxIter, param, thresh_cond);
-      
+
       if (check_cond)
       {
         SVD svd(JJ_kk, SVD::NO_UV);
@@ -717,7 +727,6 @@ namespace Distortion {
       Vec2d out( in - param.c );
       out = out.mul(Vec2d(1.0 / param.f[0], 1.0 / param.f[1]));
       out[0] -= param.alpha * out[1];
-      cout << out << endl;
       return out;
     }
   };
@@ -769,7 +778,7 @@ namespace Distortion {
     Mat X_new = R * objectPoints + T * Mat::ones(1, imagePointsNormalized.cols, CV_64F);
 
     Mat H = computeHomography(imagePointsNormalized, X_new(Rect(0,0,X_new.cols,2)));
-    
+
     double sc = .5 * (norm(H.col(0)) + norm(H.col(1)));
     H = H / sc;
     Mat u1 = H.col(0).clone();

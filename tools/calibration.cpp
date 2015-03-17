@@ -306,9 +306,13 @@ static bool runCalibration( vector<vector<Point2d> > imagePoints,
   //  cameraMatrix.at<double>(0,0) = aspectRatio;
 
   //distCoeffs = Mat::zeros(8, 1, CV_64F);
-  distCoeffs.create(0,0,CV_64F);
+  //distCoeffs.create(0,0,CV_64F);
 
   // Call the functional form so we can get the RMS error
+//  float fEstimate = max( imageSize.width, imageSize.height )/ CV_PI;
+//  Matx33d kInitial( fEstimate, 0, imageSize.width/2.0 - 0.5,
+//      0, fEstimate, imageSize.height/2.0 - 0.5,
+//      0, 0, 1. );
   Fisheye fe;
   double rms = fe.calibrate( objectPoints, imagePoints, 
       imageSize, rvecs, tvecs, flags );
