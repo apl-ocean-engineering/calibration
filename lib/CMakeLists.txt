@@ -9,6 +9,7 @@ add_library( lib_camera_calibration
 	file_utils.cpp
         synchronizer.cpp 
 	trendnet_time_code.cpp 
+        camera_model.cpp
         fisheye.cpp )
 
 target_include_directories( lib_camera_calibration 

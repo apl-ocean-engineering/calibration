@@ -11,13 +11,14 @@ namespace Distortion {
   using std::vector;
   using cv::Size;
   using cv::Mat;
-  using cv::Vec3f;
 
   using cv::Vec2d;
   using cv::Vec3d;
   using cv::Vec4d;
   using cv::Point3d;
   using cv::Point2d;
+
+  using cv::Matx33d;
 
   // For later ... it's all done double precision for now.  Not necessary.
 
@@ -26,11 +27,35 @@ namespace Distortion {
   typedef vector< Point2d > ImagePointsVec;
   typedef vector< vector< Point2d > > ImagePointsVecVec;
 
-  class DistortionModel {
+
+  class PinholeCamera {
+    public:
+      PinholeCamera( void );
+      PinholeCamera( const Matx33d &k );
+      PinholeCamera( const Mat &k );
+
+      void setCamera( const Matx33d &k );
+      void setCamera( double fx, double fy, double cx, double cy, double alpha = 1 );
+
+      Matx33d matx( void ) const;
+      Mat mat( void ) const;
+
+    protected:
+
+      double _fx, _fy, _alpha, _cx, _cy;
+
+  };
+
+  class DistortionModel : public PinholeCamera {
 
     public:
 
       DistortionModel( void )
+        : PinholeCamera()
+      {;}
+
+      DistortionModel( const Matx33d &cam )
+        : PinholeCamera( cam )
       {;}
 
   };
@@ -41,7 +66,6 @@ namespace Distortion {
     public:
 
       enum{
-        CALIB_USE_INTRINSIC_GUESS   = (1<<0),
         CALIB_RECOMPUTE_EXTRINSIC   = (1<<1),
         CALIB_CHECK_COND            = (1<<2),
         CALIB_FIX_SKEW              = (1<<3),
@@ -55,14 +79,23 @@ namespace Distortion {
 
       Fisheye( void );
       Fisheye( const Vec4d &distCoeffs );
+      Fisheye( const Vec4d &distCoeffs, const Matx33d &cam );
 
-      double calibrate( const ObjectPointsVecVec &objectPoints, 
+      static Fisheye Calibrate( const ObjectPointsVecVec &objectPoints, 
           const ImagePointsVecVec &imagePoints, const Size& image_size,
-          Mat &K,
           vector< Vec3d > &rvecs, 
           vector< Vec3d > &tvecs,
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
+
+      double calibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          vector< Vec3d > &rvecs, 
+          vector< Vec3d > &tvecs,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
+
+
 
       void undistortPoints( const vector< Point2d > &distorted, 
           vector< Point2d > &undistorted, 
@@ -72,11 +105,11 @@ namespace Distortion {
 
       void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const cv::Affine3d& affine,
-          const Mat &K, double alpha, cv::OutputArray jacobian);
+          cv::OutputArray jacobian);
 
       void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, 
-          const Mat &_K, double alpha, cv::OutputArray jacobian);
+          cv::OutputArray jacobian);
 
       struct IntrinsicParams
       {

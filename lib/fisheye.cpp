@@ -73,22 +73,50 @@ namespace Distortion {
     : DistortionModel(), _distCoeffs( distCoeffs )
   {;}
 
-  double Fisheye::calibrate( const ObjectPointsVecVec &objectPoints, 
+  Fisheye::Fisheye( const Vec4d &distCoeffs, const Matx33d &cam )
+    : DistortionModel( cam ), _distCoeffs( distCoeffs )
+  {;}
+
+  Fisheye Fisheye::Calibrate( 
+      const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
       const Size& image_size,
-      Mat &K, 
       vector< Vec3d > &rvecs, 
       vector< Vec3d > &tvecs,
       int flags, 
       cv::TermCriteria criteria)
   {
+    float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
+    // If you're calling the static function, you aren't providing an initial estimate
+    Matx33d kInitial( fEstimate, 0, image_size.width/2.0 - 0.5,
+        0, fEstimate, image_size.height/2.0 - 0.5,
+        0, 0, 1. );
+
+      Fisheye fe( Vec4d(0.0, 0.0, 0.0, 0.0), kInitial );
+    double rms = fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
+    return fe;
+  }
+
+  double Fisheye::calibrate(
+      const ObjectPointsVecVec &objectPoints, 
+      const ImagePointsVecVec &imagePoints, 
+      const Size& image_size,
+      vector< Vec3d > &rvecs, 
+      vector< Vec3d > &tvecs,
+      int flags, 
+      cv::TermCriteria criteria)
+  {
+
     CV_Assert(!objectPoints.empty() && !imagePoints.empty() && objectPoints.size() == imagePoints.size());
-    CV_Assert((!K.empty() && K.size() == Size(3,3)) || K.empty());
 
     //    CV_Assert(((flags & CALIB_USE_INTRINSIC_GUESS) && !K.empty() && !D.empty()) || !(flags & CALIB_USE_INTRINSIC_GUESS));
 
     //-------------------------------Initialization
-    IntrinsicParams finalParam;
+    Matx33d _K( matx() );
+
+    // The current values of the instance are always used as an initial guess, either
+    // they've been set by the user or they're default values.
+    IntrinsicParams finalParam( Vec2d( _fx, _fy ), Vec2d( _cx, _cy ), _distCoeffs, _alpha );
     IntrinsicParams currentParam;
     IntrinsicParams errors;
 
@@ -109,27 +137,6 @@ namespace Distortion {
     const double thresh_cond = 1e6;
     double change = 1;
     Vec2d err_std;
-
-    Matx33d _K;
-    if (flags & CALIB_USE_INTRINSIC_GUESS)
-    {
-      K.convertTo(_K, CV_64FC1);
-
-      finalParam.init(Vec2d(_K(0,0), _K(1, 1)),
-          Vec2d(_K(0,2), _K(1, 2)),
-          Vec4d(flags & CALIB_FIX_K1 ? 0 : _distCoeffs[0],
-            flags & CALIB_FIX_K2 ? 0 : _distCoeffs[1],
-            flags & CALIB_FIX_K3 ? 0 : _distCoeffs[2],
-            flags & CALIB_FIX_K4 ? 0 : _distCoeffs[3]),
-          _K(0, 1) / _K(0, 0));
-    }
-    else
-    {
-      float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
-      finalParam.init(Vec2d(fEstimate, fEstimate), 
-          Vec2d(image_size.width  / 2.0 - 0.5, 
-            image_size.height / 2.0 - 0.5));
-    }
 
     errors.isEstimate = finalParam.isEstimate;
 
@@ -172,17 +179,16 @@ namespace Distortion {
         check_cond );
 
     //-------------------------------
-    _K = Matx33d(finalParam.f[0], finalParam.f[0] * finalParam.alpha, finalParam.c[0],
-        0,                    finalParam.f[1], finalParam.c[1],
-        0,                                  0,               1);
-
-    cv::Mat(_K).convertTo(K, K.empty() ? CV_64FC1 : K.type());
+    setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
     _distCoeffs = finalParam.k;
 
-    rvecs.clear();
-    tvecs.clear();
-    std::copy( omc.begin(), omc.end(), rvecs.begin() );
-    std::copy( Tc.begin(), Tc.end(), tvecs.begin() );
+    rvecs = omc;
+    tvecs = Tc;
+
+//rvecs.resize( omc.size() );
+//    std::copy( omc.begin(), omc.end(), rvecs.begin() );
+///    tvecs.resize( Tc.size() );
+///    std::copy( Tc.begin(), Tc.end(), tvecs.begin() );
     return rms;
   }
 
@@ -268,14 +274,14 @@ namespace Distortion {
 
   void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
       const Affine3d& affine,
-      const Mat &K, double alpha, OutputArray jacobian)
+      OutputArray jacobian)
   {
-    projectPoints(objectPoints, imagePoints, affine.rvec(), affine.translation(), K, alpha, jacobian);
+    projectPoints(objectPoints, imagePoints, affine.rvec(), affine.translation(), jacobian);
   }
 
   void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
       const Vec3d &_rvec, const Vec3d &_tvec, 
-      const Mat &_K, double alpha, OutputArray jacobian)
+      OutputArray jacobian)
   {
     // will support only 3-channel data now for points
     imagePoints.resize(objectPoints.size());
@@ -285,8 +291,7 @@ namespace Distortion {
 
     //CV_Assert(_K.size() == Size(3,3) && (_K.type() == CV_32F || _K.type() == CV_64F) && _D.type() == _K.type() && _D.total() == 4);
 
-    Matx33d K;
-    _K.convertTo( K, CV_64F );
+    Matx33d K( matx() );
     Vec2d f(K(0, 0), K(1, 1));
     Vec2d c(K(0, 2), K(1, 2));
 
@@ -332,7 +337,7 @@ namespace Distortion {
       double cdist = r > 1e-8 ? theta_d * inv_r : 1;
 
       Vec2d xd1 = x * cdist;
-      Vec2d xd3(xd1[0] + alpha*xd1[1], xd1[1]);
+      Vec2d xd3(xd1[0] + _alpha*xd1[1], xd1[1]);
       Vec2d final_point(xd3[0] * f[0] + c[0], xd3[1] * f[1] + c[1]);
 
       imagePoints[i] = final_point;
@@ -400,11 +405,11 @@ namespace Distortion {
         //Vec2d xd3(xd1[0] + alpha*xd1[1], xd1[1]);
         Vec4d dxd3dk[2];
         Vec3d dxd3dom[2], dxd3dT[2];
-        dxd3dom[0] = dxd1dom[0] + alpha * dxd1dom[1];
+        dxd3dom[0] = dxd1dom[0] + _alpha * dxd1dom[1];
         dxd3dom[1] = dxd1dom[1];
-        dxd3dT[0]  = dxd1dT[0]  + alpha * dxd1dT[1];
+        dxd3dT[0]  = dxd1dT[0]  + _alpha * dxd1dT[1];
         dxd3dT[1]  = dxd1dT[1];
-        dxd3dk[0]  = dxd1dk[0]  + alpha * dxd1dk[1];
+        dxd3dk[0]  = dxd1dk[0]  + _alpha * dxd1dk[1];
         dxd3dk[1]  = dxd1dk[1];
 
         Vec2d dxd3dalpha(xd1[1], 0);
@@ -500,7 +505,7 @@ namespace Distortion {
       std::vector<Point2d> x;
       Mat jacobians;
       projectPoints(object, x, om, T, param, jacobians);
-      Mat exkk = image.t() - Mat(x);
+      Mat exkk = image - Mat(x);
 
       Mat A(jacobians.rows, 9, CV_64FC1);
       jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
@@ -549,28 +554,38 @@ namespace Distortion {
       double thresh_cond, int check_cond )
   {
 
-    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
+    vector< Point2d > ex;
+    //    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
 
     for (int image_idx = 0; image_idx < (int)objectPoints.size(); ++image_idx)
     {
-      Mat image, object;
-      Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
-      Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+      //Mat object;
+      //Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
+      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
 
       Mat om(omc[image_idx]), T(Tc[image_idx]);
 
       std::vector<Point2d> x;
-      projectPoints(object, x, om, T, params, noArray());
-      Mat ex_ = image.t() - Mat(x);
-      ex_.copyTo(ex.rowRange(ex_.rows * image_idx,  ex_.rows * (image_idx + 1)));
+      projectPoints(objectPoints[image_idx], x, 
+          omc[image_idx], Tc[image_idx], params, noArray());
+
+      for( int ptIdx = 0; ptIdx < imagePoints[image_idx].size(); ++ptIdx ) {
+        ex.push_back( imagePoints[image_idx][ptIdx] - x[ptIdx] );
+      }
     }
 
     meanStdDev(ex, noArray(), std_err);
-    std_err *= sqrt((double)ex.total()/((double)ex.total() - 1.0));
+    std_err *= sqrt((double)ex.size()/((double)ex.size() - 1.0));
 
+    // Awkward way to do this...
+    vector< double > reshaped;
+    for( vector< Point2d >::iterator itr = ex.begin(); itr != ex.end(); ++itr ){
+      reshaped.push_back( itr->x ); 
+      reshaped.push_back( itr->y );
+    }
     Mat sigma_x;
-    meanStdDev(ex.reshape(1, 1), noArray(), sigma_x);
-    sigma_x  *= sqrt(2.0 * (double)ex.total()/(2.0 * (double)ex.total() - 1.0));
+    meanStdDev(reshaped, noArray(), sigma_x);
+    sigma_x  *= sqrt(2.0 * (double)ex.size()/(2.0 * (double)ex.size() - 1.0));
 
     Mat _JJ2_inv, ex3;
     computeJacobians(objectPoints, imagePoints, params, omc, Tc, check_cond, thresh_cond, _JJ2_inv, ex3);
@@ -584,13 +599,10 @@ namespace Distortion {
     errors = r;
 
     double rms = 0;
-    const Vec2d* ptr_ex = ex.ptr<Vec2d>();
-    for (size_t i = 0; i < ex.total(); i++)
-    {
-      rms += ptr_ex[i][0] * ptr_ex[i][0] + ptr_ex[i][1] * ptr_ex[i][1];
-    }
+    for (size_t i = 0; i < ex.size(); i++)
+      rms += ex[i].x * ex[i].x + ex[i].y * ex[i].y;
 
-    rms /= (double)ex.total();
+    rms /= (double)ex.size();
     return sqrt(rms);
   }
 
@@ -764,6 +776,7 @@ namespace Distortion {
     Rodrigues(Rckk, omckk);
   }
 
+  // Internal version which takes a InterinsicParams...
   void Fisheye::projectPoints(const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints,
       const Vec3d &_rvec, const Vec3d &_tvec,
       const IntrinsicParams& param, cv::OutputArray jacobian)
@@ -773,8 +786,8 @@ namespace Distortion {
         0,               param.f[1], param.c[1],
         0,                        0,         1);
 
-    Fisheye fe(param.k);
-    fe.projectPoints(objectPoints, imagePoints, _rvec, _tvec, Mat(K), param.alpha, jacobian);
+    Fisheye fe(param.k, K);
+    fe.projectPoints(objectPoints, imagePoints, _rvec, _tvec, jacobian);
   }
 
   void Fisheye::computeExtrinsicRefine(const ImagePointsVec& imagePoints, 
