@@ -38,7 +38,7 @@ namespace Distortion {
 
   Matx33d PinholeCamera::matx( void ) const 
   {
-    return Matx33d( _fx, _alpha*_fx, _cx, 0., _fx, _cy, 0., 0., 1. );
+    return Matx33d( _fx, _alpha*_fx, _cx, 0., _fy, _cy, 0., 0., 1. );
   }
 
   Mat PinholeCamera::mat( void ) const
