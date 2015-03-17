@@ -308,19 +308,22 @@ static bool runCalibration( vector<vector<Point2d> > imagePoints,
   //distCoeffs = Mat::zeros(8, 1, CV_64F);
   distCoeffs.create(0,0,CV_64F);
 
-  Fisheye fe( Fisheye::Calibrate( objectPoints, imagePoints, 
-        imageSize, rvecs, tvecs, flags ) );
+  // Call the functional form so we can get the RMS error
+  Fisheye fe;
+  double rms = fe.calibrate( objectPoints, imagePoints, 
+      imageSize, rvecs, tvecs, flags );
 
 //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-//  printf("RMS error reported by calibrateCamera: %g\n", rms);
+  printf("RMS error reported by calibrateCamera: %g\n", rms);
 //
 //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+//
+ bool ok = true;
 //
 //  totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints,
 //      rvecs, tvecs, cameraMatrix, distCoeffs, reprojErrs);
 //
-//  return ok;
- return false;
+  return ok;
 }
 
 

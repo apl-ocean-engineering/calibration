@@ -99,7 +99,6 @@ namespace Distortion {
 
       void undistortPoints( const vector< Point2d > &distorted, 
           vector< Point2d > &undistorted, 
-          const Mat &K, 
           const Mat &R = cv::Mat::eye(3,3,CV_64F), 
           const Mat &P = cv::Mat());
 
@@ -158,7 +157,7 @@ namespace Distortion {
 
       Mat computeHomography(Mat m, Mat M);
 
-      Mat normalizePixels(const ImagePointsVec& imagePoints, const IntrinsicParams& param);
+      void normalizePixels(const ImagePointsVec& imagePoints, const IntrinsicParams& param, Mat &normalized);
 
       void computeExtrinsicRefine(const ImagePointsVec& imagePoints, const ObjectPointsVec& objectPoints, 
           Mat &rvec, Mat &tvec, 

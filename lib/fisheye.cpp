@@ -48,6 +48,9 @@
 
 #include <opencv2/calib3d/calib3d.hpp>
 
+#include <iostream>
+using namespace std;
+
 
 namespace Distortion {
 
@@ -59,8 +62,6 @@ namespace Distortion {
     Vec3d dom, dT;
     double dalpha;
   };
-
-
 
   using namespace cv;
   using namespace std;
@@ -93,7 +94,7 @@ namespace Distortion {
         0, 0, 1. );
 
       Fisheye fe( Vec4d(0.0, 0.0, 0.0, 0.0), kInitial );
-    double rms = fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
+    fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
   }
 
@@ -182,6 +183,9 @@ namespace Distortion {
     setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
     _distCoeffs = finalParam.k;
 
+    cout << "Final camera: " << endl << matx() << endl;
+    cout << "Final distortions: " << endl << _distCoeffs << endl;
+    
     rvecs = omc;
     tvecs = Tc;
 
@@ -194,7 +198,7 @@ namespace Distortion {
 
   void Fisheye::undistortPoints( const vector< Point2d > &distorted, 
       vector< Point2d > &undistorted, 
-      const Mat &K, const Mat &R, const Mat &P)
+      const Mat &R, const Mat &P)
   {
     // will support only 2-channel data now for points
     undistorted.resize(distorted.size());
@@ -202,14 +206,10 @@ namespace Distortion {
     CV_Assert(P.empty() || P.size() == Size(3, 3) || P.size() == Size(4, 3));
     CV_Assert(R.empty() || R.size() == Size(3, 3) ); //|| R.total() * R.channels() == 3);
 
-    cv::Vec2d f, c;
-    Matx33d camMat;
-    K.convertTo( camMat, CV_64F );
-    f = Vec2d(camMat(0, 0), camMat(1, 1));
-    c = Vec2d(camMat(0, 2), camMat(1, 2));
+    Vec2d finv( 1.0/_fx, 1.0/_fy );
+    Vec2d c( _cx, _cy );
 
     Vec4d k(_distCoeffs);
-
 
     // I believe the original supported axis-angle rotation vectors as well
     cv::Matx33d RR;
@@ -232,18 +232,17 @@ namespace Distortion {
       RR = PP * RR;
     }
 
+
     // start undistorting
     //    const cv::Vec2f* srcf = distorted.getMat().ptr<cv::Vec2f>();
     //    const cv::Vec2d* srcd = distorted.getMat().ptr<cv::Vec2d>();
     //    cv::Vec2f* dstf = undistorted.getMat().ptr<cv::Vec2f>();
     //    cv::Vec2d* dstd = undistorted.getMat().ptr<cv::Vec2d>();
 
-    size_t n = distorted.size();
-
-    for(size_t i = 0; i < n; i++ )
+    for(size_t i = 0; i < distorted.size(); i++ )
     {
       Vec2d pi( distorted[i] );
-      Vec2d pw((pi[0] - c[0])/f[0], (pi[1] - c[1])/f[1]);      // world point
+      Vec2d pw( (pi  - c).mul( finv ) );
 
       double scale = 1.0;
 
@@ -466,8 +465,10 @@ namespace Distortion {
       //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
 
       initExtrinsics(imagePoints[image_idx], objectPoints[image_idx], param, omckk, Tckk);
-      computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, maxIter, param, thresh_cond);
 
+      computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, 
+          maxIter, param, thresh_cond);
+      
       if (check_cond)
       {
         SVD svd(JJ_kk, SVD::NO_UV);
@@ -716,11 +717,12 @@ namespace Distortion {
       Vec2d out( in - param.c );
       out = out.mul(Vec2d(1.0 / param.f[0], 1.0 / param.f[1]));
       out[0] -= param.alpha * out[1];
+      cout << out << endl;
       return out;
     }
   };
 
-  Mat Fisheye::normalizePixels(const ImagePointsVec &imagePoints, const IntrinsicParams& param)
+  void Fisheye::normalizePixels(const ImagePointsVec &imagePoints, const IntrinsicParams& param, Mat &normalized )
   {
     ImagePointsVec distorted, undistorted;
 
@@ -737,27 +739,37 @@ namespace Distortion {
     //    }
 
     Fisheye fe( param.k );
-    fe.undistortPoints(distorted, undistorted, Mat(Matx33d::eye()));
-    return Mat(undistorted);
+    fe.undistortPoints(distorted, undistorted );
+    Mat(undistorted).copyTo( normalized );
   }
 
-  void Fisheye::initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, const IntrinsicParams& param, Mat& omckk, Mat& Tckk)
+  void Fisheye::initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
+      const IntrinsicParams& param, Mat& omckk, Mat& Tckk)
   {
-    Mat imagePointsNormalized = normalizePixels(_imagePoints, param).reshape(1).t();
-    Mat objectPoints = Mat(_objectPoints).reshape(1).t();
+    // Splat both of these down to single-channel 2xN matrices
+    Mat ipNormalized;
+    normalizePixels( _imagePoints, param, ipNormalized );
+    Mat imagePointsNormalized( ipNormalized.reshape(1).t() );
+
+    Mat objectPoints( Mat(_objectPoints).reshape(1).t() );
+
     Mat objectPointsMean, covObjectPoints;
     Mat Rckk;
-    int Np = imagePointsNormalized.cols;
-    calcCovarMatrix(objectPoints, covObjectPoints, objectPointsMean, COVAR_NORMAL | COVAR_COLS);
+
+    calcCovarMatrix( objectPoints, covObjectPoints, objectPointsMean, COVAR_NORMAL | COVAR_COLS);
     SVD svd(covObjectPoints);
     Mat R(svd.vt);
+
     if (norm(R(Rect(2, 0, 1, 2))) < 1e-6)
       R = Mat::eye(3,3, CV_64FC1);
     if (determinant(R) < 0)
       R = -R;
+
     Mat T = -R * objectPointsMean;
-    Mat X_new = R * objectPoints + T * Mat::ones(1, Np, CV_64FC1);
+    Mat X_new = R * objectPoints + T * Mat::ones(1, imagePointsNormalized.cols, CV_64F);
+
     Mat H = computeHomography(imagePointsNormalized, X_new(Rect(0,0,X_new.cols,2)));
+    
     double sc = .5 * (norm(H.col(0)) + norm(H.col(1)));
     H = H / sc;
     Mat u1 = H.col(0).clone();
