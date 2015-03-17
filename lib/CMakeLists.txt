@@ -8,7 +8,8 @@ add_library( lib_camera_calibration
 	april_tag_detection_set.cpp  
 	file_utils.cpp
         synchronizer.cpp 
-	trendnet_time_code.cpp 	)
+	trendnet_time_code.cpp 
+        fisheye.cpp )
 
 target_include_directories( lib_camera_calibration 
 	PUBLIC ${CMAKE_SOURCE_DIR}/include )

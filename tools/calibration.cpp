@@ -13,6 +13,8 @@
 
 #include "my_undistort.h"
 
+#include "distortion_model.h"
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
