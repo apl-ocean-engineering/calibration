@@ -89,6 +89,7 @@ namespace Distortion {
     : DistortionModel( cam ), _distCoeffs( distCoeffs )
   {;}
 
+  // Static version uses a reasonable estimate based on image size
   AngularPolynomial AngularPolynomial::Calibrate( 
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
@@ -212,25 +213,6 @@ namespace Distortion {
     if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
       setCamera( InitialCameraEstimate( image_size ) );
 
-//    Matx33d _K( matx() );
-
-    // The current values of the instance are always used as an initial guess, either
-    // they've been set by the user or they're default values.
-//    AngularPolynomialEstimable finalParam( *this );
-//    AngularPolynomialEstimable currentParam;
-//    AngularPolynomialEstimable errors;
-//
-//    finalParam.isEstimate[0] = 1;
-//    finalParam.isEstimate[1] = 1;
-//    finalParam.isEstimate[2] = 1;
-//    finalParam.isEstimate[3] = 1;
-//    finalParam.isEstimate[4] = flags & CALIB_FIX_SKEW ? 0 : 1;
-//    finalParam.isEstimate[5] = flags & CALIB_FIX_K1 ? 0 : 1;
-//    finalParam.isEstimate[6] = flags & CALIB_FIX_K2 ? 0 : 1;
-//    finalParam.isEstimate[7] = flags & CALIB_FIX_K3 ? 0 : 1;
-//    finalParam.isEstimate[8] = flags & CALIB_FIX_K4 ? 0 : 1;
-
-    const int recompute_extrinsic = flags & CALIB_RECOMPUTE_EXTRINSIC ? 1: 0;
     const int check_cond = flags & CALIB_CHECK_COND ? 1 : 0;
 
 //    const double alpha_smooth = 0.4;
@@ -238,33 +220,33 @@ namespace Distortion {
 //    double change = 1;
 //    Vec2d err_std;
 //
-//    errors.isEstimate = finalParam.isEstimate;
 
-    std::vector<Vec3d> omc(objectPoints.size()), Tc(objectPoints.size());
+    rvecs.resize( objectPoints.size() );
+    tvecs.resize( objectPoints.size() );
 
-    calibrateExtrinsics(objectPoints, imagePoints, check_cond, thresh_cond, omc, Tc);
+    for( int i = 0; i < objectPoints.size(); ++i ) 
+    initExtrinsics(objectPoints[i], imagePoints[i], rvecs[i], tvecs[i] );
 
     double camera[9] = { _fx, _fy, _cx, _cy,
-      _distCoeffs[0],
-      _distCoeffs[1],
-      _distCoeffs[2],
-      _distCoeffs[3] };
+      _distCoeffs[0], _distCoeffs[1],
+      _distCoeffs[2], _distCoeffs[3] };
     double alpha = _alpha;
 
     double *pose = new double[ objectPoints.size() * 6];
 
-      google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
+    google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
     ceres::Problem problem;
     for( int i = 0; i < objectPoints.size(); ++i ) {
 
       double *p = &(pose[ i*6 ]);
 
-      p[0] = omc[i][0];
-      p[1] = omc[i][1];
-      p[2] = omc[i][2];
-      p[3] = Tc[i][0];
-      p[4] = Tc[i][1];
-      p[5] = Tc[i][2];
+      // Mildly awkward
+      p[0] = rvecs[i][0];
+      p[1] = rvecs[i][1];
+      p[2] = rvecs[i][2];
+      p[3] = tvecs[i][0];
+      p[4] = tvecs[i][1];
+      p[5] = tvecs[i][2];
 
       for( int j = 0; j < imagePoints[i].size(); ++j ) {
         ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j].x, imagePoints[i][j].y,
@@ -288,13 +270,8 @@ namespace Distortion {
     for( int i = 0; i < objectPoints.size(); ++i ) {
       double *p = &(pose[ i*6 ]);
 
-      rvecs[0] = p[0];
-      rvecs[1] = p[1];
-      rvecs[2] = p[2];
-
-      tvecs[3] = p[3];
-      tvecs[4] = p[4];
-      tvecs[5] = p[5];
+      rvecs[i] = Vec3d( p );
+      tvecs[i] = Vec3d( &(p[3]) );
     }
 
     delete[] pose;
@@ -303,41 +280,6 @@ namespace Distortion {
 
     double rms = 0;
 
-    //   //-------------------------------Optimization
-    //   for(int iter = 0; ; ++iter)
-    //   {
-    //     if ((criteria.type == 1 && iter >= criteria.maxCount)  ||
-    //         (criteria.type == 2 && change <= criteria.epsilon) ||
-    //         (criteria.type == 3 && (change <= criteria.epsilon || iter >= criteria.maxCount)))
-    //       break;
-
-    //     double alpha_smooth2 = 1 - std::pow(1 - alpha_smooth, iter + 1.0);
-
-    //     Mat JJ2_inv, ex3;
-    //     finalParam.computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond,thresh_cond, JJ2_inv, ex3);
-
-    //     Mat G( alpha_smooth2 * JJ2_inv * ex3 );
-
-    //     //cout << "G: " << G.t() << endl;
-    //     //cout << JJ2_inv << endl;
-    //     //cout << ex3 << endl;
-
-    //     currentParam = finalParam + G;
-
-    //     change = currentParam.deltaFrom( finalParam );
-
-
-    //     cout << "currentParam: " << currentParam << endl;
-
-    //     finalParam = currentParam;
-
-    //     if (recompute_extrinsic)
-    //     {
-    //       finalParam.calibrateExtrinsics(objectPoints,  imagePoints, check_cond,
-    //           thresh_cond, omc, Tc);
-    //     }
-    //   }
-
     ////-------------------------------Validation
     //double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
     //    check_cond );
@@ -345,20 +287,10 @@ namespace Distortion {
     ////-------------------------------
     //set( finalParam );
 
-    //setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
-    //_distCoeffs = finalParam.k;
-
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;
 
-    //rvecs = omc;
-    //tvecs = Tc;
-
-    //rvecs.resize( omc.size() );
-    //    std::copy( omc.begin(), omc.end(), rvecs.begin() );
-    ///    tvecs.resize( Tc.size() );
-    ///    std::copy( Tc.begin(), Tc.end(), tvecs.begin() );
-    return rms;
+        return rms;
   }
 
   void AngularPolynomial::undistortPoints( const vector< Point2d > &distorted, 
@@ -430,43 +362,37 @@ namespace Distortion {
   }
 
   void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-      const Affine3d& affine, OutputArray jacobian) const
-  {
-    projectPoints(objectPoints, imagePoints, affine.rvec(), affine.translation(), jacobian);
-  }
-
-  void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-      const Vec3d &_rvec, const Vec3d &_tvec, 
+      const Vec3d &rvec, const Vec3d &tvec, 
       OutputArray jacobian) const
   {
     // will support only 3-channel data now for points
     imagePoints.resize(objectPoints.size());
 
-    Vec3d om( _rvec );
-    Vec3d T( _tvec );
-
-    //CV_Assert(_K.size() == Size(3,3) && (_K.type() == CV_32F || _K.type() == CV_64F) && _D.type() == _K.type() && _D.total() == 4);
-
-    Matx33d K( matx() );
-    Vec2d f( _fx, _fy );
-    Vec2d c(K(0, 2), K(1, 2));
+//    Vec3d om( _rvec );
+//    Vec3d T( _tvec );
+//
+//    //CV_Assert(_K.size() == Size(3,3) && (_K.type() == CV_32F || _K.type() == CV_64F) && _D.type() == _K.type() && _D.total() == 4);
+//
+//    Matx33d K( matx() );
+//    Vec2d f( _fx, _fy );
+//    Vec2d c(K(0, 2), K(1, 2));
 
     Vec4d k( _distCoeffs );
 
     // Need to be sure JacobianRow isn't being padded
-    assert( sizeof(JacobianRow ) == 15 * sizeof(double) );
-    JacobianRow *Jn = 0;
-    if (jacobian.needed())
-    {
-      int nvars = 2 + 2 + 1 + 4 + 3 + 3; // f, c, alpha, k, om, T,
-      jacobian.create(2*(int)objectPoints.size(), nvars, CV_64F);
-      Jn = jacobian.getMat().ptr<JacobianRow>(0);
-    }
+//    assert( sizeof(JacobianRow ) == 15 * sizeof(double) );
+//    JacobianRow *Jn = 0;
+//    if (jacobian.needed())
+//    {
+//      int nvars = 2 + 2 + 1 + 4 + 3 + 3; // f, c, alpha, k, om, T,
+//      jacobian.create(2*(int)objectPoints.size(), nvars, CV_64F);
+//      Jn = jacobian.getMat().ptr<JacobianRow>(0);
+//    }
 
-    Matx33d R;
-    Matx<double, 3, 9> dRdom;
-    Rodrigues(om, R, dRdom);
-    Affine3d aff(om, T);
+    //Matx33d R;
+    //Matx<double, 3, 9> dRdom;
+    //Rodrigues(rvec, R, dRdom);
+    Affine3d aff(rvec, tvec);
 
     //const Vec3f* Xf = objectPoints.getMat().ptr<Vec3f>();
     //const Vec3d* Xd = objectPoints.getMat().ptr<Vec3d>();
@@ -475,125 +401,122 @@ namespace Distortion {
 
     for(size_t i = 0; i < objectPoints.size(); ++i)
     {
-      Vec3d Xi( objectPoints[i] );
-      Vec3d Y = aff*Xi;
+      Vec3d Xworld( objectPoints[i] );
+      Vec3d Xcam( aff*Xworld );
 
-      Vec2d x(Y[0]/Y[2], Y[1]/Y[2]);
+      double theta = atan2( sqrt(  Xcam[0]*Xcam[0] + Xcam[1]*Xcam[1] ), Xcam[2] );
+      double psi = atan2( Xcam[1], Xcam[0] );
 
-      double r2 = x.dot(x);
-      double r = std::sqrt(r2);
-
-      // Angle of the incoming ray:
-      double theta = atan(r);
-
-      double theta2 = theta*theta, theta3 = theta2*theta, theta4 = theta2*theta2, theta5 = theta4*theta,
-             theta6 = theta3*theta3, theta7 = theta6*theta, theta8 = theta4*theta4, theta9 = theta8*theta;
+      double theta2 = theta*theta, 
+             theta3 = theta*theta2, 
+             theta5 = theta3*theta2,
+             theta7 = theta5*theta2, 
+             theta9 = theta7*theta2;
 
       double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
 
-      double inv_r = r > 1e-8 ? 1.0/r : 1;
-      double cdist = r > 1e-8 ? theta_d * inv_r : 1;
+      //double inv_r = r > 1e-8 ? 1.0/r : 1;
+      //double cdist = r > 1e-8 ? theta_d * inv_r : 1;
 
-      Vec2d xd1 = x * cdist;
-      Vec2d xd3(xd1[0] + _alpha*xd1[1], xd1[1]);
-      Vec2d final_point(xd3[0] * f[0] + c[0], xd3[1] * f[1] + c[1]);
+      Vec2d xd( theta_d * cos( psi ), theta_d * sin( psi ) );
 
-      imagePoints[i] = final_point;
+      imagePoints[i] = Vec2d( _fx * ( xd[0] + _alpha*xd[1] ) + _cx,
+                              _fy *   xd[1]                    + _cy );
 
-      if (jacobian.needed())
-      {
-        //Vec3d Xi = pdepth == CV_32F ? (Vec3d)Xf[i] : Xd[i];
-        //Vec3d Y = aff*Xi;
-        double dYdR[] = { Xi[0], Xi[1], Xi[2], 0, 0, 0, 0, 0, 0,
-          0, 0, 0, Xi[0], Xi[1], Xi[2], 0, 0, 0,
-          0, 0, 0, 0, 0, 0, Xi[0], Xi[1], Xi[2] };
-
-        Matx33d dYdom_data = Matx<double, 3, 9>(dYdR) * dRdom.t();
-        const Vec3d *dYdom = (Vec3d*)dYdom_data.val;
-
-        Matx33d dYdT_data = Matx33d::eye();
-        const Vec3d *dYdT = (Vec3d*)dYdT_data.val;
-
-        //Vec2d x(Y[0]/Y[2], Y[1]/Y[2]);
-        Vec3d dxdom[2];
-        dxdom[0] = (1.0/Y[2]) * dYdom[0] - x[0]/Y[2] * dYdom[2];
-        dxdom[1] = (1.0/Y[2]) * dYdom[1] - x[1]/Y[2] * dYdom[2];
-
-        Vec3d dxdT[2];
-        dxdT[0]  = (1.0/Y[2]) * dYdT[0] - x[0]/Y[2] * dYdT[2];
-        dxdT[1]  = (1.0/Y[2]) * dYdT[1] - x[1]/Y[2] * dYdT[2];
-
-        //double r2 = x.dot(x);
-        Vec3d dr2dom = 2 * x[0] * dxdom[0] + 2 * x[1] * dxdom[1];
-        Vec3d dr2dT  = 2 * x[0] *  dxdT[0] + 2 * x[1] *  dxdT[1];
-
-        //double r = std::sqrt(r2);
-        double drdr2 = r > 1e-8 ? 1.0/(2*r) : 1;
-        Vec3d drdom = drdr2 * dr2dom;
-        Vec3d drdT  = drdr2 * dr2dT;
-
-        // Angle of the incoming ray:
-        //double theta = atan(r);
-        double dthetadr = 1.0/(1+r2);
-        Vec3d dthetadom = dthetadr * drdom;
-        Vec3d dthetadT  = dthetadr *  drdT;
-
-        //double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
-        double dtheta_ddtheta = 1 + 3*k[0]*theta2 + 5*k[1]*theta4 + 7*k[2]*theta6 + 9*k[3]*theta8;
-        Vec3d dtheta_ddom = dtheta_ddtheta * dthetadom;
-        Vec3d dtheta_ddT  = dtheta_ddtheta * dthetadT;
-        Vec4d dtheta_ddk  = Vec4d(theta3, theta5, theta7, theta9);
-
-        //double inv_r = r > 1e-8 ? 1.0/r : 1;
-        //double cdist = r > 1e-8 ? theta_d / r : 1;
-        Vec3d dcdistdom = inv_r * (dtheta_ddom - cdist*drdom);
-        Vec3d dcdistdT  = inv_r * (dtheta_ddT  - cdist*drdT);
-        Vec4d dcdistdk  = inv_r *  dtheta_ddk;
-
-        //Vec2d xd1 = x * cdist;
-        Vec4d dxd1dk[2];
-        Vec3d dxd1dom[2], dxd1dT[2];
-        dxd1dom[0] = x[0] * dcdistdom + cdist * dxdom[0];
-        dxd1dom[1] = x[1] * dcdistdom + cdist * dxdom[1];
-        dxd1dT[0]  = x[0] * dcdistdT  + cdist * dxdT[0];
-        dxd1dT[1]  = x[1] * dcdistdT  + cdist * dxdT[1];
-        dxd1dk[0]  = x[0] * dcdistdk;
-        dxd1dk[1]  = x[1] * dcdistdk;
-
-        //Vec2d xd3(xd1[0] + alpha*xd1[1], xd1[1]);
-        Vec4d dxd3dk[2];
-        Vec3d dxd3dom[2], dxd3dT[2];
-        dxd3dom[0] = dxd1dom[0] + _alpha * dxd1dom[1];
-        dxd3dom[1] = dxd1dom[1];
-        dxd3dT[0]  = dxd1dT[0]  + _alpha * dxd1dT[1];
-        dxd3dT[1]  = dxd1dT[1];
-        dxd3dk[0]  = dxd1dk[0]  + _alpha * dxd1dk[1];
-        dxd3dk[1]  = dxd1dk[1];
-
-        Vec2d dxd3dalpha(xd1[1], 0);
-
-        //final jacobian
-        Jn[0].dom = f[0] * dxd3dom[0];
-        Jn[1].dom = f[1] * dxd3dom[1];
-
-        Jn[0].dT = f[0] * dxd3dT[0];
-        Jn[1].dT = f[1] * dxd3dT[1];
-
-        Jn[0].dk = f[0] * dxd3dk[0];
-        Jn[1].dk = f[1] * dxd3dk[1];
-
-        Jn[0].dalpha = f[0] * dxd3dalpha[0];
-        Jn[1].dalpha = 0; //f[1] * dxd3dalpha[1];
-
-        Jn[0].df = Vec2d(xd3[0], 0);
-        Jn[1].df = Vec2d(0, xd3[1]);
-
-        Jn[0].dc = Vec2d(1, 0);
-        Jn[1].dc = Vec2d(0, 1);
-
-        //step to jacobian rows for next point
-        Jn += 2;
-      }
+//      if (jacobian.needed())
+//      {
+//        //Vec3d Xi = pdepth == CV_32F ? (Vec3d)Xf[i] : Xd[i];
+//        //Vec3d Y = aff*Xi;
+//        double dYdR[] = { Xi[0], Xi[1], Xi[2], 0, 0, 0, 0, 0, 0,
+//          0, 0, 0, Xi[0], Xi[1], Xi[2], 0, 0, 0,
+//          0, 0, 0, 0, 0, 0, Xi[0], Xi[1], Xi[2] };
+//
+//        Matx33d dYdom_data = Matx<double, 3, 9>(dYdR) * dRdom.t();
+//        const Vec3d *dYdom = (Vec3d*)dYdom_data.val;
+//
+//        Matx33d dYdT_data = Matx33d::eye();
+//        const Vec3d *dYdT = (Vec3d*)dYdT_data.val;
+//
+//        //Vec2d x(Y[0]/Y[2], Y[1]/Y[2]);
+//        Vec3d dxdom[2];
+//        dxdom[0] = (1.0/Y[2]) * dYdom[0] - x[0]/Y[2] * dYdom[2];
+//        dxdom[1] = (1.0/Y[2]) * dYdom[1] - x[1]/Y[2] * dYdom[2];
+//
+//        Vec3d dxdT[2];
+//        dxdT[0]  = (1.0/Y[2]) * dYdT[0] - x[0]/Y[2] * dYdT[2];
+//        dxdT[1]  = (1.0/Y[2]) * dYdT[1] - x[1]/Y[2] * dYdT[2];
+//
+//        //double r2 = x.dot(x);
+//        Vec3d dr2dom = 2 * x[0] * dxdom[0] + 2 * x[1] * dxdom[1];
+//        Vec3d dr2dT  = 2 * x[0] *  dxdT[0] + 2 * x[1] *  dxdT[1];
+//
+//        //double r = std::sqrt(r2);
+//        double drdr2 = r > 1e-8 ? 1.0/(2*r) : 1;
+//        Vec3d drdom = drdr2 * dr2dom;
+//        Vec3d drdT  = drdr2 * dr2dT;
+//
+//        // Angle of the incoming ray:
+//        //double theta = atan(r);
+//        double dthetadr = 1.0/(1+r2);
+//        Vec3d dthetadom = dthetadr * drdom;
+//        Vec3d dthetadT  = dthetadr *  drdT;
+//
+//        //double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
+//        double dtheta_ddtheta = 1 + 3*k[0]*theta2 + 5*k[1]*theta4 + 7*k[2]*theta6 + 9*k[3]*theta8;
+//        Vec3d dtheta_ddom = dtheta_ddtheta * dthetadom;
+//        Vec3d dtheta_ddT  = dtheta_ddtheta * dthetadT;
+//        Vec4d dtheta_ddk  = Vec4d(theta3, theta5, theta7, theta9);
+//
+//        //double inv_r = r > 1e-8 ? 1.0/r : 1;
+//        //double cdist = r > 1e-8 ? theta_d / r : 1;
+//        Vec3d dcdistdom = inv_r * (dtheta_ddom - cdist*drdom);
+//        Vec3d dcdistdT  = inv_r * (dtheta_ddT  - cdist*drdT);
+//        Vec4d dcdistdk  = inv_r *  dtheta_ddk;
+//
+//        //Vec2d xd1 = x * cdist;
+//        Vec4d dxd1dk[2];
+//        Vec3d dxd1dom[2], dxd1dT[2];
+//        dxd1dom[0] = x[0] * dcdistdom + cdist * dxdom[0];
+//        dxd1dom[1] = x[1] * dcdistdom + cdist * dxdom[1];
+//        dxd1dT[0]  = x[0] * dcdistdT  + cdist * dxdT[0];
+//        dxd1dT[1]  = x[1] * dcdistdT  + cdist * dxdT[1];
+//        dxd1dk[0]  = x[0] * dcdistdk;
+//        dxd1dk[1]  = x[1] * dcdistdk;
+//
+//        //Vec2d xd3(xd1[0] + alpha*xd1[1], xd1[1]);
+//        Vec4d dxd3dk[2];
+//        Vec3d dxd3dom[2], dxd3dT[2];
+//        dxd3dom[0] = dxd1dom[0] + _alpha * dxd1dom[1];
+//        dxd3dom[1] = dxd1dom[1];
+//        dxd3dT[0]  = dxd1dT[0]  + _alpha * dxd1dT[1];
+//        dxd3dT[1]  = dxd1dT[1];
+//        dxd3dk[0]  = dxd1dk[0]  + _alpha * dxd1dk[1];
+//        dxd3dk[1]  = dxd1dk[1];
+//
+//        Vec2d dxd3dalpha(xd1[1], 0);
+//
+//        //final jacobian
+//        Jn[0].dom = f[0] * dxd3dom[0];
+//        Jn[1].dom = f[1] * dxd3dom[1];
+//
+//        Jn[0].dT = f[0] * dxd3dT[0];
+//        Jn[1].dT = f[1] * dxd3dT[1];
+//
+//        Jn[0].dk = f[0] * dxd3dk[0];
+//        Jn[1].dk = f[1] * dxd3dk[1];
+//
+//        Jn[0].dalpha = f[0] * dxd3dalpha[0];
+//        Jn[1].dalpha = 0; //f[1] * dxd3dalpha[1];
+//
+//        Jn[0].df = Vec2d(xd3[0], 0);
+//        Jn[1].df = Vec2d(0, xd3[1]);
+//
+//        Jn[0].dc = Vec2d(1, 0);
+//        Jn[1].dc = Vec2d(0, 1);
+//
+//        //step to jacobian rows for next point
+//        Jn += 2;
+//      }
     }
   }
 
@@ -604,42 +527,42 @@ namespace Distortion {
   //  Protected / internal functions
   //===========================================================================
 
-  void AngularPolynomial::calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
-      const ImagePointsVecVec &imagePoints,
-      const int check_cond,
-      const double thresh_cond,
-      vector< Vec3d > &omc, 
-      vector< Vec3d > &Tc )
-  {
-    omc.resize( imagePoints.size() );
-    Tc.resize( imagePoints.size() );
+  //void AngularPolynomial::calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
+  //    const ImagePointsVecVec &imagePoints,
+  //    const int check_cond,
+  //    const double thresh_cond,
+  //    vector< Vec3d > &omc, 
+  //    vector< Vec3d > &Tc )
+  //{
+  //  omc.resize( imagePoints.size() );
+  //  Tc.resize( imagePoints.size() );
 
-    const int maxIter = 20;
+  //  const int maxIter = 20;
 
-    for(int image_idx = 0; image_idx < (int)imagePoints.size(); ++image_idx)
-    {
-      Mat omckk, Tckk, JJ_kk;
-      //Mat image, object;
-      //Mat(objectPoints[image_idx]).convertTo(object,  CV_64FC3);
-      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+  //  for(int image_idx = 0; image_idx < (int)imagePoints.size(); ++image_idx)
+  //  {
+  //    Mat omckk, Tckk, JJ_kk;
+  //    //Mat image, object;
+  //    //Mat(objectPoints[image_idx]).convertTo(object,  CV_64FC3);
+  //    //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
 
-      initExtrinsics(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk);
+  //    initExtrinsics(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk);
 
-      computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, 
-          maxIter, thresh_cond);
+  //    //computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, 
+  //    //    maxIter, thresh_cond);
 
-      if (check_cond)
-      {
-        SVD svd(JJ_kk, SVD::NO_UV);
-        CV_Assert(svd.w.at<double>(0) / svd.w.at<double>((int)svd.w.total() - 1) < thresh_cond);
-      }
+  //    if (check_cond)
+  //    {
+  //      SVD svd(JJ_kk, SVD::NO_UV);
+  //      CV_Assert(svd.w.at<double>(0) / svd.w.at<double>((int)svd.w.total() - 1) < thresh_cond);
+  //    }
 
-      omc[ image_idx ] = omckk;
-      Tc[ image_idx ] = Tckk;
-      //omckk.reshape(3,1).copyTo(omc.getMat().col(image_idx));
-      //Tckk.reshape(3,1).copyTo(Tc.getMat().col(image_idx));
-    }
-  }
+  //    omc[ image_idx ] = omckk;
+  //    Tc[ image_idx ] = Tckk;
+  //    //omckk.reshape(3,1).copyTo(omc.getMat().col(image_idx));
+  //    //Tckk.reshape(3,1).copyTo(Tc.getMat().col(image_idx));
+  //  }
+  //}
 
   cv::Mat AngularPolynomial::computeHomography(Mat m, Mat M)
   {
@@ -758,21 +681,6 @@ namespace Distortion {
   void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
   {
     ImagePointsVec undistorted;
-
-    //const Vec2d* ptr   = imagePoints.ptr<Vec2d>(0);
-    //Vec2d* ptr_d = distorted.ptr<Vec2d>(0);
-
-    //std::transform( imagePoints.begin(), imagePoints.end(), 
-    //    back_inserter( distorted ), TxNormalizePixels(*this));
-
-    //    for (size_t i = 0; i < imagePoints.total(); ++i)
-    //    {
-    //      ptr_d[i] = (ptr[i] - param.c).mul(Vec2d(1.0 / param.f[0], 1.0 / param.f[1]));
-    //      ptr_d[i][0] = ptr_d[i][0] - param.alpha * ptr_d[i][1];
-    //    }
-
-    //AngularPolynomial fe( k );
-
     undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
     Mat(undistorted).copyTo( normalized );
   }
@@ -837,271 +745,272 @@ namespace Distortion {
   //  fe.projectPoints(objectPoints, imagePoints, _rvec, _tvec, jacobian);
   //}
 
-  void AngularPolynomial::computeExtrinsicRefine(const ImagePointsVec& imagePoints, 
-      const ObjectPointsVec& objectPoints, 
-      Mat& rvec,
-      Mat&  tvec, Mat& J, const int MaxIter,
-      const double thresh_cond)
-  {
-    Vec6d extrinsics(rvec.at<double>(0), rvec.at<double>(1), rvec.at<double>(2),
-        tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2));
-    double change = 1;
-    int iter = 0;
-
-    while (change > 1e-10 && iter < MaxIter)
-    {
-      ImagePointsVec x;
-      Mat jacobians;
-      projectPoints(objectPoints, x, rvec, tvec, jacobians);
-
-      Mat ex = Mat(imagePoints) - Mat(x);
-      ex = ex.reshape(1, 2);
-
-      J = jacobians.colRange(9, 15).clone();
-
-      SVD svd(J, SVD::NO_UV);
-      double condJJ = svd.w.at<double>(0)/svd.w.at<double>(5);
-
-      if (condJJ > thresh_cond)
-        change = 0;
-      else
-      {
-        Vec6d param_innov;
-        solve(J, ex.reshape(1, (int)ex.total()), param_innov, DECOMP_SVD + DECOMP_NORMAL);
-
-        Vec6d param_up = extrinsics + param_innov;
-        change = norm(param_innov)/norm(param_up);
-        extrinsics = param_up;
-        iter = iter + 1;
-
-        rvec = Mat(Vec3d(extrinsics.val));
-        tvec = Mat(Vec3d(extrinsics.val+3));
-      }
-    }
-  }
-
-  // This was formerly in its own anonymous namespace
-  void AngularPolynomial::subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows)
-  {
-    CV_Assert(src.type() == CV_64FC1);
-
-    int nonzeros_cols = cv::countNonZero(cols);
-    Mat tmp(src.rows, nonzeros_cols, CV_64FC1);
-
-    for (int i = 0, j = 0; i < (int)cols.size(); i++)
-    {
-      if (cols[i])
-      {
-        src.col(i).copyTo(tmp.col(j++));
-      }
-    }
-
-    int nonzeros_rows  = cv::countNonZero(rows);
-    Mat tmp1(nonzeros_rows, nonzeros_cols, CV_64FC1);
-    for (int i = 0, j = 0; i < (int)rows.size(); i++)
-    {
-      if (rows[i])
-      {
-        tmp.row(i).copyTo(tmp1.row(j++));
-      }
-    }
-
-    dst = tmp1.clone();
-  }
-
-
-
-
-
-
-  //---------------------------------------------------------------------------
-  //  IntrinsicParams
-  //---------------------------------------------------------------------------
-
-  AngularPolynomialEstimable AngularPolynomialEstimable::operator+(const Mat& a)
-  {
-    CV_Assert(a.type() == CV_64FC1);
-    AngularPolynomialEstimable tmp;
-    const double* ptr = a.ptr<double>();
-
-    int j = 0;
-    Vec2d newf( this->_fx    + (isEstimate[0] ? ptr[j++] : 0),
-        this->_fy    + (isEstimate[1] ? ptr[j++] : 0) );
-    Vec2d newc( this->_cx    + (isEstimate[2] ? ptr[j++] : 0),
-        this->_cy    + (isEstimate[3] ? ptr[j++] : 0) );
-    double alpha = this->_alpha   + (isEstimate[4] ? ptr[j++] : 0);
-    Vec4d newk( this->_distCoeffs[0]    + (isEstimate[5] ? ptr[j++] : 0),
-        this->_distCoeffs[1]    + (isEstimate[6] ? ptr[j++] : 0),
-        this->_distCoeffs[2]    + (isEstimate[7] ? ptr[j++] : 0),
-        this->_distCoeffs[3]    + (isEstimate[8] ? ptr[j++] : 0) );
-
-    tmp.set( newf, newc, alpha, newk );
-    tmp.isEstimate = isEstimate;
-    return tmp;
-  }
-
-  AngularPolynomialEstimable& AngularPolynomialEstimable::operator =(const Mat& a)
-  {
-    CV_Assert(a.type() == CV_64FC1);
-    const double* ptr = a.ptr<double>();
-
-    int j = 0;
-    Vec2d newf( (isEstimate[0] ? ptr[j++] : 0),
-        (isEstimate[1] ? ptr[j++] : 0) );
-    Vec2d newc( (isEstimate[2] ? ptr[j++] : 0),
-        (isEstimate[3] ? ptr[j++] : 0) );
-    double alpha = (isEstimate[4] ? ptr[j++] : 0);
-    Vec4d newk( (isEstimate[5] ? ptr[j++] : 0),
-        (isEstimate[6] ? ptr[j++] : 0),
-        (isEstimate[7] ? ptr[j++] : 0),
-        (isEstimate[8] ? ptr[j++] : 0) );
-
-    set( newf, newc, alpha, newk );
-
-    return *this;
-  }
-
-  Vec4d AngularPolynomialEstimable::normVec( void ) const
-  {
-    return Vec4d( _fx, _fy, _cx, _cy );
-  }
-
-  double AngularPolynomialEstimable::deltaFrom( const AngularPolynomialEstimable &other ) const
-  {
-    return  norm( normVec(), other.normVec() ) / norm( normVec() );
-  }
-
-  void AngularPolynomialEstimable::computeJacobians( const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints,
-      const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
-      const int check_cond, const double thresh_cond, 
-      Mat& JJ2_inv, Mat& ex3)
-  {
-
-    int n = (int)objectPoints.size();
-
-    Mat JJ3 = Mat::zeros(9 + 6 * n, 9 + 6 * n, CV_64FC1);
-    ex3 = Mat::zeros(9 + 6 * n, 1, CV_64FC1 );
-
-    for (int image_idx = 0; image_idx < n; ++image_idx)
-    {
-      Mat image, object;
-      Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
-      Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
-
-      Mat om(omc[image_idx]), T(Tc[image_idx]);
-
-      ImagePointsVec x;
-      Mat jacobians;
-      projectPoints(object, x, om, T, jacobians);
-      Mat exkk = image - Mat(x);
-
-      //      cout << "Image: " << image << endl;
-      //      cout << "reproj: " << x << endl;
-      //
-      //cout << "jacobians: "<< jacobians << endl;
-      //      cout << "exkk: " << exkk << endl;
-
-      //Mat A(jacobians.rows, 9, CV_64FC1);
-      //jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
-      //jacobians.col(14).copyTo(A.col(4));
-      //jacobians.colRange(4, 8).copyTo(A.colRange(5, 9));
-
-      Mat A( jacobians.colRange(0, 9).clone() );
-      A = A.t();
-
-      Mat B( jacobians.colRange(9, 15).clone() );
-      B = B.t();
-
-      JJ3(Rect(0, 0, 9, 9)) = JJ3(Rect(0, 0, 9, 9)) + A * A.t();
-      JJ3(Rect(9 + 6 * image_idx, 9 + 6 * image_idx, 6, 6)) = B * B.t();
-
-      Mat AB = A * B.t();
-      AB.copyTo(JJ3(Rect(9 + 6 * image_idx, 0, 6, 9)));
-      JJ3(Rect(0, 9 + 6 * image_idx, 9, 6)) = AB.t();
-
-      ex3(Rect(0,0,1,9)) = ex3(Rect(0,0,1,9)) + A * exkk.reshape(1, 2 * exkk.rows);
-      ex3(Rect(0, 9 + 6 * image_idx, 1, 6)) = B * exkk.reshape(1, 2 * exkk.rows);
-
-      if (check_cond)
-      {
-        Mat JJ_kk = B.t();
-        SVD svd(JJ_kk, SVD::NO_UV);
-        CV_Assert(svd.w.at<double>(0) / svd.w.at<double>(svd.w.rows - 1) < thresh_cond);
-      }
-    }
-
-    vector<int> idxs(isEstimate);
-    idxs.insert(idxs.end(), 6 * n, 1);
-
-    subMatrix(JJ3, JJ3, idxs, idxs);
-    subMatrix(ex3, ex3, std::vector<int>(1, 1), idxs);
-    JJ2_inv = JJ3.inv();
-  }
-
-  double AngularPolynomialEstimable::estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints,
-      const vector< Vec3d > &omc, 
-      const vector< Vec3d > &Tc,
-      AngularPolynomialEstimable &errors, 
-      Vec2d& std_err, 
-      double thresh_cond, int check_cond )
-  {
-
-    vector< Point2d > ex;
-    //    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
-
-    for (int image_idx = 0; image_idx < (int)objectPoints.size(); ++image_idx)
-    {
-      //Mat object;
-      //Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
-      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
-
-      Mat om(omc[image_idx]), T(Tc[image_idx]);
-
-      std::vector<Point2d> x;
-      projectPoints(objectPoints[image_idx], x, 
-          omc[image_idx], Tc[image_idx], noArray());
-
-      for( int ptIdx = 0; ptIdx < imagePoints[image_idx].size(); ++ptIdx ) {
-        ex.push_back( imagePoints[image_idx][ptIdx] - x[ptIdx] );
-      }
-    }
-
-    meanStdDev(ex, noArray(), std_err);
-    std_err *= sqrt((double)ex.size()/((double)ex.size() - 1.0));
-
-    // Awkward way to do this...
-    vector< double > reshaped;
-    for( vector< Point2d >::iterator itr = ex.begin(); itr != ex.end(); ++itr ){
-      reshaped.push_back( itr->x ); 
-      reshaped.push_back( itr->y );
-    }
-    Mat sigma_x;
-    meanStdDev(reshaped, noArray(), sigma_x);
-    sigma_x  *= sqrt(2.0 * (double)ex.size()/(2.0 * (double)ex.size() - 1.0));
-
-    Mat _JJ2_inv, ex3;
-    computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond, thresh_cond, _JJ2_inv, ex3);
-
-    Mat_<double>& JJ2_inv = (Mat_<double>&)_JJ2_inv;
-
-    sqrt(JJ2_inv, JJ2_inv);
-
-    double s  = sigma_x.at<double>(0);
-    Mat r = 3 * s * JJ2_inv.diag();
-    errors = r;
-
-    double rms = 0;
-    for (size_t i = 0; i < ex.size(); i++)
-      rms += ex[i].x * ex[i].x + ex[i].y * ex[i].y;
-
-    rms /= (double)ex.size();
-    return sqrt(rms);
-  }
+//  void AngularPolynomial::computeExtrinsicRefine(const ImagePointsVec& imagePoints, 
+//      const ObjectPointsVec& objectPoints, 
+//      Mat& rvec,
+//      Mat&  tvec, Mat& J, const int MaxIter,
+//      const double thresh_cond)
+//  {
+//    Vec6d extrinsics(rvec.at<double>(0), rvec.at<double>(1), rvec.at<double>(2),
+//        tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2));
+//    double change = 1;
+//    int iter = 0;
+//
+//    while (change > 1e-10 && iter < MaxIter)
+//    {
+//      ImagePointsVec x;
+//      Mat jacobians;
+//      projectPoints(objectPoints, x, rvec, tvec, jacobians);
+//
+//      Mat ex = Mat(imagePoints) - Mat(x);
+//      ex = ex.reshape(1, 2);
+//
+//      J = jacobians.colRange(9, 15).clone();
+//
+//      SVD svd(J, SVD::NO_UV);
+//      double condJJ = svd.w.at<double>(0)/svd.w.at<double>(5);
+//
+//      if (condJJ > thresh_cond)
+//        change = 0;
+//      else
+//      {
+//        Vec6d param_innov;
+//        solve(J, ex.reshape(1, (int)ex.total()), param_innov, DECOMP_SVD + DECOMP_NORMAL);
+//
+//        Vec6d param_up = extrinsics + param_innov;
+//        change = norm(param_innov)/norm(param_up);
+//        extrinsics = param_up;
+//        iter = iter + 1;
+//
+//        rvec = Mat(Vec3d(extrinsics.val));
+//        tvec = Mat(Vec3d(extrinsics.val+3));
+//      }
+//    }
+//  }
+//
+//  // This was formerly in its own anonymous namespace
+//  void AngularPolynomial::subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows)
+//  {
+//    CV_Assert(src.type() == CV_64FC1);
+//
+//    int nonzeros_cols = cv::countNonZero(cols);
+//    Mat tmp(src.rows, nonzeros_cols, CV_64FC1);
+//
+//    for (int i = 0, j = 0; i < (int)cols.size(); i++)
+//    {
+//      if (cols[i])
+//      {
+//        src.col(i).copyTo(tmp.col(j++));
+//      }
+//    }
+//
+//    int nonzeros_rows  = cv::countNonZero(rows);
+//    Mat tmp1(nonzeros_rows, nonzeros_cols, CV_64FC1);
+//    for (int i = 0, j = 0; i < (int)rows.size(); i++)
+//    {
+//      if (rows[i])
+//      {
+//        tmp.row(i).copyTo(tmp1.row(j++));
+//      }
+//    }
+//
+//    dst = tmp1.clone();
+//  }
 
 
 }
+
+
+
+
+//  //---------------------------------------------------------------------------
+//  //  IntrinsicParams
+//  //---------------------------------------------------------------------------
+//
+//  AngularPolynomialEstimable AngularPolynomialEstimable::operator+(const Mat& a)
+//  {
+//    CV_Assert(a.type() == CV_64FC1);
+//    AngularPolynomialEstimable tmp;
+//    const double* ptr = a.ptr<double>();
+//
+//    int j = 0;
+//    Vec2d newf( this->_fx    + (isEstimate[0] ? ptr[j++] : 0),
+//        this->_fy    + (isEstimate[1] ? ptr[j++] : 0) );
+//    Vec2d newc( this->_cx    + (isEstimate[2] ? ptr[j++] : 0),
+//        this->_cy    + (isEstimate[3] ? ptr[j++] : 0) );
+//    double alpha = this->_alpha   + (isEstimate[4] ? ptr[j++] : 0);
+//    Vec4d newk( this->_distCoeffs[0]    + (isEstimate[5] ? ptr[j++] : 0),
+//        this->_distCoeffs[1]    + (isEstimate[6] ? ptr[j++] : 0),
+//        this->_distCoeffs[2]    + (isEstimate[7] ? ptr[j++] : 0),
+//        this->_distCoeffs[3]    + (isEstimate[8] ? ptr[j++] : 0) );
+//
+//    tmp.set( newf, newc, alpha, newk );
+//    tmp.isEstimate = isEstimate;
+//    return tmp;
+//  }
+//
+//  AngularPolynomialEstimable& AngularPolynomialEstimable::operator =(const Mat& a)
+//  {
+//    CV_Assert(a.type() == CV_64FC1);
+//    const double* ptr = a.ptr<double>();
+//
+//    int j = 0;
+//    Vec2d newf( (isEstimate[0] ? ptr[j++] : 0),
+//        (isEstimate[1] ? ptr[j++] : 0) );
+//    Vec2d newc( (isEstimate[2] ? ptr[j++] : 0),
+//        (isEstimate[3] ? ptr[j++] : 0) );
+//    double alpha = (isEstimate[4] ? ptr[j++] : 0);
+//    Vec4d newk( (isEstimate[5] ? ptr[j++] : 0),
+//        (isEstimate[6] ? ptr[j++] : 0),
+//        (isEstimate[7] ? ptr[j++] : 0),
+//        (isEstimate[8] ? ptr[j++] : 0) );
+//
+//    set( newf, newc, alpha, newk );
+//
+//    return *this;
+//  }
+//
+//  Vec4d AngularPolynomialEstimable::normVec( void ) const
+//  {
+//    return Vec4d( _fx, _fy, _cx, _cy );
+//  }
+//
+//  double AngularPolynomialEstimable::deltaFrom( const AngularPolynomialEstimable &other ) const
+//  {
+//    return  norm( normVec(), other.normVec() ) / norm( normVec() );
+//  }
+//
+//  void AngularPolynomialEstimable::computeJacobians( const ObjectPointsVecVec &objectPoints, 
+//      const ImagePointsVecVec &imagePoints,
+//      const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
+//      const int check_cond, const double thresh_cond, 
+//      Mat& JJ2_inv, Mat& ex3)
+//  {
+//
+//    int n = (int)objectPoints.size();
+//
+//    Mat JJ3 = Mat::zeros(9 + 6 * n, 9 + 6 * n, CV_64FC1);
+//    ex3 = Mat::zeros(9 + 6 * n, 1, CV_64FC1 );
+//
+//    for (int image_idx = 0; image_idx < n; ++image_idx)
+//    {
+//      Mat image, object;
+//      Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
+//      Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+//
+//      Mat om(omc[image_idx]), T(Tc[image_idx]);
+//
+//      ImagePointsVec x;
+//      Mat jacobians;
+//      projectPoints(object, x, om, T, jacobians);
+//      Mat exkk = image - Mat(x);
+//
+//      //      cout << "Image: " << image << endl;
+//      //      cout << "reproj: " << x << endl;
+//      //
+//      //cout << "jacobians: "<< jacobians << endl;
+//      //      cout << "exkk: " << exkk << endl;
+//
+//      //Mat A(jacobians.rows, 9, CV_64FC1);
+//      //jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
+//      //jacobians.col(14).copyTo(A.col(4));
+//      //jacobians.colRange(4, 8).copyTo(A.colRange(5, 9));
+//
+//      Mat A( jacobians.colRange(0, 9).clone() );
+//      A = A.t();
+//
+//      Mat B( jacobians.colRange(9, 15).clone() );
+//      B = B.t();
+//
+//      JJ3(Rect(0, 0, 9, 9)) = JJ3(Rect(0, 0, 9, 9)) + A * A.t();
+//      JJ3(Rect(9 + 6 * image_idx, 9 + 6 * image_idx, 6, 6)) = B * B.t();
+//
+//      Mat AB = A * B.t();
+//      AB.copyTo(JJ3(Rect(9 + 6 * image_idx, 0, 6, 9)));
+//      JJ3(Rect(0, 9 + 6 * image_idx, 9, 6)) = AB.t();
+//
+//      ex3(Rect(0,0,1,9)) = ex3(Rect(0,0,1,9)) + A * exkk.reshape(1, 2 * exkk.rows);
+//      ex3(Rect(0, 9 + 6 * image_idx, 1, 6)) = B * exkk.reshape(1, 2 * exkk.rows);
+//
+//      if (check_cond)
+//      {
+//        Mat JJ_kk = B.t();
+//        SVD svd(JJ_kk, SVD::NO_UV);
+//        CV_Assert(svd.w.at<double>(0) / svd.w.at<double>(svd.w.rows - 1) < thresh_cond);
+//      }
+//    }
+//
+//    vector<int> idxs(isEstimate);
+//    idxs.insert(idxs.end(), 6 * n, 1);
+//
+//    subMatrix(JJ3, JJ3, idxs, idxs);
+//    subMatrix(ex3, ex3, std::vector<int>(1, 1), idxs);
+//    JJ2_inv = JJ3.inv();
+//  }
+//
+//  double AngularPolynomialEstimable::estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
+//      const ImagePointsVecVec &imagePoints,
+//      const vector< Vec3d > &omc, 
+//      const vector< Vec3d > &Tc,
+//      AngularPolynomialEstimable &errors, 
+//      Vec2d& std_err, 
+//      double thresh_cond, int check_cond )
+//  {
+//
+//    vector< Point2d > ex;
+//    //    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
+//
+//    for (int image_idx = 0; image_idx < (int)objectPoints.size(); ++image_idx)
+//    {
+//      //Mat object;
+//      //Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
+//      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+//
+//      Mat om(omc[image_idx]), T(Tc[image_idx]);
+//
+//      std::vector<Point2d> x;
+//      projectPoints(objectPoints[image_idx], x, 
+//          omc[image_idx], Tc[image_idx], noArray());
+//
+//      for( int ptIdx = 0; ptIdx < imagePoints[image_idx].size(); ++ptIdx ) {
+//        ex.push_back( imagePoints[image_idx][ptIdx] - x[ptIdx] );
+//      }
+//    }
+//
+//    meanStdDev(ex, noArray(), std_err);
+//    std_err *= sqrt((double)ex.size()/((double)ex.size() - 1.0));
+//
+//    // Awkward way to do this...
+//    vector< double > reshaped;
+//    for( vector< Point2d >::iterator itr = ex.begin(); itr != ex.end(); ++itr ){
+//      reshaped.push_back( itr->x ); 
+//      reshaped.push_back( itr->y );
+//    }
+//    Mat sigma_x;
+//    meanStdDev(reshaped, noArray(), sigma_x);
+//    sigma_x  *= sqrt(2.0 * (double)ex.size()/(2.0 * (double)ex.size() - 1.0));
+//
+//    Mat _JJ2_inv, ex3;
+//    computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond, thresh_cond, _JJ2_inv, ex3);
+//
+//    Mat_<double>& JJ2_inv = (Mat_<double>&)_JJ2_inv;
+//
+//    sqrt(JJ2_inv, JJ2_inv);
+//
+//    double s  = sigma_x.at<double>(0);
+//    Mat r = 3 * s * JJ2_inv.diag();
+//    errors = r;
+//
+//    double rms = 0;
+//    for (size_t i = 0; i < ex.size(); i++)
+//      rms += ex[i].x * ex[i].x + ex[i].y * ex[i].y;
+//
+//    rms /= (double)ex.size();
+//    return sqrt(rms);
+//  }
+//
+//
+//}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///// cv::fisheye::distortPoints
