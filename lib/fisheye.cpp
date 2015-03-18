@@ -170,6 +170,8 @@ namespace Distortion {
 
       Mat G =  alpha_smooth2 * JJ2_inv * ex3;
 
+      //cout << G.t() << endl;
+
       currentParam = finalParam + G;
 
       change = norm(Vec4d(currentParam.f[0], currentParam.f[1], currentParam.c[0], currentParam.c[1]) -
@@ -282,15 +284,14 @@ namespace Distortion {
   }
 
   void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-      const Affine3d& affine,
-      OutputArray jacobian)
+      const Affine3d& affine, OutputArray jacobian) const
   {
     projectPoints(objectPoints, imagePoints, affine.rvec(), affine.translation(), jacobian);
   }
 
   void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
       const Vec3d &_rvec, const Vec3d &_tvec, 
-      OutputArray jacobian)
+      OutputArray jacobian) const
   {
     // will support only 3-channel data now for points
     imagePoints.resize(objectPoints.size());

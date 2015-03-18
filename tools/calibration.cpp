@@ -262,13 +262,13 @@ class CalibrationOpts {
 
 
 static double computeReprojectionErrors(
-    const vector<vector<Point3d> >& objectPoints,
-    const vector<vector<Point2d> >& imagePoints,
-    const vector<Mat>& rvecs, const vector<Mat>& tvecs,
-    const Mat& cameraMatrix, const Mat& distCoeffs,
+    const DistortionModel &dist,
+    const Distortion::ObjectPointsVecVec &objectPoints,
+    const Distortion::ImagePointsVecVec &imagePoints,
+    const Distortion::RotVec &rvecs, const Distortion::TransVec &tvecs,
     vector<float>& perViewErrors )
 {
-  vector<Point2d> imagePoints2;
+  vector<Point2d> reprojImgPoints;
   int i, totalPoints = 0;
   double totalErr = 0, err;
   perViewErrors.resize(objectPoints.size());
@@ -278,10 +278,10 @@ static double computeReprojectionErrors(
     if( objectPoints[i].size() > 0 ) {
       //fisheye::projectPoints( Mat( objectPoints[i] ), imagePoints2, rvecs[i], tvecs[i],
       //    cameraMatrix, distCoeffs );
-      projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i],
-          cameraMatrix, distCoeffs, imagePoints2);
 
-      err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
+      dist.projectPoints( Mat( objectPoints[i] ), reprojImgPoints, rvecs[i], tvecs[i] );
+
+      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
       int n = (int)objectPoints[i].size();
       perViewErrors[i] = (float)std::sqrt(err*err/n);
       totalErr += err*err;
@@ -292,44 +292,31 @@ static double computeReprojectionErrors(
   return std::sqrt(totalErr/totalPoints);
 }
 
-static bool runCalibration( vector<vector<Point2d> > imagePoints,
-    vector< vector<Point3d> > objectPoints,
-    Size imageSize, 
-    float aspectRatio,
-    int flags, Mat& cameraMatrix, Mat& distCoeffs,
-    vector< Vec3d > &rvecs, vector< Vec3d > &tvecs,
-    vector<float>& reprojErrs,
-    double& totalAvgErr)
-{
-  //cameraMatrix = Mat::eye(3, 3, CV_64F);
-  //if( flags & CV_CALIB_FIX_ASPECT_RATIO )
-  //  cameraMatrix.at<double>(0,0) = aspectRatio;
-
-  //distCoeffs = Mat::zeros(8, 1, CV_64F);
-  //distCoeffs.create(0,0,CV_64F);
-
-  // Call the functional form so we can get the RMS error
-//  float fEstimate = max( imageSize.width, imageSize.height )/ CV_PI;
-//  Matx33d kInitial( fEstimate, 0, imageSize.width/2.0 - 0.5,
-//      0, fEstimate, imageSize.height/2.0 - 0.5,
-//      0, 0, 1. );
-  Fisheye fe;
-  double rms = fe.calibrate( objectPoints, imagePoints, 
-      imageSize, rvecs, tvecs, flags );
-
-//  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-  printf("RMS error reported by calibrateCamera: %g\n", rms);
+//static bool runCalibration( vector<vector<Point2d> > imagePoints,
+//    vector< vector<Point3d> > objectPoints,
+//    Size imageSize, 
+//    float aspectRatio,
+//    int flags, Mat& cameraMatrix, Mat& distCoeffs,
+//    vector< Vec3d > &rvecs, vector< Vec3d > &tvecs,
+//    vector<float>& reprojErrs,
+//    double& totalAvgErr)
+//{
+//  //cameraMatrix = Mat::eye(3, 3, CV_64F);
+//  //if( flags & CV_CALIB_FIX_ASPECT_RATIO )
+//  //  cameraMatrix.at<double>(0,0) = aspectRatio;
 //
-//  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+//  //distCoeffs = Mat::zeros(8, 1, CV_64F);
+//  //distCoeffs.create(0,0,CV_64F);
 //
- bool ok = true;
+//  // Call the functional form so we can get the RMS error
+////  float fEstimate = max( imageSize.width, imageSize.height )/ CV_PI;
+////  Matx33d kInitial( fEstimate, 0, imageSize.width/2.0 - 0.5,
+////      0, fEstimate, imageSize.height/2.0 - 0.5,
+////      0, 0, 1. );
+///
+//  return ok;
+//}
 //
-//  totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints,
-//      rvecs, tvecs, cameraMatrix, distCoeffs, reprojErrs);
-//
-  return ok;
-}
-
 
 static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
@@ -446,7 +433,6 @@ int main( int argc, char** argv )
 
   Size imageSize;
   float aspectRatio = 1.f;
-  Mat cameraMatrix, distCoeffs;
   bool writeExtrinsics = false, writePoints = false;
 
   vector<vector<Point2d> > imagePoints;
@@ -538,14 +524,22 @@ std::copy( detection->corners.begin(), detection->corners.end(), wldPts.begin() 
 
   string cameraFile( opts.cameraPath(mkCameraFileName() ) );
   vector< Vec3d > rvecs, tvecs;
+
+  int flags = 0;
+  Fisheye distModel;
+  double rms = distModel.calibrate( objectPoints, imagePoints, 
+      imageSize, rvecs, tvecs, flags );
+
+//  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+  printf("RMS error reported by calibrateCamera: %g\n", rms);
+  
+//  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+
+ bool ok = true;
+
   vector<float> reprojErrs;
   double totalAvgErr = 0;
-
-  int flags = CV_CALIB_ZERO_TANGENT_DIST;
-
-  bool ok = runCalibration(imagePoints, objectPoints,
-      imageSize, aspectRatio, flags, cameraMatrix, distCoeffs,
-      rvecs, tvecs, reprojErrs, totalAvgErr);
+  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
 
 //  _if( ok ) {
 //  saveCameraParams( cameraFile, imageSize,
@@ -565,44 +559,46 @@ std::copy( detection->corners.begin(), detection->corners.end(), wldPts.begin() 
 //  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
 //                      //                alpha = 1 means all source image pixels are included
 //                      //
-//  Mat optimalCameraMatrix = getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, alpha, 
+//  Mat optimalCameraMatrix = getOptimalNewCameraMatrix(distModel.mat(), distModel.distCoeffs(), imageSize, alpha, 
 //        Size(), NULL );
-//  //optimalCameraMatrix = cameraMatrix;
-//  
+
+Mat optimalCameraMatrix = distModel.mat();
+  
 //  cout << "Distortion coefficients: " << endl << distCoeffs << endl;
-//  cout << "Calculated camera matrix: " << endl << cameraMatrix << endl;
-//  cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
+  cout << "Calculated camera matrix: " << endl << distModel.mat() << endl;
+  cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
+
 //
 //  Mat map1, map2;
 //  initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), optimalCameraMatrix,
 //      imageSize, CV_16SC2, map1, map2);
 //  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
 //  //    imageSize, CV_16SC2, map1, map2);
-//
-//  for( int i = 0; i < imagesUsed.size(); ++i ) {
-//
-//    string outfile;
-//    if( objectPoints[i].size() > 0 ) {
-//      vector<Point2d> imagePoints2;
-//      Mat out;
-//      //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
-//       //   cameraMatrix, distCoeffs);
-//      projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
-//          cameraMatrix, distCoeffs, imagePoints2);
-//
-//      imagesUsed[i].img().copyTo( out );
-//      for( int j = 0; j < imagePoints[i].size(); ++j ) {
-//        circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
-//
-//        circle( out, imagePoints2[j], 5, Scalar(0,255,0), 1 );
-//      }
-//
-//
-//      outfile  = opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() );
-//      mkdir_p( outfile );
-//      imwrite(  outfile, out );
-//    }
-//   
+
+for( int i = 0; i < imagesUsed.size(); ++i ) {
+
+  string outfile;
+  if( objectPoints[i].size() > 0 ) {
+    vector<Point2d> reprojImgPoints;
+    Mat out;
+    //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
+    //   cameraMatrix, distCoeffs);
+    distModel.projectPoints(objectPoints[i], reprojImgPoints, rvecs[i], tvecs[i] );
+
+    imagesUsed[i].img().copyTo( out );
+    for( int j = 0; j < imagePoints[i].size(); ++j ) {
+      circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
+
+      circle( out, reprojImgPoints[j], 5, Scalar(0,255,0), 1 );
+    }
+
+
+    outfile  = opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() );
+    mkdir_p( outfile );
+    imwrite(  outfile, out );
+  }
+}
+   
 //    Mat rview;
 //    remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
 //

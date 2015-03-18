@@ -27,6 +27,7 @@ namespace Distortion {
   typedef vector< Point2d > ImagePointsVec;
   typedef vector< vector< Point2d > > ImagePointsVecVec;
 
+  typedef vector< Vec3d > RotVec, TransVec;
 
   class PinholeCamera {
     public:
@@ -51,12 +52,15 @@ namespace Distortion {
     public:
 
       DistortionModel( void )
-        : PinholeCamera()
-      {;}
+        : PinholeCamera() {;}
 
       DistortionModel( const Matx33d &cam )
-        : PinholeCamera( cam )
-      {;}
+        : PinholeCamera( cam ) {;}
+
+      virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
+          const Vec3d &_rvec, const Vec3d &_tvec, 
+          cv::OutputArray jacobian = cv::noArray()) const = 0;
+
 
   };
 
@@ -104,11 +108,11 @@ namespace Distortion {
 
       void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const cv::Affine3d& affine,
-          cv::OutputArray jacobian);
+          cv::OutputArray jacobian = cv::noArray()) const;
 
-      void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
+      virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, 
-          cv::OutputArray jacobian);
+          cv::OutputArray jacobian = cv::noArray() ) const;
 
       struct IntrinsicParams
       {
