@@ -22,7 +22,8 @@ namespace Distortion {
         _distCoeffs = k;
       }
 
-      virtual const std::string name( void ) const { return "AngularPolynomial"; }
+      static const std::string Name( void ) { return "AngularPolynomial"; }
+      virtual const std::string name( void ) const { return AngularPolynomial::Name(); }
 
 
 //      void set( const AngularPolynomial &other )
@@ -55,6 +56,7 @@ namespace Distortion {
           cv::OutputArray jacobian = cv::noArray() ) const;
 
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
+      static AngularPolynomial *Load( cv::FileStorage &in );
 
     protected: 
 

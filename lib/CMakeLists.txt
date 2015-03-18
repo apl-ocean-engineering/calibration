@@ -11,7 +11,8 @@ add_library( lib_camera_calibration
 	trendnet_time_code.cpp 
         camera_model.cpp
         distortion_model.cpp
-        angular_polynomial.cpp )
+        angular_polynomial.cpp
+        camera_factory.cpp )
       # fisheye.cpp
 
 target_include_directories( lib_camera_calibration 

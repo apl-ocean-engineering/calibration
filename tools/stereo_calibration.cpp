@@ -20,9 +20,12 @@
 #include "board.h"
 #include "detection.h"
 #include "image.h"
+#include "camera_factory.h"
 
 using namespace cv;
 using namespace std;
+
+using namespace Distortion;
 
 namespace fs = boost::filesystem;
 
@@ -483,44 +486,6 @@ static void saveStereoPairParams( const string& filename,
   //  }
 }
 
-class Camera
-{
-  public:
-    Camera( const string &name )
-      : _name(name), _cam(), _dist()
-    {; }
-
-    const Mat &cameraMatrix( void ) const { return _cam; }
-    const Mat &cam( void ) const { return _cam; }
-
-    const Mat &distCoeffs( void ) const { return _dist; }
-
-    bool loadCache( const string &cacheFile )
-    {
-      cout << "Loading camera file " << cacheFile << endl;
-
-      if( !file_exists( cacheFile ) ) {
-        cerr << "Cache  file \"" << cacheFile << "\" doesn't exist." << endl;
-        return false;
-      }
-
-      FileStorage cache( cacheFile, FileStorage::READ );
-
-      cache["camera_matrix"] >> _cam;
-      cache["distortion_coefficients"] >> _dist;
-
-      // Insert validation here
-      //
-
-      return true;
-    }
-
-  private:
-
-    string _name, _cache;
-    Mat _cam, _dist;
-};
-
 
 
 static string mkStereoPairFileName( void )
@@ -584,7 +549,7 @@ struct PointCalibrator {
   Point2f operator()( const Point2f &pt ) { 
     Mat v = _kinv * (Mat_<double>(3,1) << pt.x, pt.y, 1); 
     return Point2f( v.at<double>(0,0)/v.at<double>(0,2),
-                    v.at<double>(1,0)/v.at<double>(2,0) );
+        v.at<double>(1,0)/v.at<double>(2,0) );
   }
 
   Mat _kinv;
@@ -610,11 +575,11 @@ int main( int argc, char** argv )
   }
 
   // Load the camera files
-  Camera cameras[2] = { Camera( opts.cameraName[0] ),
-    Camera( opts.cameraName[1] ) };
+  Camera *cameras[2] = { CameraFactory::Load( opts.cameraLatest(0) ),
+    CameraFactory::Load( opts.cameraLatest(1) ) };
 
   for( int i = 0; i < 2; ++i ) 
-    if( !cameras[i].loadCache( opts.cameraLatest( i ) ) ) {
+    if( !cameras[i] ) {
       cerr << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
       exit(-1);
     }
@@ -699,8 +664,7 @@ int main( int argc, char** argv )
           imagePoints[imgIdx].push_back( shared.imagePoints[imgIdx] );
 
           // Generate undistorted image points as well
-          undistortPoints( shared.imagePoints[imgIdx], undistortedPoints[imgIdx], 
-              cameras[imgIdx].cam(), cameras[imgIdx].distCoeffs(), noArray(), cameras[imgIdx].cam() );
+          cameras[imgIdx]->undistortPoints( shared.imagePoints[imgIdx], undistortedPoints[imgIdx] ); 
           undistortedImagePoints[imgIdx].push_back( undistortedPoints[imgIdx] );
         }
 
@@ -708,8 +672,7 @@ int main( int argc, char** argv )
         CompositeCanvas canvas( thisPair );
 
         for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
-          undistort( thisPair[imgIdx].img(), canvas.roi[imgIdx], 
-              cameras[imgIdx].cam(), cameras[imgIdx].distCoeffs() );
+          cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
         }
 
         //thisPair[0].img().copyTo( rectified[0] );
@@ -754,8 +717,8 @@ int main( int argc, char** argv )
   //cout << "image size: " <<  imageSize << endl;
 
   // Local copies as they might be changed in the calibration
-  Mat cam[2] = { cameras[0].cam(), cameras[1].cam() };
-  Mat dist[2] = { cameras[0].distCoeffs(), cameras[1].distCoeffs() };
+  //Mat cam[2] = { cameras[0]->mat(), cameras[1]->mat() };
+  //Mat dist[2] = { cameras[0].distCoeffs(), cameras[1].distCoeffs() };
 
   cout << "cam0 before: " << endl << cam[0] << endl;
   cout << "cam1 before: " << endl << cam[1] << endl;
@@ -785,11 +748,11 @@ int main( int argc, char** argv )
       }
 
     //        for( int j = 0; j < undistortedImagePoints[k][i].size(); ++j ) 
-//        {
-//          // Currently unsightly...
-//          Mat uncal( camInv[k]  * Mat( Vec3d( undistortedImagePoints[k][i][j].x, undistortedImagePoints[k][i][j].y, 1.0 ) ) );
-//          allimgpt[k].push_back(  Point2f( uncal.at<double>(0,0) / uncal.at<double>(2,0), uncal.at<double>(1,0) / uncal.at<double>(2,0) ) );
-//        }
+    //        {
+    //          // Currently unsightly...
+    //          Mat uncal( camInv[k]  * Mat( Vec3d( undistortedImagePoints[k][i][j].x, undistortedImagePoints[k][i][j].y, 1.0 ) ) );
+    //          allimgpt[k].push_back(  Point2f( uncal.at<double>(0,0) / uncal.at<double>(2,0), uncal.at<double>(1,0) / uncal.at<double>(2,0) ) );
+    //        }
 
     Mat status, estE;
     estE = findFundamentalMat(Mat(calimgpt[0]), Mat(calimgpt[1]), FM_RANSAC, 3. / 1600., 0.99, status);
@@ -843,8 +806,8 @@ int main( int argc, char** argv )
     // Disambiguate the four solutions by:
     // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
     Mat W( Matx33d(0,-1,0,
-        1,0,0,
-        0,0,1) );
+          1,0,0,
+          0,0,1) );
     Mat u( svdE.u ), vt( svdE.vt );
     if( determinant(u) < 0 )  u*= -1;
     if( determinant(vt) < 0 ) vt *= -1;

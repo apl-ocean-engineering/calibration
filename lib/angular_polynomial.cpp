@@ -336,16 +336,16 @@ namespace Distortion {
       Vec3d Xworld( objectPoints[i] );
       Vec3d Xcam( aff*Xworld );
 
-//      double theta = atan2( sqrt(  Xcam[0]*Xcam[0] + Xcam[1]*Xcam[1] ), Xcam[2] );
-//      double psi = atan2( Xcam[1], Xcam[0] );
-//
-//      double theta2 = theta*theta, 
-//             theta3 = theta*theta2, 
-//             theta5 = theta3*theta2,
-//             theta7 = theta5*theta2, 
-//             theta9 = theta7*theta2;
-//
-//      double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
+      //      double theta = atan2( sqrt(  Xcam[0]*Xcam[0] + Xcam[1]*Xcam[1] ), Xcam[2] );
+      //      double psi = atan2( Xcam[1], Xcam[0] );
+      //
+      //      double theta2 = theta*theta, 
+      //             theta3 = theta*theta2, 
+      //             theta5 = theta3*theta2,
+      //             theta7 = theta5*theta2, 
+      //             theta9 = theta7*theta2;
+      //
+      //      double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
 
       //double inv_r = r > 1e-8 ? 1.0/r : 1;
       //double cdist = r > 1e-8 ? theta_d * inv_r : 1;
@@ -448,7 +448,7 @@ namespace Distortion {
       //      }
     }
   }
-  
+
 
   Vec2d AngularPolynomial::distort( const Vec3d &w ) const
   {
@@ -463,25 +463,25 @@ namespace Distortion {
 
   Vec2d AngularPolynomial::undistort( const Vec2d &pw ) const
   {
-      double scale = 1.0;
+    double scale = 1.0;
 
-      double theta_d = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
-      if (theta_d > 1e-8)
+    double theta_d = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
+    if (theta_d > 1e-8)
+    {
+      // compensate distortion iteratively
+      double theta = theta_d;
+      for(int j = 0; j < 10; j++ )
       {
-        // compensate distortion iteratively
-        double theta = theta_d;
-        for(int j = 0; j < 10; j++ )
-        {
-          double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta6*theta2;
-          theta = theta_d / (1 + _distCoeffs[0] * theta2 + _distCoeffs[1] * theta4 + _distCoeffs[2] * theta6 + _distCoeffs[3] * theta8);
-        }
-
-        scale = std::tan(theta) / theta_d;
+        double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta6*theta2;
+        theta = theta_d / (1 + _distCoeffs[0] * theta2 + _distCoeffs[1] * theta4 + _distCoeffs[2] * theta6 + _distCoeffs[3] * theta8);
       }
 
-      Vec2d pu = pw * scale; //undistorted point
+      scale = std::tan(theta) / theta_d;
+    }
 
-      return pu;
+    Vec2d pu = pw * scale; //undistorted point
+
+    return pu;
   }
 
 
@@ -698,11 +698,30 @@ namespace Distortion {
   }
 
 
-      FileStorage &AngularPolynomial::write( FileStorage &out ) const
-      {
-        DistortionModel::write( out );
-        out << "distortion_coefficients" << _distCoeffs;
-      }
+  FileStorage &AngularPolynomial::write( FileStorage &out ) const
+  {
+    DistortionModel::write( out );
+    out << "distortion_coefficients" << _distCoeffs;
+
+    return out;
+  }
+
+  AngularPolynomial *AngularPolynomial::Load( cv::FileStorage &in )
+  {
+    Mat kmat, distmat;
+
+    in["camera_matrix"] >> kmat;
+    in["distortion_coefficients"] >> distmat;
+
+    Matx33d k;
+    Vec4d dist;
+
+    kmat.copyTo( k, CV_64F );
+    distmat.copyTo( dist, CV_64F );
+
+    return new AngularPolynomial( dist, k );
+
+  }
 }
 
 

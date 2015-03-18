@@ -8,7 +8,7 @@ namespace Distortion {
   using namespace cv;
   using namespace std;
 
-  void DistortionModel::undistortImage( const Mat &distorted, Mat &undistorted,
+  void Camera::undistortImage( const Mat &distorted, Mat &undistorted,
       const Mat &Knew, const Size& new_size)
   {
     Size size = new_size.area() != 0 ? new_size : distorted.size();
@@ -18,7 +18,7 @@ namespace Distortion {
     remap(distorted, undistorted, map1, map2, INTER_LINEAR, BORDER_CONSTANT);
   }
 
-void DistortionModel::initUndistortRectifyMap( const Mat &R, const Mat &P,
+void Camera::initUndistortRectifyMap( const Mat &R, const Mat &P,
     const cv::Size& size, int m1type, Mat &map1, Mat &map2 )
 {
     CV_Assert( m1type == CV_16SC2 || m1type == CV_32F || m1type <=0 );
@@ -80,7 +80,7 @@ void DistortionModel::initUndistortRectifyMap( const Mat &R, const Mat &P,
     }
 }
 
-  void DistortionModel::undistortPoints( const vector< Point2d > &distorted, 
+  void Camera::undistortPoints( const vector< Point2d > &distorted, 
       vector< Point2d > &undistorted, 
       const Mat &R, const Mat &P)
   {
@@ -89,9 +89,6 @@ void DistortionModel::initUndistortRectifyMap( const Mat &R, const Mat &P,
 
     CV_Assert(P.empty() || P.size() == Size(3, 3) || P.size() == Size(4, 3));
     CV_Assert(R.empty() || R.size() == Size(3, 3) ); //|| R.total() * R.channels() == 3);
-
-    Vec2d finv( 1.0/_fx, 1.0/_fy );
-    Vec2d c( _cx, _cy );
 
     // I believe the original supported axis-angle rotation vectors as well
     cv::Matx33d RR( Matx33d::eye() );
