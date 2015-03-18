@@ -576,28 +576,28 @@ int main( int argc, char** argv )
 
       Mat rview;
       remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
-  //
-  //    const int N = 9;
-  //    int x, y, k;
-  //    vector< Point2d > pts, undPts;
-  //
-  //    for( y = k = 0; y < N; y++ )
-  //      for( x = 0; x < N; x++ )
-  //        pts.push_back( Point2d((float)x*imageSize.width/(N-1),
-  //                           (float)y*imageSize.height/(N-1)) );
-  //
-  //    myUndistortPoints(pts, undPts, cameraMatrix, distCoeffs, noArray(), optimalCameraMatrix );
-  //
-  //    for( y = k = 0; y < N; y++ )
-  //      for( x = 0; x < N; x++ ) {
-  ////        cout << pts[k] <<  "  " << undPts[k] << endl;
-  //        Point2d thisPt( undPts[k++] );
-  //        if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
-  //            thisPt.y >=0 && thisPt.y <= rview.size().height )
-  //          circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
-  //      }
-  //
-  //
+  
+      const int N = 9;
+      int x, y, k;
+      vector< Point2d > pts, undPts;
+  
+      for( y = k = 0; y < N; y++ )
+        for( x = 0; x < N; x++ )
+          pts.push_back( Point2d((float)x*imageSize.width/(N-1),
+                             (float)y*imageSize.height/(N-1)) );
+  
+      distModel.undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
+  
+      for( y = k = 0; y < N; y++ )
+        for( x = 0; x < N; x++ ) {
+  //        cout << pts[k] <<  "  " << undPts[k] << endl;
+          Point2d thisPt( undPts[k++] );
+          if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
+              thisPt.y >=0 && thisPt.y <= rview.size().height )
+            circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
+        }
+  
+  
       outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
       mkdir_p( outfile );
       imwrite(  outfile, rview );

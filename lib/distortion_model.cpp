@@ -94,18 +94,15 @@ void DistortionModel::initUndistortRectifyMap( const Mat &R, const Mat &P,
     Vec2d c( _cx, _cy );
 
     // I believe the original supported axis-angle rotation vectors as well
-    cv::Matx33d RR;
-    R.convertTo( RR, CV_64F );
-
-    // = cv::Matx33d::eye();
-    // if (!R.empty() && R.total() * R.channels() == 3)
-    // {
-    //   cv::Vec3d rvec;
-    //   R.convertTo(rvec, CV_64F);
-    //   RR = cv::Affine3d(rvec).rotation();
-    // }
-    // else if (!R.empty() && R.size() == Size(3, 3))
-    //   R.getMat().convertTo(RR, CV_64F);
+    cv::Matx33d RR( Matx33d::eye() );
+    if (!R.empty() && R.total() * R.channels() == 3)
+    {
+      cv::Vec3d rvec;
+      R.convertTo(rvec, CV_64F);
+      RR = cv::Affine3d(rvec).rotation();
+    }
+    else if (!R.empty() && R.size() == Size(3, 3))
+      R.convertTo(RR, CV_64F);
 
     if(!P.empty())
     {
