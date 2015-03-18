@@ -501,7 +501,7 @@ int main( int argc, char** argv )
   string cameraFile( opts.cameraPath(mkCameraFileName() ) );
   vector< Vec3d > rvecs, tvecs;
 
-  int flags = 0;
+  int flags =  PinholeCamera::CALIB_FIX_SKEW;
   AngularPolynomial distModel;
   double rms = distModel.calibrate( objectPoints, imagePoints, 
       imageSize, rvecs, tvecs, flags );

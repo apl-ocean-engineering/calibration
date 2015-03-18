@@ -122,6 +122,7 @@ namespace Distortion {
 
     template <typename T>
       bool operator()(const T* const camera,
+          const T* const alpha,
           const T* const pose, 
           T* residuals) const
       {
@@ -129,11 +130,13 @@ namespace Distortion {
         //    3 angles
         //    3 translations
         //
-        // camera i s 9-vector
+        // alpha is a 1-vector (separate so it can be set Constant/Variable)
+        //
+        // camera i s 8-vector
         //    2 focal length
         //    2 camera center
-        //    1 alpha
         //    4 distortion params
+        //
         //
         // camera[0,1,2] are the angle-axis rotation.
         T point[3] = { T( worldX ), 
@@ -141,7 +144,6 @@ namespace Distortion {
                        T( 0.0 ) };
         T p[3];
         ceres::AngleAxisRotatePoint(pose, point, p);
-        // camera[3,4,5] are the translation.
         p[0] += pose[3]; p[1] += pose[4]; p[2] += pose[5];
 
         T theta = atan2( sqrt( p[0]*p[0] + p[1]*p[1] ), p[2]  );
@@ -151,36 +153,23 @@ namespace Distortion {
         const T &fy = camera[1];
         const T &cx = camera[2];
         const T &cy = camera[3];
-        const T &alpha = camera[4];
-        const T &k1 = camera[5];
-        const T &k2 = camera[6];
-        const T &k3 = camera[7];
-        const T &k4 = camera[8];
+        const T &k1 = camera[4];
+        const T &k2 = camera[5];
+        const T &k3 = camera[6];
+        const T &k4 = camera[7];
 
-        T theta3 =  theta*theta*theta;
-        T theta5 = theta3*theta*theta;
-        T theta7 = theta5*theta*theta;
-        T theta9 = theta7*theta*theta;
+        T theta2 =  theta*theta;
+        T theta3 =  theta*theta2;
+        T theta5 = theta3*theta2;
+        T theta7 = theta5*theta2;
+        T theta9 = theta7*theta2;
 
         T thetaDist = theta + k1*theta3 + k2 *theta5 + k3*theta7 + k4*theta9;
-
-        //        // Compute the center of distortion. The sign change comes from
-        //        // the camera model that Noah Snavely's Bundler assumes, whereby
-        //        // the camera coordinate system has a negative z axis.
-        //        //
-        //        T xp = - p[0] / p[2];
-        //        T yp = - p[1] / p[2];
-        //
-        //        // Apply second and fourth order radial distortion.
-        //        const T& l1 = camera[7];
-        //        const T& l2 = camera[8];
-        //        T r2 = xp*xp + yp*yp;
-        //        T distortion = T(1.0) + r2  * (l1 + l2  * r2);
 
         T xdn = thetaDist * cos( psi ),
           ydn = thetaDist * sin( psi );
 
-        T predictedX = fx*(xdn + alpha*ydn) + cx;
+        T predictedX = fx*(xdn + alpha[0]*ydn) + cx;
         T predictedY = fy* ydn              + cy;
 
         // The error is the difference between the predicted and observed position.
@@ -193,7 +182,7 @@ namespace Distortion {
     // the client code.
     static ceres::CostFunction* Create(const double observed_x, const double observed_y, 
         const double world_x, const double world_y ) {
-      return (new ceres::AutoDiffCostFunction<CalibReprojectionError, 2, 9, 6>(
+      return (new ceres::AutoDiffCostFunction<CalibReprojectionError, 2, 8, 1, 6>(
             new CalibReprojectionError(observed_x, observed_y, world_x, world_y)));
     }
 
@@ -223,45 +212,44 @@ namespace Distortion {
     if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
       setCamera( InitialCameraEstimate( image_size ) );
 
-    Matx33d _K( matx() );
+//    Matx33d _K( matx() );
 
     // The current values of the instance are always used as an initial guess, either
     // they've been set by the user or they're default values.
-    AngularPolynomialEstimable finalParam( *this );
-    AngularPolynomialEstimable currentParam;
-    AngularPolynomialEstimable errors;
-
-    finalParam.isEstimate[0] = 1;
-    finalParam.isEstimate[1] = 1;
-    finalParam.isEstimate[2] = 1;
-    finalParam.isEstimate[3] = 1;
-    finalParam.isEstimate[4] = flags & CALIB_FIX_SKEW ? 0 : 1;
-    finalParam.isEstimate[5] = flags & CALIB_FIX_K1 ? 0 : 1;
-    finalParam.isEstimate[6] = flags & CALIB_FIX_K2 ? 0 : 1;
-    finalParam.isEstimate[7] = flags & CALIB_FIX_K3 ? 0 : 1;
-    finalParam.isEstimate[8] = flags & CALIB_FIX_K4 ? 0 : 1;
+//    AngularPolynomialEstimable finalParam( *this );
+//    AngularPolynomialEstimable currentParam;
+//    AngularPolynomialEstimable errors;
+//
+//    finalParam.isEstimate[0] = 1;
+//    finalParam.isEstimate[1] = 1;
+//    finalParam.isEstimate[2] = 1;
+//    finalParam.isEstimate[3] = 1;
+//    finalParam.isEstimate[4] = flags & CALIB_FIX_SKEW ? 0 : 1;
+//    finalParam.isEstimate[5] = flags & CALIB_FIX_K1 ? 0 : 1;
+//    finalParam.isEstimate[6] = flags & CALIB_FIX_K2 ? 0 : 1;
+//    finalParam.isEstimate[7] = flags & CALIB_FIX_K3 ? 0 : 1;
+//    finalParam.isEstimate[8] = flags & CALIB_FIX_K4 ? 0 : 1;
 
     const int recompute_extrinsic = flags & CALIB_RECOMPUTE_EXTRINSIC ? 1: 0;
     const int check_cond = flags & CALIB_CHECK_COND ? 1 : 0;
 
-    const double alpha_smooth = 0.4;
+//    const double alpha_smooth = 0.4;
     const double thresh_cond = 1e6;
-    double change = 1;
-    Vec2d err_std;
-
-    errors.isEstimate = finalParam.isEstimate;
+//    double change = 1;
+//    Vec2d err_std;
+//
+//    errors.isEstimate = finalParam.isEstimate;
 
     std::vector<Vec3d> omc(objectPoints.size()), Tc(objectPoints.size());
 
-    finalParam.calibrateExtrinsics(objectPoints, imagePoints, check_cond, thresh_cond, omc, Tc);
+    calibrateExtrinsics(objectPoints, imagePoints, check_cond, thresh_cond, omc, Tc);
 
-    double camera[9] = { finalParam.fx(), finalParam.fy(),
-      finalParam.cx(), finalParam.cy(),
-      finalParam.alpha(),
-      finalParam.distCoeffs()[0],
-      finalParam.distCoeffs()[1],
-      finalParam.distCoeffs()[2],
-      finalParam.distCoeffs()[3] };
+    double camera[9] = { _fx, _fy, _cx, _cy,
+      _distCoeffs[0],
+      _distCoeffs[1],
+      _distCoeffs[2],
+      _distCoeffs[3] };
+    double alpha = _alpha;
 
     double *pose = new double[ objectPoints.size() * 6];
 
@@ -281,13 +269,16 @@ namespace Distortion {
       for( int j = 0; j < imagePoints[i].size(); ++j ) {
         ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j].x, imagePoints[i][j].y,
             objectPoints[i][j].x, objectPoints[i][j].y );
-        problem.AddResidualBlock( costFunction, NULL, camera, p );
+        problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
       }
     }
+
+    if( flags & CALIB_FIX_SKEW ) problem.SetParameterBlockConstant( &alpha );
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.minimizer_progress_to_stdout = true;
+
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << "\n";
@@ -308,7 +299,7 @@ namespace Distortion {
 
     delete[] pose;
 
-    set(camera);
+    set(camera, alpha);
 
     double rms = 0;
 

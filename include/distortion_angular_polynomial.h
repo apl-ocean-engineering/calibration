@@ -11,17 +11,6 @@ namespace Distortion {
   class AngularPolynomial : public DistortionModel {
     public:
 
-      enum{
-        CALIB_RECOMPUTE_EXTRINSIC   = (1<<1),
-        CALIB_CHECK_COND            = (1<<2),
-        CALIB_FIX_SKEW              = (1<<3),
-        CALIB_FIX_K1                = (1<<4),
-        CALIB_FIX_K2                = (1<<5),
-        CALIB_FIX_K3                = (1<<6),
-        CALIB_FIX_K4                = (1<<7),
-        CALIB_FIX_INTRINSIC         = (1<<8)
-      };
-
 
       AngularPolynomial( void );
       AngularPolynomial( const Vec4d &distCoeffs );
@@ -36,10 +25,10 @@ namespace Distortion {
       void set( const AngularPolynomial &other )
       { set( other.f(), other.c(), other.alpha(), other.distCoeffs() ); }
 
-      void set( const double *c )
+      void set( const double *c, const double alpha )
       {
-        setCamera( c[0], c[1], c[2], c[3], c[4] );
-        _distCoeffs = Vec4d( c[5], c[6], c[7], c[8] );
+        setCamera( c[0], c[1], c[2], c[3], alpha );
+        _distCoeffs = Vec4d( &c[4] ); // c[4], c[5], c[6], c[8] );
       }
 
 

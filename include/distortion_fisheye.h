@@ -10,18 +10,6 @@ namespace Distortion {
   class Fisheye : public DistortionModel {
     public:
 
-      enum{
-        CALIB_RECOMPUTE_EXTRINSIC   = (1<<1),
-        CALIB_CHECK_COND            = (1<<2),
-        CALIB_FIX_SKEW              = (1<<3),
-        CALIB_FIX_K1                = (1<<4),
-        CALIB_FIX_K2                = (1<<5),
-        CALIB_FIX_K3                = (1<<6),
-        CALIB_FIX_K4                = (1<<7),
-        CALIB_FIX_INTRINSIC         = (1<<8)
-      };
-
-
       Fisheye( void );
       Fisheye( const Vec4d &distCoeffs );
       Fisheye( const Vec4d &distCoeffs, const Matx33d &cam );

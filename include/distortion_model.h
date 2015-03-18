@@ -31,6 +31,16 @@ namespace Distortion {
 
   class PinholeCamera {
     public:
+
+      enum{
+        CALIB_RECOMPUTE_EXTRINSIC   = (1<<0),
+        CALIB_CHECK_COND            = (1<<1),
+        CALIB_FIX_SKEW              = (1<<2),
+        CALIB_FIX_INTRINSIC         = (1<<3)
+      };
+      static const int CALIB_FLAG_OFFSET = 4;
+
+
       PinholeCamera( void );
       PinholeCamera( const Matx33d &k );
       PinholeCamera( const Mat &k );
