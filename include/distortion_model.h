@@ -41,6 +41,12 @@ namespace Distortion {
       Matx33d matx( void ) const;
       Mat mat( void ) const;
 
+      Vec2d  f( void ) const      { return Vec2d( _fx, _fy ); }
+      double fx( void ) const     { return _fx; }
+      double fy( void ) const     { return _fy; }
+      Vec2d c( void ) const       { return Vec2d(_cx,_cy); }
+      double alpha( void) const   { return _alpha; }
+
     protected:
 
       double _fx, _fy, _alpha, _cx, _cy;
@@ -61,125 +67,6 @@ namespace Distortion {
           const Vec3d &_rvec, const Vec3d &_tvec, 
           cv::OutputArray jacobian = cv::noArray()) const = 0;
 
-
-  };
-
-
-
-  class Fisheye : public DistortionModel {
-    public:
-
-      enum{
-        CALIB_RECOMPUTE_EXTRINSIC   = (1<<1),
-        CALIB_CHECK_COND            = (1<<2),
-        CALIB_FIX_SKEW              = (1<<3),
-        CALIB_FIX_K1                = (1<<4),
-        CALIB_FIX_K2                = (1<<5),
-        CALIB_FIX_K3                = (1<<6),
-        CALIB_FIX_K4                = (1<<7),
-        CALIB_FIX_INTRINSIC         = (1<<8)
-      };
-
-
-      Fisheye( void );
-      Fisheye( const Vec4d &distCoeffs );
-      Fisheye( const Vec4d &distCoeffs, const Matx33d &cam );
-
-      static Fisheye Calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
-
-      double calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
-
-
-
-      void undistortPoints( const vector< Point2d > &distorted, 
-          vector< Point2d > &undistorted, 
-          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
-          const Mat &P = cv::Mat());
-
-      void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-          const cv::Affine3d& affine,
-          cv::OutputArray jacobian = cv::noArray()) const;
-
-      virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, 
-          cv::OutputArray jacobian = cv::noArray() ) const;
-
-      struct IntrinsicParams
-      {
-        Vec2d f;
-        Vec2d c;
-        Vec4d k;
-        double alpha;
-        std::vector<int> isEstimate;
-
-        IntrinsicParams();
-        IntrinsicParams(Vec2d f, Vec2d c, Vec4d k, double alpha = 0);
-        IntrinsicParams operator+(const Mat& a);
-        IntrinsicParams& operator =(const Mat& a);
-
-        void init(const cv::Vec2d& f, const cv::Vec2d& c, const cv::Vec4d& k = Vec4d(0,0,0,0), const double& alpha = 0);
-      };
-
-
-    protected: 
-
-  static Matx33d InitialCameraEstimate( const Size &image_size );
-
-      void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
-          const ImagePointsVecVec &imagePoints,
-          const IntrinsicParams& param, const int check_cond,
-          const double thresh_cond,
-          vector< Vec3d > &omc, 
-          vector< Vec3d > &Tc );
-
-      void computeJacobians( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints,
-          const IntrinsicParams& param, 
-          const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
-          const int check_cond, const double thresh_cond, 
-          Mat& JJ2_inv, Mat& ex3);
-
-      double estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints,
-          const IntrinsicParams& params, 
-          const vector< Vec3d > &omc, 
-          const vector< Vec3d > &Tc,
-          IntrinsicParams& errors, 
-          Vec2d& std_err, 
-          double thresh_cond, int check_cond );
-
-      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-          const IntrinsicParams& param, Mat& omckk, Mat& Tckk);
-
-      Mat computeHomography(Mat m, Mat M);
-
-      void normalizePixels(const ImagePointsVec& imagePoints, const IntrinsicParams& param, Mat &normalized);
-
-      void computeExtrinsicRefine(const ImagePointsVec& imagePoints, const ObjectPointsVec& objectPoints, 
-          Mat &rvec, Mat &tvec, 
-          Mat &J, const int MaxIter,
-          const IntrinsicParams& param, const double thresh_cond);
-
-      // Internal functions for projection points given an IntrinsicParams
-      void projectPoints(const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints,
-          const Vec3d &_rvec, const Vec3d &_tvec,
-          const IntrinsicParams& param, cv::OutputArray jacobian);
-
-      // This was formerly in its own anonymous namespace.
-      // Maybe it should still be there...
-      void subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows);
-
-      cv::Vec4d _distCoeffs;
 
   };
 

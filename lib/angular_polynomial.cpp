@@ -1,5 +1,6 @@
 //
-// Refactoring the OpenCV distortion model, starting with the Fisheye model.
+// Refactoring the OpenCV distortion model, starting with the AngularPolynomial model.
+// Based on a heavily hacked version of fisheye.cpp from OpenCV.
 //
 /*M///////////////////////////////////////////////////////////////////////////////////////
 //
@@ -44,7 +45,7 @@
 //M*/
 
 
-#include "distortion_fisheye.h"
+#include "distortion_angular_polynomial.h"
 
 #include <opencv2/calib3d/calib3d.hpp>
 
@@ -52,9 +53,9 @@
 using namespace std;
 
 
-static std::ostream& operator <<(std::ostream& stream, const Distortion::Fisheye::IntrinsicParams &p )
+static std::ostream& operator <<(std::ostream& stream, const Distortion::AngularPolynomial &p )
 {
-  stream << p.f[0] << " " << p.f[1] << ", " << p.c[0] << " " << p.c[1] << ", " << p.alpha << ", " << p.k[0] << " " << p.k[1] << " " << p.k[2] << " " << p.k[3];
+  stream << p.f()[0] << " " << p.f()[1] << ", " << p.c()[0] << " " << p.c()[1] << ", " << p.alpha() << ", " << p.distCoeffs()[0] << " " << p.distCoeffs()[1] << " " << p.distCoeffs()[2] << " " << p.distCoeffs()[3];
 return stream;
 }
 
@@ -72,19 +73,19 @@ namespace Distortion {
   using namespace cv;
   using namespace std;
 
-  Fisheye::Fisheye( void )
+  AngularPolynomial::AngularPolynomial( void )
     : DistortionModel(), _distCoeffs( 0.0, 0.0, 0.0, 0.0 )
   {;}
 
-  Fisheye::Fisheye( const Vec4d &distCoeffs )
+  AngularPolynomial::AngularPolynomial( const Vec4d &distCoeffs )
     : DistortionModel(), _distCoeffs( distCoeffs )
   {;}
 
-  Fisheye::Fisheye( const Vec4d &distCoeffs, const Matx33d &cam )
+  AngularPolynomial::AngularPolynomial( const Vec4d &distCoeffs, const Matx33d &cam )
     : DistortionModel( cam ), _distCoeffs( distCoeffs )
   {;}
 
-  Fisheye Fisheye::Calibrate( 
+  AngularPolynomial AngularPolynomial::Calibrate( 
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
       const Size& image_size,
@@ -93,12 +94,12 @@ namespace Distortion {
       int flags, 
       cv::TermCriteria criteria)
   {
-    Fisheye fe( Vec4d(0.0, 0.0, 0.0, 0.0), InitialCameraEstimate( image_size ) );
+    AngularPolynomial fe( Vec4d(0.0, 0.0, 0.0, 0.0), InitialCameraEstimate( image_size ) );
     fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
   }
 
-  Matx33d Fisheye::InitialCameraEstimate( const Size &image_size )
+  Matx33d AngularPolynomial::InitialCameraEstimate( const Size &image_size )
   {
     float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
     // If you're calling the static function, you aren't providing an initial estimate
@@ -109,7 +110,7 @@ namespace Distortion {
 
 
 
-  double Fisheye::calibrate(
+  double AngularPolynomial::calibrate(
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
       const Size& image_size,
@@ -133,9 +134,9 @@ namespace Distortion {
 
     // The current values of the instance are always used as an initial guess, either
     // they've been set by the user or they're default values.
-    IntrinsicParams finalParam( Vec2d( _fx, _fy ), Vec2d( _cx, _cy ), _distCoeffs, _alpha );
-    IntrinsicParams currentParam;
-    IntrinsicParams errors;
+    AngularPolynomialEstimable finalParam( *this );
+    AngularPolynomialEstimable currentParam;
+    AngularPolynomialEstimable errors;
 
     finalParam.isEstimate[0] = 1;
     finalParam.isEstimate[1] = 1;
@@ -159,7 +160,7 @@ namespace Distortion {
 
     std::vector<Vec3d> omc(objectPoints.size()), Tc(objectPoints.size());
 
-    calibrateExtrinsics(objectPoints, imagePoints, finalParam, check_cond, thresh_cond, omc, Tc);
+    finalParam.calibrateExtrinsics(objectPoints, imagePoints, check_cond, thresh_cond, omc, Tc);
 
     //-------------------------------Optimization
     for(int iter = 0; ; ++iter)
@@ -172,7 +173,7 @@ namespace Distortion {
       double alpha_smooth2 = 1 - std::pow(1 - alpha_smooth, iter + 1.0);
 
       Mat JJ2_inv, ex3;
-      computeJacobians(objectPoints, imagePoints, finalParam, omc, Tc, check_cond,thresh_cond, JJ2_inv, ex3);
+      finalParam.computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond,thresh_cond, JJ2_inv, ex3);
 
       Mat G( alpha_smooth2 * JJ2_inv * ex3 );
 
@@ -181,10 +182,9 @@ namespace Distortion {
       //cout << ex3 << endl;
 
       currentParam = finalParam + G;
+      
+      change = currentParam.deltaFrom( finalParam );
 
-      change = norm(Vec4d(currentParam.f[0], currentParam.f[1], currentParam.c[0], currentParam.c[1]) -
-          Vec4d(finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1]))
-        / norm(Vec4d(currentParam.f[0], currentParam.f[1], currentParam.c[0], currentParam.c[1]));
 
       cout << "currentParam: " << currentParam << endl;
 
@@ -192,18 +192,20 @@ namespace Distortion {
 
       if (recompute_extrinsic)
       {
-        calibrateExtrinsics(objectPoints,  imagePoints, finalParam, check_cond,
+        finalParam.calibrateExtrinsics(objectPoints,  imagePoints, check_cond,
             thresh_cond, omc, Tc);
       }
     }
 
     //-------------------------------Validation
-    double rms = estimateUncertainties(objectPoints, imagePoints, finalParam,  omc, Tc, errors, err_std, thresh_cond,
+    double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
         check_cond );
 
     //-------------------------------
-    setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
-    _distCoeffs = finalParam.k;
+    set( finalParam );
+
+    //setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
+    //_distCoeffs = finalParam.k;
 
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;
@@ -218,7 +220,7 @@ namespace Distortion {
     return rms;
   }
 
-  void Fisheye::undistortPoints( const vector< Point2d > &distorted, 
+  void AngularPolynomial::undistortPoints( const vector< Point2d > &distorted, 
       vector< Point2d > &undistorted, 
       const Mat &R, const Mat &P)
   {
@@ -286,13 +288,13 @@ namespace Distortion {
 
   }
 
-  void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
+  void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
       const Affine3d& affine, OutputArray jacobian) const
   {
     projectPoints(objectPoints, imagePoints, affine.rvec(), affine.translation(), jacobian);
   }
 
-  void Fisheye::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
+  void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
       const Vec3d &_rvec, const Vec3d &_tvec, 
       OutputArray jacobian) const
   {
@@ -461,9 +463,9 @@ namespace Distortion {
   //  Protected / internal functions
   //===========================================================================
 
-  void Fisheye::calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
+  void AngularPolynomial::calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
       const ImagePointsVecVec &imagePoints,
-      const IntrinsicParams& param, const int check_cond,
+      const int check_cond,
       const double thresh_cond,
       vector< Vec3d > &omc, 
       vector< Vec3d > &Tc )
@@ -480,10 +482,10 @@ namespace Distortion {
       //Mat(objectPoints[image_idx]).convertTo(object,  CV_64FC3);
       //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
 
-      initExtrinsics(imagePoints[image_idx], objectPoints[image_idx], param, omckk, Tckk);
+      initExtrinsics(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk);
 
       computeExtrinsicRefine(imagePoints[image_idx], objectPoints[image_idx], omckk, Tckk, JJ_kk, 
-          maxIter, param, thresh_cond);
+          maxIter, thresh_cond);
 
       if (check_cond)
       {
@@ -498,138 +500,7 @@ namespace Distortion {
     }
   }
 
-  void Fisheye::computeJacobians( const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints,
-      const IntrinsicParams& param, 
-      const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
-      const int check_cond, const double thresh_cond, 
-      Mat& JJ2_inv, Mat& ex3)
-  {
-
-    int n = (int)objectPoints.size();
-
-    Mat JJ3 = Mat::zeros(9 + 6 * n, 9 + 6 * n, CV_64FC1);
-    ex3 = Mat::zeros(9 + 6 * n, 1, CV_64FC1 );
-
-    for (int image_idx = 0; image_idx < n; ++image_idx)
-    {
-      Mat image, object;
-      Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
-      Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
-
-      Mat om(omc[image_idx]), T(Tc[image_idx]);
-
-      ImagePointsVec x;
-      Mat jacobians;
-      projectPoints(object, x, om, T, param, jacobians);
-      Mat exkk = image - Mat(x);
-
-//      cout << "Image: " << image << endl;
-//      cout << "reproj: " << x << endl;
-//
-      //cout << "jacobians: "<< jacobians << endl;
-//      cout << "exkk: " << exkk << endl;
-
-      //Mat A(jacobians.rows, 9, CV_64FC1);
-      //jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
-      //jacobians.col(14).copyTo(A.col(4));
-      //jacobians.colRange(4, 8).copyTo(A.colRange(5, 9));
-
-      Mat A( jacobians.colRange(0, 9).clone() );
-      A = A.t();
-
-      Mat B( jacobians.colRange(9, 15).clone() );
-      B = B.t();
-
-      JJ3(Rect(0, 0, 9, 9)) = JJ3(Rect(0, 0, 9, 9)) + A * A.t();
-      JJ3(Rect(9 + 6 * image_idx, 9 + 6 * image_idx, 6, 6)) = B * B.t();
-
-      Mat AB = A * B.t();
-      AB.copyTo(JJ3(Rect(9 + 6 * image_idx, 0, 6, 9)));
-      JJ3(Rect(0, 9 + 6 * image_idx, 9, 6)) = AB.t();
-
-      ex3(Rect(0,0,1,9)) = ex3(Rect(0,0,1,9)) + A * exkk.reshape(1, 2 * exkk.rows);
-      ex3(Rect(0, 9 + 6 * image_idx, 1, 6)) = B * exkk.reshape(1, 2 * exkk.rows);
-
-      if (check_cond)
-      {
-        Mat JJ_kk = B.t();
-        SVD svd(JJ_kk, SVD::NO_UV);
-        CV_Assert(svd.w.at<double>(0) / svd.w.at<double>(svd.w.rows - 1) < thresh_cond);
-      }
-    }
-
-    vector<int> idxs(param.isEstimate);
-    idxs.insert(idxs.end(), 6 * n, 1);
-
-    subMatrix(JJ3, JJ3, idxs, idxs);
-    subMatrix(ex3, ex3, std::vector<int>(1, 1), idxs);
-    JJ2_inv = JJ3.inv();
-  }
-
-  double Fisheye::estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints,
-      const IntrinsicParams& params, 
-      const vector< Vec3d > &omc, 
-      const vector< Vec3d > &Tc,
-      IntrinsicParams& errors, 
-      Vec2d& std_err, 
-      double thresh_cond, int check_cond )
-  {
-
-    vector< Point2d > ex;
-    //    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
-
-    for (int image_idx = 0; image_idx < (int)objectPoints.size(); ++image_idx)
-    {
-      //Mat object;
-      //Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
-      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
-
-      Mat om(omc[image_idx]), T(Tc[image_idx]);
-
-      std::vector<Point2d> x;
-      projectPoints(objectPoints[image_idx], x, 
-          omc[image_idx], Tc[image_idx], params, noArray());
-
-      for( int ptIdx = 0; ptIdx < imagePoints[image_idx].size(); ++ptIdx ) {
-        ex.push_back( imagePoints[image_idx][ptIdx] - x[ptIdx] );
-      }
-    }
-
-    meanStdDev(ex, noArray(), std_err);
-    std_err *= sqrt((double)ex.size()/((double)ex.size() - 1.0));
-
-    // Awkward way to do this...
-    vector< double > reshaped;
-    for( vector< Point2d >::iterator itr = ex.begin(); itr != ex.end(); ++itr ){
-      reshaped.push_back( itr->x ); 
-      reshaped.push_back( itr->y );
-    }
-    Mat sigma_x;
-    meanStdDev(reshaped, noArray(), sigma_x);
-    sigma_x  *= sqrt(2.0 * (double)ex.size()/(2.0 * (double)ex.size() - 1.0));
-
-    Mat _JJ2_inv, ex3;
-    computeJacobians(objectPoints, imagePoints, params, omc, Tc, check_cond, thresh_cond, _JJ2_inv, ex3);
-
-    Mat_<double>& JJ2_inv = (Mat_<double>&)_JJ2_inv;
-
-    sqrt(JJ2_inv, JJ2_inv);
-
-    double s  = sigma_x.at<double>(0);
-    Mat r = 3 * s * JJ2_inv.diag();
-    errors = r;
-
-    double rms = 0;
-    for (size_t i = 0; i < ex.size(); i++)
-      rms += ex[i].x * ex[i].x + ex[i].y * ex[i].y;
-
-    rms /= (double)ex.size();
-    return sqrt(rms);
-  }
-
-  cv::Mat Fisheye::computeHomography(Mat m, Mat M)
+  cv::Mat AngularPolynomial::computeHomography(Mat m, Mat M)
   {
     int Np = m.cols;
 
@@ -729,29 +600,29 @@ namespace Distortion {
   }
 
 
-  struct TxNormalizePixels {
-    Fisheye::IntrinsicParams param;
+  //struct TxNormalizePixels {
+  //  const PinholeCamera &camera;
 
-    TxNormalizePixels( const Fisheye::IntrinsicParams &p ) : param(p) {;}
+  //  TxNormalizePixels( const PinholeCamera &p ) : camera(p) {;}
 
-    Vec2d operator()( const Vec2d &in )
-    {
-      Vec2d out( in - param.c );
-      out = out.mul(Vec2d(1.0 / param.f[0], 1.0 / param.f[1]));
-      out[0] -= param.alpha * out[1];
-      return out;
-    }
-  };
+  //  Vec2d operator()( const Vec2d &in )
+  //  {
+  //    Vec2d out( in - camera.c() );
+  //    out = out.mul(Vec2d(1.0 / camera.fx(), 1.0 / camera.fy()));
+  //    out[0] -= camera.alpha() * out[1];
+  //    return out;
+  //  }
+  //};
 
-  void Fisheye::normalizePixels(const ImagePointsVec &imagePoints, const IntrinsicParams& param, Mat &normalized )
+  void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
   {
-    ImagePointsVec distorted, undistorted;
+    ImagePointsVec undistorted;
 
     //const Vec2d* ptr   = imagePoints.ptr<Vec2d>(0);
     //Vec2d* ptr_d = distorted.ptr<Vec2d>(0);
 
-    std::transform( imagePoints.begin(), imagePoints.end(), 
-        back_inserter( distorted ), TxNormalizePixels(param));
+    //std::transform( imagePoints.begin(), imagePoints.end(), 
+    //    back_inserter( distorted ), TxNormalizePixels(*this));
 
     //    for (size_t i = 0; i < imagePoints.total(); ++i)
     //    {
@@ -759,17 +630,19 @@ namespace Distortion {
     //      ptr_d[i][0] = ptr_d[i][0] - param.alpha * ptr_d[i][1];
     //    }
 
-    Fisheye fe( param.k );
-    fe.undistortPoints(distorted, undistorted );
+    //AngularPolynomial fe( k );
+    
+    undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
     Mat(undistorted).copyTo( normalized );
   }
 
-  void Fisheye::initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-      const IntrinsicParams& param, Mat& omckk, Mat& Tckk)
+  void AngularPolynomial::initExtrinsics(const ImagePointsVec& _imagePoints, 
+      const ObjectPointsVec& _objectPoints, 
+      Mat& omckk, Mat& Tckk)
   {
     // Splat both of these down to single-channel 2xN matrices
     Mat ipNormalized;
-    normalizePixels( _imagePoints, param, ipNormalized );
+    normalizePixels( _imagePoints, ipNormalized );
     Mat imagePointsNormalized( ipNormalized.reshape(1).t() );
 
     Mat objectPoints( Mat(_objectPoints).reshape(1).t() );
@@ -810,24 +683,24 @@ namespace Distortion {
   }
 
   // Internal version which takes a InterinsicParams...
-  void Fisheye::projectPoints(const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints,
-      const Vec3d &_rvec, const Vec3d &_tvec,
-      const IntrinsicParams& param, cv::OutputArray jacobian)
-  {
-    //CV_Assert(!objectPoints.empty() && objectPoints.type() == CV_64FC3);
-    Matx33d K(param.f[0], param.f[0] * param.alpha, param.c[0],
-        0,               param.f[1], param.c[1],
-        0,                        0,         1);
+  //void AngularPolynomial::projectPoints(const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints,
+  //    const Vec3d &_rvec, const Vec3d &_tvec,
+  //    const IntrinsicParams& param, cv::OutputArray jacobian)
+  //{
+  //  //CV_Assert(!objectPoints.empty() && objectPoints.type() == CV_64FC3);
+  //  Matx33d K(param.f[0], param.f[0] * param.alpha, param.c[0],
+  //      0,               param.f[1], param.c[1],
+  //      0,                        0,         1);
 
-    Fisheye fe(param.k, K);
-    fe.projectPoints(objectPoints, imagePoints, _rvec, _tvec, jacobian);
-  }
+  //  AngularPolynomial fe(param.k, K);
+  //  fe.projectPoints(objectPoints, imagePoints, _rvec, _tvec, jacobian);
+  //}
 
-  void Fisheye::computeExtrinsicRefine(const ImagePointsVec& imagePoints, 
+  void AngularPolynomial::computeExtrinsicRefine(const ImagePointsVec& imagePoints, 
       const ObjectPointsVec& objectPoints, 
       Mat& rvec,
       Mat&  tvec, Mat& J, const int MaxIter,
-      const IntrinsicParams& param, const double thresh_cond)
+      const double thresh_cond)
   {
     Vec6d extrinsics(rvec.at<double>(0), rvec.at<double>(1), rvec.at<double>(2),
         tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2));
@@ -838,7 +711,7 @@ namespace Distortion {
     {
       ImagePointsVec x;
       Mat jacobians;
-      projectPoints(objectPoints, x, rvec, tvec, param, jacobians);
+      projectPoints(objectPoints, x, rvec, tvec, jacobians);
 
       Mat ex = Mat(imagePoints) - Mat(x);
       ex = ex.reshape(1, 2);
@@ -867,7 +740,7 @@ namespace Distortion {
   }
 
   // This was formerly in its own anonymous namespace
-  void Fisheye::subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows)
+  void AngularPolynomial::subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows)
   {
     CV_Assert(src.type() == CV_64FC1);
 
@@ -904,64 +777,188 @@ namespace Distortion {
   //  IntrinsicParams
   //---------------------------------------------------------------------------
 
-  Fisheye::IntrinsicParams::IntrinsicParams():
-    f(Vec2d::all(0)), c(Vec2d::all(0)), k(Vec4d::all(0)), alpha(0), isEstimate(9,0)
-  {
-  }
-
-  Fisheye::IntrinsicParams::IntrinsicParams(Vec2d _f, Vec2d _c, Vec4d _k, double _alpha):
-    f(_f), c(_c), k(_k), alpha(_alpha), isEstimate(9,0)
-  {
-  }
-
-  Fisheye::IntrinsicParams Fisheye::IntrinsicParams::operator+(const Mat& a)
+  AngularPolynomialEstimable AngularPolynomialEstimable::operator+(const Mat& a)
   {
     CV_Assert(a.type() == CV_64FC1);
-    IntrinsicParams tmp;
+    AngularPolynomialEstimable tmp;
     const double* ptr = a.ptr<double>();
 
     int j = 0;
-    tmp.f[0]    = this->f[0]    + (isEstimate[0] ? ptr[j++] : 0);
-    tmp.f[1]    = this->f[1]    + (isEstimate[1] ? ptr[j++] : 0);
-    tmp.c[0]    = this->c[0]    + (isEstimate[2] ? ptr[j++] : 0);
-    tmp.c[1]    = this->c[1]    + (isEstimate[3] ? ptr[j++] : 0);
-    tmp.alpha   = this->alpha   + (isEstimate[4] ? ptr[j++] : 0);
-    tmp.k[0]    = this->k[0]    + (isEstimate[5] ? ptr[j++] : 0);
-    tmp.k[1]    = this->k[1]    + (isEstimate[6] ? ptr[j++] : 0);
-    tmp.k[2]    = this->k[2]    + (isEstimate[7] ? ptr[j++] : 0);
-    tmp.k[3]    = this->k[3]    + (isEstimate[8] ? ptr[j++] : 0);
+    Vec2d newf( this->_fx    + (isEstimate[0] ? ptr[j++] : 0),
+                this->_fy    + (isEstimate[1] ? ptr[j++] : 0) );
+    Vec2d newc( this->_cx    + (isEstimate[2] ? ptr[j++] : 0),
+                this->_cy    + (isEstimate[3] ? ptr[j++] : 0) );
+    double alpha = this->_alpha   + (isEstimate[4] ? ptr[j++] : 0);
+    Vec4d newk( this->_distCoeffs[0]    + (isEstimate[5] ? ptr[j++] : 0),
+                this->_distCoeffs[1]    + (isEstimate[6] ? ptr[j++] : 0),
+                this->_distCoeffs[2]    + (isEstimate[7] ? ptr[j++] : 0),
+                this->_distCoeffs[3]    + (isEstimate[8] ? ptr[j++] : 0) );
 
+    tmp.set( newf, newc, alpha, newk );
     tmp.isEstimate = isEstimate;
     return tmp;
   }
 
-  Fisheye::IntrinsicParams& Fisheye::IntrinsicParams::operator =(const Mat& a)
+  AngularPolynomialEstimable& AngularPolynomialEstimable::operator =(const Mat& a)
   {
     CV_Assert(a.type() == CV_64FC1);
     const double* ptr = a.ptr<double>();
 
     int j = 0;
+    Vec2d newf( (isEstimate[0] ? ptr[j++] : 0),
+                (isEstimate[1] ? ptr[j++] : 0) );
+    Vec2d newc( (isEstimate[2] ? ptr[j++] : 0),
+                (isEstimate[3] ? ptr[j++] : 0) );
+    double alpha = (isEstimate[4] ? ptr[j++] : 0);
+    Vec4d newk( (isEstimate[5] ? ptr[j++] : 0),
+                (isEstimate[6] ? ptr[j++] : 0),
+                (isEstimate[7] ? ptr[j++] : 0),
+                (isEstimate[8] ? ptr[j++] : 0) );
 
-    this->f[0]  = isEstimate[0] ? ptr[j++] : 0;
-    this->f[1]  = isEstimate[1] ? ptr[j++] : 0;
-    this->c[0]  = isEstimate[2] ? ptr[j++] : 0;
-    this->c[1]  = isEstimate[3] ? ptr[j++] : 0;
-    this->alpha = isEstimate[4] ? ptr[j++] : 0;
-    this->k[0]  = isEstimate[5] ? ptr[j++] : 0;
-    this->k[1]  = isEstimate[6] ? ptr[j++] : 0;
-    this->k[2]  = isEstimate[7] ? ptr[j++] : 0;
-    this->k[3]  = isEstimate[8] ? ptr[j++] : 0;
+    set( newf, newc, alpha, newk );
 
     return *this;
   }
 
-  void Fisheye::IntrinsicParams::init(const cv::Vec2d& _f, const cv::Vec2d& _c, const cv::Vec4d& _k, const double& _alpha)
+  Vec4d AngularPolynomialEstimable::normVec( void ) const
   {
-    this->c = _c;
-    this->f = _f;
-    this->k = _k;
-    this->alpha = _alpha;
+    return Vec4d( _fx, _fy, _cx, _cy );
   }
+
+  double AngularPolynomialEstimable::deltaFrom( const AngularPolynomialEstimable &other ) const
+  {
+    return  norm( normVec(), other.normVec() ) / norm( normVec() );
+  }
+
+  void AngularPolynomialEstimable::computeJacobians( const ObjectPointsVecVec &objectPoints, 
+      const ImagePointsVecVec &imagePoints,
+      const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
+      const int check_cond, const double thresh_cond, 
+      Mat& JJ2_inv, Mat& ex3)
+  {
+
+    int n = (int)objectPoints.size();
+
+    Mat JJ3 = Mat::zeros(9 + 6 * n, 9 + 6 * n, CV_64FC1);
+    ex3 = Mat::zeros(9 + 6 * n, 1, CV_64FC1 );
+
+    for (int image_idx = 0; image_idx < n; ++image_idx)
+    {
+      Mat image, object;
+      Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
+      Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+
+      Mat om(omc[image_idx]), T(Tc[image_idx]);
+
+      ImagePointsVec x;
+      Mat jacobians;
+      projectPoints(object, x, om, T, jacobians);
+      Mat exkk = image - Mat(x);
+
+//      cout << "Image: " << image << endl;
+//      cout << "reproj: " << x << endl;
+//
+      //cout << "jacobians: "<< jacobians << endl;
+//      cout << "exkk: " << exkk << endl;
+
+      //Mat A(jacobians.rows, 9, CV_64FC1);
+      //jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
+      //jacobians.col(14).copyTo(A.col(4));
+      //jacobians.colRange(4, 8).copyTo(A.colRange(5, 9));
+
+      Mat A( jacobians.colRange(0, 9).clone() );
+      A = A.t();
+
+      Mat B( jacobians.colRange(9, 15).clone() );
+      B = B.t();
+
+      JJ3(Rect(0, 0, 9, 9)) = JJ3(Rect(0, 0, 9, 9)) + A * A.t();
+      JJ3(Rect(9 + 6 * image_idx, 9 + 6 * image_idx, 6, 6)) = B * B.t();
+
+      Mat AB = A * B.t();
+      AB.copyTo(JJ3(Rect(9 + 6 * image_idx, 0, 6, 9)));
+      JJ3(Rect(0, 9 + 6 * image_idx, 9, 6)) = AB.t();
+
+      ex3(Rect(0,0,1,9)) = ex3(Rect(0,0,1,9)) + A * exkk.reshape(1, 2 * exkk.rows);
+      ex3(Rect(0, 9 + 6 * image_idx, 1, 6)) = B * exkk.reshape(1, 2 * exkk.rows);
+
+      if (check_cond)
+      {
+        Mat JJ_kk = B.t();
+        SVD svd(JJ_kk, SVD::NO_UV);
+        CV_Assert(svd.w.at<double>(0) / svd.w.at<double>(svd.w.rows - 1) < thresh_cond);
+      }
+    }
+
+    vector<int> idxs(isEstimate);
+    idxs.insert(idxs.end(), 6 * n, 1);
+
+    subMatrix(JJ3, JJ3, idxs, idxs);
+    subMatrix(ex3, ex3, std::vector<int>(1, 1), idxs);
+    JJ2_inv = JJ3.inv();
+  }
+
+  double AngularPolynomialEstimable::estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
+      const ImagePointsVecVec &imagePoints,
+      const vector< Vec3d > &omc, 
+      const vector< Vec3d > &Tc,
+      AngularPolynomialEstimable &errors, 
+      Vec2d& std_err, 
+      double thresh_cond, int check_cond )
+  {
+
+    vector< Point2d > ex;
+    //    Mat ex((int)(objectPoints[0].size() * objectPoints.size()), 1, CV_64FC2);
+
+    for (int image_idx = 0; image_idx < (int)objectPoints.size(); ++image_idx)
+    {
+      //Mat object;
+      //Mat(objectPoints[image_idx]).convertTo(object, CV_64FC3);
+      //Mat(imagePoints[image_idx]).convertTo(image, CV_64FC2);
+
+      Mat om(omc[image_idx]), T(Tc[image_idx]);
+
+      std::vector<Point2d> x;
+      projectPoints(objectPoints[image_idx], x, 
+          omc[image_idx], Tc[image_idx], noArray());
+
+      for( int ptIdx = 0; ptIdx < imagePoints[image_idx].size(); ++ptIdx ) {
+        ex.push_back( imagePoints[image_idx][ptIdx] - x[ptIdx] );
+      }
+    }
+
+    meanStdDev(ex, noArray(), std_err);
+    std_err *= sqrt((double)ex.size()/((double)ex.size() - 1.0));
+
+    // Awkward way to do this...
+    vector< double > reshaped;
+    for( vector< Point2d >::iterator itr = ex.begin(); itr != ex.end(); ++itr ){
+      reshaped.push_back( itr->x ); 
+      reshaped.push_back( itr->y );
+    }
+    Mat sigma_x;
+    meanStdDev(reshaped, noArray(), sigma_x);
+    sigma_x  *= sqrt(2.0 * (double)ex.size()/(2.0 * (double)ex.size() - 1.0));
+
+    Mat _JJ2_inv, ex3;
+    computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond, thresh_cond, _JJ2_inv, ex3);
+
+    Mat_<double>& JJ2_inv = (Mat_<double>&)_JJ2_inv;
+
+    sqrt(JJ2_inv, JJ2_inv);
+
+    double s  = sigma_x.at<double>(0);
+    Mat r = 3 * s * JJ2_inv.diag();
+    errors = r;
+
+    double rms = 0;
+    for (size_t i = 0; i < ex.size(); i++)
+      rms += ex[i].x * ex[i].x + ex[i].y * ex[i].y;
+
+    rms /= (double)ex.size();
+    return sqrt(rms);
+  }
+
 
 }
 
