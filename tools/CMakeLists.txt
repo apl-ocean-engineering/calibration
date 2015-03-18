@@ -1,10 +1,13 @@
 
 include_directories( "${CMAKE_SOURCE_DIR}/include" 
-	${OpenCV_INCLUDE_DIRS} )
+	${OpenCV_INCLUDE_DIRS} 
+        ${CERES_INCLUDE_DIRS} )
+
 link_libraries(	lib_camera_calibration ${OpenCV_LIBS} 
 	${GSL_LIBRARIES}
 	${Boost_LIBRARIES}
 	${APRILTAGS_LIBS}
+        ${CERES_LIBRARIES}
         cryptopp )
 
 add_executable( extract extract.cpp )

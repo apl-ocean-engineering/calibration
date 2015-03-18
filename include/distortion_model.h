@@ -45,6 +45,8 @@ namespace Distortion {
       double fx( void ) const     { return _fx; }
       double fy( void ) const     { return _fy; }
       Vec2d c( void ) const       { return Vec2d(_cx,_cy); }
+      double cx( void ) const     { return _cx; }
+      double cy( void ) const     { return _cy; }
       double alpha( void) const   { return _alpha; }
 
     protected:

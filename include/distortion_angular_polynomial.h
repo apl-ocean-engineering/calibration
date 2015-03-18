@@ -36,6 +36,13 @@ namespace Distortion {
       void set( const AngularPolynomial &other )
       { set( other.f(), other.c(), other.alpha(), other.distCoeffs() ); }
 
+      void set( const double *c )
+      {
+        setCamera( c[0], c[1], c[2], c[3], c[4] );
+        _distCoeffs = Vec4d( c[5], c[6], c[7], c[8] );
+      }
+
+
       Vec4d distCoeffs( void ) const    { return _distCoeffs; }
 
       static AngularPolynomial Calibrate( const ObjectPointsVecVec &objectPoints, 

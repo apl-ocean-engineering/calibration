@@ -9,9 +9,11 @@ set(MAKE_CXX_FLAGS, "-Wall")
 set(MAKE_C_FLAGS_RELEASE, "-Werror")
 set(MAKE_CXX_FLAGS_RELEASE, "-Werror")
 
+set( EIGEN_INCLUDE_DIR "/usr/local/include/eigen3/" )
 
 find_package( OpenCV REQUIRED )
 find_package( GSL REQUIRED )
+find_package( Ceres REQUIRED )
 
 set( Boost_USE_MULTITHREADED ON )
 find_package( Boost REQUIRED COMPONENTS thread system filesystem )

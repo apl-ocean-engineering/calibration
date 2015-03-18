@@ -44,10 +44,14 @@
 //
 //M*/
 
+#include <math.h>
 
 #include "distortion_angular_polynomial.h"
 
 #include <opencv2/calib3d/calib3d.hpp>
+
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
 
 #include <iostream>
 using namespace std;
@@ -56,7 +60,7 @@ using namespace std;
 static std::ostream& operator <<(std::ostream& stream, const Distortion::AngularPolynomial &p )
 {
   stream << p.f()[0] << " " << p.f()[1] << ", " << p.c()[0] << " " << p.c()[1] << ", " << p.alpha() << ", " << p.distCoeffs()[0] << " " << p.distCoeffs()[1] << " " << p.distCoeffs()[2] << " " << p.distCoeffs()[3];
-return stream;
+  return stream;
 }
 
 namespace Distortion {
@@ -110,6 +114,95 @@ namespace Distortion {
 
 
 
+  // Ceres functor for solving calibration problem
+  //  Based on the Bundler solver used in their examples
+  struct CalibReprojectionError {
+    CalibReprojectionError(double observed_x, double observed_y, double world_x, double world_y )
+      : observed_x(observed_x), observed_y(observed_y), worldX( world_x ), worldY( world_y ) {}
+
+    template <typename T>
+      bool operator()(const T* const camera,
+          const T* const pose, 
+          T* residuals) const
+      {
+        // pose is a 6-vector
+        //    3 angles
+        //    3 translations
+        //
+        // camera i s 9-vector
+        //    2 focal length
+        //    2 camera center
+        //    1 alpha
+        //    4 distortion params
+        //
+        // camera[0,1,2] are the angle-axis rotation.
+        T point[3] = { T( worldX ), 
+                       T( worldY ), 
+                       T( 0.0 ) };
+        T p[3];
+        ceres::AngleAxisRotatePoint(pose, point, p);
+        // camera[3,4,5] are the translation.
+        p[0] += pose[3]; p[1] += pose[4]; p[2] += pose[5];
+
+        T theta = atan2( sqrt( p[0]*p[0] + p[1]*p[1] ), p[2]  );
+        T psi   = atan2( p[1], p[0] );
+
+        const T &fx = camera[0];
+        const T &fy = camera[1];
+        const T &cx = camera[2];
+        const T &cy = camera[3];
+        const T &alpha = camera[4];
+        const T &k1 = camera[5];
+        const T &k2 = camera[6];
+        const T &k3 = camera[7];
+        const T &k4 = camera[8];
+
+        T theta3 =  theta*theta*theta;
+        T theta5 = theta3*theta*theta;
+        T theta7 = theta5*theta*theta;
+        T theta9 = theta7*theta*theta;
+
+        T thetaDist = theta + k1*theta3 + k2 *theta5 + k3*theta7 + k4*theta9;
+
+        //        // Compute the center of distortion. The sign change comes from
+        //        // the camera model that Noah Snavely's Bundler assumes, whereby
+        //        // the camera coordinate system has a negative z axis.
+        //        //
+        //        T xp = - p[0] / p[2];
+        //        T yp = - p[1] / p[2];
+        //
+        //        // Apply second and fourth order radial distortion.
+        //        const T& l1 = camera[7];
+        //        const T& l2 = camera[8];
+        //        T r2 = xp*xp + yp*yp;
+        //        T distortion = T(1.0) + r2  * (l1 + l2  * r2);
+
+        T xdn = thetaDist * cos( psi ),
+          ydn = thetaDist * sin( psi );
+
+        T predictedX = fx*(xdn + alpha*ydn) + cx;
+        T predictedY = fy* ydn              + cy;
+
+        // The error is the difference between the predicted and observed position.
+        residuals[0] = predictedX - T(observed_x);
+        residuals[1] = predictedY - T(observed_y);
+        return true;
+      }
+
+    // Factory to hide the construction of the CostFunction object from
+    // the client code.
+    static ceres::CostFunction* Create(const double observed_x, const double observed_y, 
+        const double world_x, const double world_y ) {
+      return (new ceres::AutoDiffCostFunction<CalibReprojectionError, 2, 9, 6>(
+            new CalibReprojectionError(observed_x, observed_y, world_x, world_y)));
+    }
+
+    double observed_x;
+    double observed_y;
+
+    double worldX, worldY;
+  };
+
   double AngularPolynomial::calibrate(
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
@@ -162,47 +255,104 @@ namespace Distortion {
 
     finalParam.calibrateExtrinsics(objectPoints, imagePoints, check_cond, thresh_cond, omc, Tc);
 
-    //-------------------------------Optimization
-    for(int iter = 0; ; ++iter)
-    {
-      if ((criteria.type == 1 && iter >= criteria.maxCount)  ||
-          (criteria.type == 2 && change <= criteria.epsilon) ||
-          (criteria.type == 3 && (change <= criteria.epsilon || iter >= criteria.maxCount)))
-        break;
+    double camera[9] = { finalParam.fx(), finalParam.fy(),
+      finalParam.cx(), finalParam.cy(),
+      finalParam.alpha(),
+      finalParam.distCoeffs()[0],
+      finalParam.distCoeffs()[1],
+      finalParam.distCoeffs()[2],
+      finalParam.distCoeffs()[3] };
 
-      double alpha_smooth2 = 1 - std::pow(1 - alpha_smooth, iter + 1.0);
+    double *pose = new double[ objectPoints.size() * 6];
 
-      Mat JJ2_inv, ex3;
-      finalParam.computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond,thresh_cond, JJ2_inv, ex3);
+      google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
+    ceres::Problem problem;
+    for( int i = 0; i < objectPoints.size(); ++i ) {
 
-      Mat G( alpha_smooth2 * JJ2_inv * ex3 );
+      double *p = &(pose[ i*6 ]);
 
-      //cout << "G: " << G.t() << endl;
-      //cout << JJ2_inv << endl;
-      //cout << ex3 << endl;
+      p[0] = omc[i][0];
+      p[1] = omc[i][1];
+      p[2] = omc[i][2];
+      p[3] = Tc[i][0];
+      p[4] = Tc[i][1];
+      p[5] = Tc[i][2];
 
-      currentParam = finalParam + G;
-      
-      change = currentParam.deltaFrom( finalParam );
-
-
-      cout << "currentParam: " << currentParam << endl;
-
-      finalParam = currentParam;
-
-      if (recompute_extrinsic)
-      {
-        finalParam.calibrateExtrinsics(objectPoints,  imagePoints, check_cond,
-            thresh_cond, omc, Tc);
+      for( int j = 0; j < imagePoints[i].size(); ++j ) {
+        ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j].x, imagePoints[i][j].y,
+            objectPoints[i][j].x, objectPoints[i][j].y );
+        problem.AddResidualBlock( costFunction, NULL, camera, p );
       }
     }
 
-    //-------------------------------Validation
-    double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
-        check_cond );
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = true;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+    std::cout << summary.FullReport() << "\n";
 
-    //-------------------------------
-    set( finalParam );
+    rvecs.resize( objectPoints.size() );
+    tvecs.resize( objectPoints.size() );
+    for( int i = 0; i < objectPoints.size(); ++i ) {
+      double *p = &(pose[ i*6 ]);
+
+      rvecs[0] = p[0];
+      rvecs[1] = p[1];
+      rvecs[2] = p[2];
+
+      tvecs[3] = p[3];
+      tvecs[4] = p[4];
+      tvecs[5] = p[5];
+    }
+
+    delete[] pose;
+
+    set(camera);
+
+    double rms = 0;
+
+    //   //-------------------------------Optimization
+    //   for(int iter = 0; ; ++iter)
+    //   {
+    //     if ((criteria.type == 1 && iter >= criteria.maxCount)  ||
+    //         (criteria.type == 2 && change <= criteria.epsilon) ||
+    //         (criteria.type == 3 && (change <= criteria.epsilon || iter >= criteria.maxCount)))
+    //       break;
+
+    //     double alpha_smooth2 = 1 - std::pow(1 - alpha_smooth, iter + 1.0);
+
+    //     Mat JJ2_inv, ex3;
+    //     finalParam.computeJacobians(objectPoints, imagePoints, omc, Tc, check_cond,thresh_cond, JJ2_inv, ex3);
+
+    //     Mat G( alpha_smooth2 * JJ2_inv * ex3 );
+
+    //     //cout << "G: " << G.t() << endl;
+    //     //cout << JJ2_inv << endl;
+    //     //cout << ex3 << endl;
+
+    //     currentParam = finalParam + G;
+
+    //     change = currentParam.deltaFrom( finalParam );
+
+
+    //     cout << "currentParam: " << currentParam << endl;
+
+    //     finalParam = currentParam;
+
+    //     if (recompute_extrinsic)
+    //     {
+    //       finalParam.calibrateExtrinsics(objectPoints,  imagePoints, check_cond,
+    //           thresh_cond, omc, Tc);
+    //     }
+    //   }
+
+    ////-------------------------------Validation
+    //double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
+    //    check_cond );
+
+    ////-------------------------------
+    //set( finalParam );
 
     //setCamera( finalParam.f[0], finalParam.f[1], finalParam.c[0], finalParam.c[1], finalParam.alpha );
     //_distCoeffs = finalParam.k;
@@ -210,8 +360,8 @@ namespace Distortion {
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;
 
-    rvecs = omc;
-    tvecs = Tc;
+    //rvecs = omc;
+    //tvecs = Tc;
 
     //rvecs.resize( omc.size() );
     //    std::copy( omc.begin(), omc.end(), rvecs.begin() );
@@ -364,8 +514,8 @@ namespace Distortion {
         //Vec3d Xi = pdepth == CV_32F ? (Vec3d)Xf[i] : Xd[i];
         //Vec3d Y = aff*Xi;
         double dYdR[] = { Xi[0], Xi[1], Xi[2], 0, 0, 0, 0, 0, 0,
-                          0, 0, 0, Xi[0], Xi[1], Xi[2], 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, Xi[0], Xi[1], Xi[2] };
+          0, 0, 0, Xi[0], Xi[1], Xi[2], 0, 0, 0,
+          0, 0, 0, 0, 0, 0, Xi[0], Xi[1], Xi[2] };
 
         Matx33d dYdom_data = Matx<double, 3, 9>(dYdR) * dRdom.t();
         const Vec3d *dYdom = (Vec3d*)dYdom_data.val;
@@ -631,7 +781,7 @@ namespace Distortion {
     //    }
 
     //AngularPolynomial fe( k );
-    
+
     undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
     Mat(undistorted).copyTo( normalized );
   }
@@ -785,14 +935,14 @@ namespace Distortion {
 
     int j = 0;
     Vec2d newf( this->_fx    + (isEstimate[0] ? ptr[j++] : 0),
-                this->_fy    + (isEstimate[1] ? ptr[j++] : 0) );
+        this->_fy    + (isEstimate[1] ? ptr[j++] : 0) );
     Vec2d newc( this->_cx    + (isEstimate[2] ? ptr[j++] : 0),
-                this->_cy    + (isEstimate[3] ? ptr[j++] : 0) );
+        this->_cy    + (isEstimate[3] ? ptr[j++] : 0) );
     double alpha = this->_alpha   + (isEstimate[4] ? ptr[j++] : 0);
     Vec4d newk( this->_distCoeffs[0]    + (isEstimate[5] ? ptr[j++] : 0),
-                this->_distCoeffs[1]    + (isEstimate[6] ? ptr[j++] : 0),
-                this->_distCoeffs[2]    + (isEstimate[7] ? ptr[j++] : 0),
-                this->_distCoeffs[3]    + (isEstimate[8] ? ptr[j++] : 0) );
+        this->_distCoeffs[1]    + (isEstimate[6] ? ptr[j++] : 0),
+        this->_distCoeffs[2]    + (isEstimate[7] ? ptr[j++] : 0),
+        this->_distCoeffs[3]    + (isEstimate[8] ? ptr[j++] : 0) );
 
     tmp.set( newf, newc, alpha, newk );
     tmp.isEstimate = isEstimate;
@@ -806,14 +956,14 @@ namespace Distortion {
 
     int j = 0;
     Vec2d newf( (isEstimate[0] ? ptr[j++] : 0),
-                (isEstimate[1] ? ptr[j++] : 0) );
+        (isEstimate[1] ? ptr[j++] : 0) );
     Vec2d newc( (isEstimate[2] ? ptr[j++] : 0),
-                (isEstimate[3] ? ptr[j++] : 0) );
+        (isEstimate[3] ? ptr[j++] : 0) );
     double alpha = (isEstimate[4] ? ptr[j++] : 0);
     Vec4d newk( (isEstimate[5] ? ptr[j++] : 0),
-                (isEstimate[6] ? ptr[j++] : 0),
-                (isEstimate[7] ? ptr[j++] : 0),
-                (isEstimate[8] ? ptr[j++] : 0) );
+        (isEstimate[6] ? ptr[j++] : 0),
+        (isEstimate[7] ? ptr[j++] : 0),
+        (isEstimate[8] ? ptr[j++] : 0) );
 
     set( newf, newc, alpha, newk );
 
@@ -855,11 +1005,11 @@ namespace Distortion {
       projectPoints(object, x, om, T, jacobians);
       Mat exkk = image - Mat(x);
 
-//      cout << "Image: " << image << endl;
-//      cout << "reproj: " << x << endl;
-//
+      //      cout << "Image: " << image << endl;
+      //      cout << "reproj: " << x << endl;
+      //
       //cout << "jacobians: "<< jacobians << endl;
-//      cout << "exkk: " << exkk << endl;
+      //      cout << "exkk: " << exkk << endl;
 
       //Mat A(jacobians.rows, 9, CV_64FC1);
       //jacobians.colRange(0, 4).copyTo(A.colRange(0, 4));
