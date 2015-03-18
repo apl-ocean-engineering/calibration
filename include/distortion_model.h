@@ -45,6 +45,8 @@ namespace Distortion {
       PinholeCamera( const Matx33d &k );
       PinholeCamera( const Mat &k );
 
+     virtual const std::string name( void ) const { return "pinhole"; }
+
       void setCamera( const Matx33d &k );
       void setCamera( double fx, double fy, double cx, double cy, double alpha = 1 );
 
@@ -62,6 +64,9 @@ namespace Distortion {
       double cy( void ) const     { return _cy; }
       double alpha( void) const   { return _alpha; }
 
+
+      virtual cv::FileStorage &write( cv::FileStorage &out ) const;
+
     protected:
 
       double _fx, _fy, _alpha, _cx, _cy;
@@ -77,6 +82,7 @@ namespace Distortion {
 
       DistortionModel( const Matx33d &cam )
         : PinholeCamera( cam ) {;}
+
 
       virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, 

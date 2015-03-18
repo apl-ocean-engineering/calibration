@@ -22,6 +22,9 @@ namespace Distortion {
         _distCoeffs = k;
       }
 
+      virtual const std::string name( void ) const { return "AngularPolynomial"; }
+
+
 //      void set( const AngularPolynomial &other )
 //      { set( other.f(), other.c(), other.alpha(), other.distCoeffs() ); }
 
@@ -50,6 +53,8 @@ namespace Distortion {
        virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, 
           cv::OutputArray jacobian = cv::noArray() ) const;
+
+      virtual cv::FileStorage &write( cv::FileStorage &out ) const;
 
     protected: 
 

@@ -697,6 +697,12 @@ namespace Distortion {
     Tc = Tckk;
   }
 
+
+      FileStorage &AngularPolynomial::write( FileStorage &out ) const
+      {
+        DistortionModel::write( out );
+        out << "distortion_coefficients" << _distCoeffs;
+      }
 }
 
 

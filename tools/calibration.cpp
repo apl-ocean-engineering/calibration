@@ -297,7 +297,7 @@ static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
     const vector< Image > &imagesUsed,
     float aspectRatio, int flags,
-    const Mat& cameraMatrix, const Mat& distCoeffs,
+    const DistortionModel &model, 
     const vector<Vec3d>& rvecs, const vector<Vec3d>& tvecs,
     const vector<float>& reprojErrs,
     const vector<vector<Point2d> >& imagePoints,
@@ -338,8 +338,7 @@ static void saveCameraParams( const string& filename,
 
   out << "flags" << flags;
 
-  out << "camera_matrix" << cameraMatrix;
-  out << "distortion_coefficients" << distCoeffs;
+  model.write( out );
 
   out << "avg_reprojection_error" << totalAvgErr;
   if( !reprojErrs.empty() )
@@ -516,16 +515,16 @@ int main( int argc, char** argv )
   double totalAvgErr = 0;
   totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
 
-  //  _if( ok ) {
-  //  saveCameraParams( cameraFile, imageSize,
-  //      *board, imagesUsed, aspectRatio,
-  //      flags, cameraMatrix, distCoeffs,
-  //      writeExtrinsics ? rvecs : vector<Mat>(),
-  //      writeExtrinsics ? tvecs : vector<Mat>(),
-  //      writeExtrinsics ? reprojErrs : vector<float>(),
-  //      writePoints ? imagePoints : vector<vector<Point2d> >(),
-  //      totalAvgErr );
-  //  }
+  if( ok ) {
+    saveCameraParams( cameraFile, imageSize,
+        *board, imagesUsed, aspectRatio,
+        flags, distModel,
+        writeExtrinsics ? rvecs : vector<Vec3d>(),
+        writeExtrinsics ? tvecs : vector<Vec3d>(),
+        writeExtrinsics ? reprojErrs : vector<float>(),
+        writePoints ? imagePoints : vector<vector<Point2d> >(),
+        totalAvgErr );
+  }
   //
   //
   //
@@ -543,9 +542,9 @@ int main( int argc, char** argv )
   cout << "Calculated camera matrix: " << endl << distModel.mat() << endl;
   cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
 
- 
-   Mat map1, map2;
-   distModel.initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
+
+  Mat map1, map2;
+  distModel.initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
 
   //  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
   //  //    imageSize, CV_16SC2, map1, map2);
@@ -574,35 +573,35 @@ int main( int argc, char** argv )
     }
 
 
-      Mat rview;
-      remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
-  
-      const int N = 9;
-      int x, y, k;
-      vector< Point2d > pts, undPts;
-  
-      for( y = k = 0; y < N; y++ )
-        for( x = 0; x < N; x++ )
-          pts.push_back( Point2d((float)x*imageSize.width/(N-1),
-                             (float)y*imageSize.height/(N-1)) );
-  
-      distModel.undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
-  
-      for( y = k = 0; y < N; y++ )
-        for( x = 0; x < N; x++ ) {
-  //        cout << pts[k] <<  "  " << undPts[k] << endl;
-          Point2d thisPt( undPts[k++] );
-          if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
-              thisPt.y >=0 && thisPt.y <= rview.size().height )
-            circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
-        }
-  
-  
-      outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
-      mkdir_p( outfile );
-      imwrite(  outfile, rview );
-  
-    }
+    Mat rview;
+    remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
+
+    const int N = 9;
+    int x, y, k;
+    vector< Point2d > pts, undPts;
+
+    for( y = k = 0; y < N; y++ )
+      for( x = 0; x < N; x++ )
+        pts.push_back( Point2d((float)x*imageSize.width/(N-1),
+              (float)y*imageSize.height/(N-1)) );
+
+    distModel.undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
+
+    for( y = k = 0; y < N; y++ )
+      for( x = 0; x < N; x++ ) {
+        //        cout << pts[k] <<  "  " << undPts[k] << endl;
+        Point2d thisPt( undPts[k++] );
+        if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
+            thisPt.y >=0 && thisPt.y <= rview.size().height )
+          circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
+      }
+
+
+    outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
+    mkdir_p( outfile );
+    imwrite(  outfile, rview );
+
+  }
 
 
   //    if( inputFilename )
@@ -653,12 +652,12 @@ int main( int argc, char** argv )
 
   // Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
   // error messages
-printf("%s. avg reprojection error = %.2f\n",
-    ok ? "Calibration succeeded" : "Calibration failed",
-    totalAvgErr);
-cout << "Writing results to " << cameraFile << endl;
+  printf("%s. avg reprojection error = %.2f\n",
+      ok ? "Calibration succeeded" : "Calibration failed",
+      totalAvgErr);
+  cout << "Writing results to " << cameraFile << endl;
 
-delete board;
+  delete board;
 
-return 0;
+  return 0;
 }

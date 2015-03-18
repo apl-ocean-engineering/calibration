@@ -47,15 +47,21 @@ namespace Distortion {
   Vec2d PinholeCamera::image( const Vec2d &xd ) const
   {
     return  Vec2d( _fx * ( xd[0] + _alpha*xd[1] ) + _cx,
-                   _fy *   xd[1]                    + _cy );
+        _fy *   xd[1]                    + _cy );
   }
 
   Vec2d PinholeCamera::unimage( const Vec2d &pt ) const
   {
-return Vec2d( 1.0 / _fx * (pt[0] - _cx ),
-              1.0 / _fy * (pt[1] - _cy ) );
+    return Vec2d( 1.0 / _fx * (pt[0] - _cx ),
+        1.0 / _fy * (pt[1] - _cy ) );
   }
 
+  FileStorage &PinholeCamera::write( FileStorage &out ) const
+  {
+    out << "camera_model" << name();
+    out << "camera_matrix" << mat();
+    return out;
+  }
 
 };
 
