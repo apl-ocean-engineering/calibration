@@ -14,7 +14,6 @@
 #include "my_undistort.h"
 
 #include "distortion_model.h"
-#include "distortion_fisheye.h"
 #include "distortion_angular_polynomial.h"
 using namespace Distortion;
 
@@ -544,10 +543,10 @@ int main( int argc, char** argv )
   cout << "Calculated camera matrix: " << endl << distModel.mat() << endl;
   cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
 
-  //
-  //  Mat map1, map2;
-  //  initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), optimalCameraMatrix,
-  //      imageSize, CV_16SC2, map1, map2);
+ 
+   Mat map1, map2;
+   distModel.initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
+
   //  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
   //  //    imageSize, CV_16SC2, map1, map2);
 
@@ -573,10 +572,10 @@ int main( int argc, char** argv )
       mkdir_p( outfile );
       imwrite(  outfile, out );
     }
-  }
 
-  //    Mat rview;
-  //    remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
+
+      Mat rview;
+      remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
   //
   //    const int N = 9;
   //    int x, y, k;
@@ -599,11 +598,11 @@ int main( int argc, char** argv )
   //      }
   //
   //
-  //    outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
-  //    mkdir_p( outfile );
-  //    imwrite(  outfile, rview );
-  //
-  //  }
+      outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
+      mkdir_p( outfile );
+      imwrite(  outfile, rview );
+  
+    }
 
 
   //    if( inputFilename )

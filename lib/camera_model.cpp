@@ -13,7 +13,7 @@ namespace Distortion {
 
   PinholeCamera::PinholeCamera( const Matx33d &k )
     : _fx( k(0,0) ), _fy( k(1,1) ), _alpha( k(0,1)/_fx ), 
-      _cx( k(0,2) ), _cy( k(1,2) )
+    _cx( k(0,2) ), _cy( k(1,2) )
   {;}
 
   PinholeCamera::PinholeCamera( const Mat &k )
@@ -43,6 +43,19 @@ namespace Distortion {
 
   Mat PinholeCamera::mat( void ) const
   { return Mat(matx()); }
+
+  Vec2d PinholeCamera::image( const Vec2d &xd ) const
+  {
+    return  Vec2d( _fx * ( xd[0] + _alpha*xd[1] ) + _cx,
+                   _fy *   xd[1]                    + _cy );
+  }
+
+  Vec2d PinholeCamera::unimage( const Vec2d &pt ) const
+  {
+return Vec2d( 1.0 / _fx * (pt[0] - _cx ),
+              1.0 / _fy * (pt[1] - _cy ) );
+  }
+
 
 };
 

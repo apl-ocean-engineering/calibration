@@ -47,17 +47,14 @@ namespace Distortion {
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
-      void undistortPoints( const vector< Point2d > &distorted, 
-          vector< Point2d > &undistorted, 
-          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
-          const Mat &P = cv::Mat());
-
-      virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
+       virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, 
           cv::OutputArray jacobian = cv::noArray() ) const;
 
-
     protected: 
+
+       virtual Vec2d undistort( const Vec2d &pw ) const;
+       virtual Vec2d distort( const Vec3d &w ) const ;
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
@@ -69,7 +66,7 @@ namespace Distortion {
 //          vector< Vec3d > &Tc );
 
       void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-          Mat& omckk, Mat& Tckk);
+          Vec3d& omckk, Vec3d& Tckk);
 
       Mat computeHomography(Mat m, Mat M);
 

@@ -48,6 +48,9 @@ namespace Distortion {
       void setCamera( const Matx33d &k );
       void setCamera( double fx, double fy, double cx, double cy, double alpha = 1 );
 
+      Vec2d image( const Vec2d &pt ) const;
+      Vec2d unimage( const Vec2d &pt ) const;
+
       Matx33d matx( void ) const;
       Mat mat( void ) const;
 
@@ -79,7 +82,23 @@ namespace Distortion {
           const Vec3d &_rvec, const Vec3d &_tvec, 
           cv::OutputArray jacobian = cv::noArray()) const = 0;
 
+      //-- Undistortion functions --
+     void undistortPoints( const vector< Point2d > &distorted, 
+          vector< Point2d > &undistorted, 
+          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
+          const Mat &P = cv::Mat());
 
+      virtual void initUndistortRectifyMap( const Mat &R, const Mat &P,
+          const cv::Size& size, int m1type, Mat &map1, Mat &map2 );
+
+
+      void undistortImage( const Mat &distorted, Mat &undistorted,
+          const Mat &Knew, const Size& new_size);
+
+    protected:
+
+       virtual Vec2d undistort( const Vec2d &pw ) const = 0;
+       virtual Vec2d distort( const Vec3d &w ) const = 0;
   };
 
 }

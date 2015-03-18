@@ -43,6 +43,10 @@ namespace Distortion {
           const Vec3d &_rvec, const Vec3d &_tvec, 
           cv::OutputArray jacobian = cv::noArray() ) const;
 
+      virtual void initUndistortRectifyMap( const Mat &R, const Mat &P,
+          const cv::Size& size, int m1type, Mat &map1, Mat &map2 ) {;}
+
+
       struct IntrinsicParams
       {
         Vec2d f;

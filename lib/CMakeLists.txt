@@ -10,8 +10,9 @@ add_library( lib_camera_calibration
         synchronizer.cpp 
 	trendnet_time_code.cpp 
         camera_model.cpp
-        fisheye.cpp
+        distortion_model.cpp
         angular_polynomial.cpp )
+      # fisheye.cpp
 
 target_include_directories( lib_camera_calibration 
 	PUBLIC ${CMAKE_SOURCE_DIR}/include )
