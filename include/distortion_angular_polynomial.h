@@ -72,10 +72,10 @@ namespace Distortion {
 //          vector< Vec3d > &omc, 
 //          vector< Vec3d > &Tc );
 
-      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-          Vec3d& omckk, Vec3d& Tckk);
-
-      Mat computeHomography(Mat m, Mat M);
+//      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
+//          Vec3d& omckk, Vec3d& Tckk);
+//
+//      Mat computeHomography(Mat m, Mat M);
 
       //void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
 

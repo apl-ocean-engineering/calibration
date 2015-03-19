@@ -5,6 +5,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/affine.hpp>
 #include <vector>
+#include <algorithm>
 
 namespace Distortion {
 
@@ -120,9 +121,7 @@ namespace Distortion {
       virtual void undistortPoints( const ImagePointsVec &distorted, 
           ImagePointsVec &undistorted, 
           const Mat &R = cv::Mat::eye(3,3,CV_64F), 
-          const Mat &P = cv::Mat());
-
-    protected:
+          const Mat &P = cv::Mat()) const;
 
       virtual ImagePoint image( const ImagePoint &pt ) const;
       virtual ImagePoint unimage( const ImagePoint &pt ) const;
@@ -130,6 +129,33 @@ namespace Distortion {
       virtual ImagePoint undistort( const ImagePoint &pw ) const { return pw; }
       virtual ImagePoint distort( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
 
+
+//      struct Undistorter {
+//        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+//
+//        const PinholeCamera &_cam;
+//
+//        ImagePoint operator()( const ImagePoint &pt ) 
+//        { return _cam.undistort( pt ); }
+//      };
+
+      struct VecUndistorter {
+        VecUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+        const PinholeCamera &_cam;
+
+        ImagePointsVec operator()( const ImagePointsVec &vec )
+        { ImagePointsVec out( vec.size() );
+          _cam.undistortPoints( vec, out );
+          return out;
+        }
+      };
+
+
+      VecUndistorter makeVecUndistorter( void ) const { return VecUndistorter( *this ); }
+
+
+
+    protected:
 
       void getRectangles(
           const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
@@ -158,6 +184,9 @@ namespace Distortion {
 
       void undistortImage( const Mat &distorted, Mat &undistorted,
           const Mat &Knew, const Size& new_size);
+      void undistortImage( const Mat &distorted, Mat &undistorted )
+      { undistortImage( distorted, undistorted, Mat(), Size() ); }
+
 
 
 

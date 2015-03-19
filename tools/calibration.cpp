@@ -407,6 +407,7 @@ int main( int argc, char** argv )
       if( detection->found )  
         cout << "  Found calibration pattern." << endl;
 
+      cout << "Writing to " << detectionCacheFile << endl;
       detection->writeCache( *board, detectionCacheFile );
     }
 
@@ -435,6 +436,11 @@ int main( int argc, char** argv )
 
 
   cout << "Using points from " << imagePoints.size() << "/" << opts.inFiles.size() << " images" << endl;
+
+  if( imagePoints.size() < 3 ) {
+    cerr << "Not enough images.  Stopping." << endl;
+    exit(-1);
+  }
 
   string cameraFile( opts.cameraPath(mkCameraFileName() ) );
   vector< Vec3d > rvecs, tvecs;

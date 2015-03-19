@@ -7,12 +7,13 @@
 #include <opencv2/core/core.hpp>
 
 #include "board.h"
+#include "distortion_model.h"
 
 
 struct SharedPoints
 {
-  std::vector< cv::Point2f > imagePoints[2];
-  std::vector< cv::Point3f > worldPoints;
+  Distortion::ImagePointsVec imagePoints[2];
+  Distortion::ObjectPointsVec worldPoints;
 };
 
 struct Detection 
@@ -21,11 +22,11 @@ struct Detection
     : found(false), points(), corners(), ids() {;}
 
   bool found;
-  std::vector< cv::Point2f > points;
-  std::vector< cv::Point3f > corners;
+  Distortion::ImagePointsVec points;
+  Distortion::ObjectPointsVec corners;
   std::vector< int > ids;
 
-int size( void ) const { return points.size(); }
+  int size( void ) const { return points.size(); }
 
   virtual void calculateCorners( const Board &board );
   virtual void drawCorners(  const Board &board, cv::Mat &view ) const;

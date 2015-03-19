@@ -188,7 +188,7 @@ namespace Distortion {
 
   void PinholeCamera::undistortPoints( const ImagePointsVec &distorted, 
       ImagePointsVec &undistorted, 
-      const Mat &R, const Mat &P)
+      const Mat &R, const Mat &P) const
   {
     // will support only 2-channel data now for points
     undistorted.resize(distorted.size());
