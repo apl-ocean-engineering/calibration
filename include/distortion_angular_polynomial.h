@@ -6,7 +6,7 @@
 
 namespace Distortion {
 
-  class AngularPolynimalEstimable;
+  using cv::Vec4d;
 
   class AngularPolynomial : public DistortionModel {
     public:
@@ -44,15 +44,15 @@ namespace Distortion {
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
-      double calibrate( const ObjectPointsVecVec &objectPoints, 
+      virtual double calibrate( const ObjectPointsVecVec &objectPoints, 
           const ImagePointsVecVec &imagePoints, const Size& image_size,
           vector< Vec3d > &rvecs, 
           vector< Vec3d > &tvecs,
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
-       virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, 
+       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
+          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
           cv::OutputArray jacobian = cv::noArray() ) const;
 
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
@@ -60,8 +60,8 @@ namespace Distortion {
 
     protected: 
 
-       virtual Vec2d undistort( const Vec2d &pw ) const;
-       virtual Vec2d distort( const Vec3d &w ) const ;
+       virtual ImagePoint undistort( const ImagePoint &pw ) const;
+       virtual ImagePoint distort( const Vec3f &w ) const ;
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
@@ -96,47 +96,6 @@ namespace Distortion {
       cv::Vec4d _distCoeffs;
 
   };
-
-//  class AngularPolynomialEstimable : public AngularPolynomial {
-//    public:
-//
-//      AngularPolynomialEstimable() : AngularPolynomial(), isEstimate(9,0) {;}
-//
-//      AngularPolynomialEstimable( const AngularPolynomial &other )
-//        : AngularPolynomial( other.distCoeffs(), other.matx() ), isEstimate(9,0) {;}
-//
-//      AngularPolynomialEstimable( const Vec4d &distCoeffs, const Matx33d &cam )
-//        : AngularPolynomial( distCoeffs, cam ), isEstimate(9,0) {;}
-//
-//
-//      vector<int> isEstimate;
-//
-//      AngularPolynomialEstimable operator+(const Mat& a);
-//      AngularPolynomialEstimable& operator=(const Mat& a);
-//
-//      Vec4d normVec( void ) const;
-//      double deltaFrom( const AngularPolynomialEstimable &other ) const;
-//
-//      friend class AngularPolynomial;
-//
-//    protected:
-//      void computeJacobians( const ObjectPointsVecVec &objectPoints, 
-//          const ImagePointsVecVec &imagePoints,
-//          const vector< Vec3d > &omc, const vector< Vec3d > &Tc,
-//          const int check_cond, const double thresh_cond, 
-//          Mat& JJ2_inv, Mat& ex3);
-//
-//      double estimateUncertainties( const ObjectPointsVecVec &objectPoints, 
-//          const ImagePointsVecVec &imagePoints,
-//          const vector< Vec3d > &omc, 
-//          const vector< Vec3d > &Tc,
-//          AngularPolynomialEstimable &errors, 
-//          Vec2d& std_err, 
-//          double thresh_cond, int check_cond );
-//
-//
-//
-//  };
 
 }
 

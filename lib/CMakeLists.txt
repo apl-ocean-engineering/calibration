@@ -12,6 +12,7 @@ add_library( lib_camera_calibration
         camera_model.cpp
         distortion_model.cpp
         angular_polynomial.cpp
+        radial_polynomial.cpp
         camera_factory.cpp )
       # fisheye.cpp
 

@@ -58,7 +58,7 @@ void Camera::initUndistortRectifyMap( const Mat &R, const Mat &P,
 
         for( int j = 0; j < size.width; ++j)
         {
-          Vec2d pt( image( distort( world ) ) );
+          ImagePoint pt( image( distort( world ) ) );
           double u = pt[0], v = pt[1];
 
             if( m1type == CV_16SC2 )
@@ -80,8 +80,8 @@ void Camera::initUndistortRectifyMap( const Mat &R, const Mat &P,
     }
 }
 
-  void Camera::undistortPoints( const vector< Point2d > &distorted, 
-      vector< Point2d > &undistorted, 
+  void Camera::undistortPoints( const ImagePointsVec &distorted, 
+      ImagePointsVec &undistorted, 
       const Mat &R, const Mat &P)
   {
     // will support only 2-channel data now for points

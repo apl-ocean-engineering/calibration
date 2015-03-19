@@ -66,14 +66,14 @@ static std::ostream& operator <<(std::ostream& stream, const Distortion::Angular
 
 namespace Distortion {
 
-  // Used by projectPoints
-  struct  __attribute__((packed)) JacobianRow
-  {
-    Vec2d df, dc;
-    double dalpha;
-    Vec4d dk;
-    Vec3d dom, dT;
-  };
+  //// Used by projectPoints
+  //struct  __attribute__((packed)) JacobianRow
+  //{
+  //  Vec2d df, dc;
+  //  double dalpha;
+  //  Vec4d dk;
+  //  Vec3d dom, dT;
+  //};
 
   using namespace cv;
   using namespace std;
@@ -100,18 +100,9 @@ namespace Distortion {
       int flags, 
       cv::TermCriteria criteria)
   {
-    AngularPolynomial fe( Vec4d(0.0, 0.0, 0.0, 0.0), InitialCameraEstimate( image_size ) );
+    AngularPolynomial fe( Vec4d(0.0, 0.0, 0.0, 0.0), Camera::InitialCameraEstimate( image_size ) );
     fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
-  }
-
-  Matx33d AngularPolynomial::InitialCameraEstimate( const Size &image_size )
-  {
-    float fEstimate = max( image_size.width, image_size.height )/ CV_PI;
-    // If you're calling the static function, you aren't providing an initial estimate
-    return Matx33d( fEstimate, 0, image_size.width/2.0 - 0.5,
-        0, fEstimate, image_size.height/2.0 - 0.5,
-        0, 0, 1. );
   }
 
 
@@ -211,7 +202,7 @@ namespace Distortion {
 
     // Check and see if the camera matrix has been initialized
     if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
-      setCamera( InitialCameraEstimate( image_size ) );
+      setCamera( Camera::InitialCameraEstimate( image_size ) );
 
     const int check_cond = flags & CALIB_CHECK_COND ? 1 : 0;
 
@@ -249,8 +240,8 @@ namespace Distortion {
       p[5] = tvecs[i][2];
 
       for( int j = 0; j < imagePoints[i].size(); ++j ) {
-        ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j].x, imagePoints[i][j].y,
-            objectPoints[i][j].x, objectPoints[i][j].y );
+        ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j][0], imagePoints[i][j][1],
+            objectPoints[i][j][0], objectPoints[i][j][1] );
         problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
       }
     }
@@ -293,8 +284,8 @@ namespace Distortion {
     return rms;
   }
 
-  void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-      const Vec3d &rvec, const Vec3d &tvec, 
+  void AngularPolynomial::projectPoints( const ObjectPointsVec &objectPoints, 
+      const Vec3d &rvec, const Vec3d &tvec, ImagePointsVec &imagePoints, 
       OutputArray jacobian) const
   {
     // will support only 3-channel data now for points
@@ -450,7 +441,7 @@ namespace Distortion {
   }
 
 
-  Vec2d AngularPolynomial::distort( const Vec3d &w ) const
+  Vec2f AngularPolynomial::distort( const Vec3f &w ) const
   {
     double theta = atan2( sqrt( w[0]*w[0] + w[1]*w[1] ), w[2] );
     double psi = atan2( w[1], w[0] );
@@ -458,10 +449,10 @@ namespace Distortion {
     double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta4*theta4;
     double theta_d = theta * (1 + _distCoeffs[0]*theta2 + _distCoeffs[1]*theta4 + _distCoeffs[2]*theta6 + _distCoeffs[3]*theta8);
 
-    return Vec2d( theta_d*cos( psi ), theta_d*sin(psi) );
+    return Vec2f( theta_d*cos( psi ), theta_d*sin(psi) );
   }
 
-  Vec2d AngularPolynomial::undistort( const Vec2d &pw ) const
+  Vec2f AngularPolynomial::undistort( const Vec2f &pw ) const
   {
     double scale = 1.0;
 
@@ -479,7 +470,7 @@ namespace Distortion {
       scale = std::tan(theta) / theta_d;
     }
 
-    Vec2d pu = pw * scale; //undistorted point
+    Vec2f pu = pw * scale; //undistorted point
 
     return pu;
   }

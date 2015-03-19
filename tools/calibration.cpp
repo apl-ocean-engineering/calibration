@@ -15,6 +15,7 @@
 
 #include "distortion_model.h"
 #include "distortion_angular_polynomial.h"
+#include "distortion_radial_polynomial.h"
 using namespace Distortion;
 
 #include "file_utils.h"
@@ -26,12 +27,17 @@ using namespace cv;
 using namespace std;
 
 class CalibrationOpts {
+
   public:
+
+    typedef enum { ANGULAR_POLYNOMIAL, RADIAL_POLYNOMIAL } CalibrationType_t;
+
     CalibrationOpts()
       : dataDir("data"),
       boardName(), 
       inFiles(),
-      ignoreCache( false )
+      ignoreCache( false ),
+      calibType( ANGULAR_POLYNOMIAL )
   {;}
 
     bool validate( string &msg)
@@ -47,6 +53,7 @@ class CalibrationOpts {
     string cameraName;
     vector< string > inFiles;
     bool ignoreCache, retryUnregistered;
+    CalibrationType_t calibType;
 
     const string boardPath( void )
     { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -104,6 +111,7 @@ class CalibrationOpts {
         { "data_directory", true, NULL, 'd' },
         { "board", true, NULL, 'b' },
         { "camera", true, NULL, 'c' },
+        { "calibation-model", true, NULL, 'm' },
         { "ignore-cache", false, NULL, 'i' },
         { "retry-unregistered", false, NULL, 'r' },
         { "help", false, NULL, '?' },
@@ -119,7 +127,8 @@ class CalibrationOpts {
 
       int indexPtr;
       int optVal;
-      while( (optVal = getopt_long( argc, argv, "irb:c:d:?", long_options, &indexPtr )) != -1 ) {
+      string c;
+      while( (optVal = getopt_long( argc, argv, "irb:c:d:m:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
@@ -132,6 +141,17 @@ class CalibrationOpts {
             break;
           case 'i':
             ignoreCache = true;
+            break;
+          case 'm':
+            c = optarg;
+            if( c.compare("angular") == 0 )
+              calibType = ANGULAR_POLYNOMIAL;
+            else if (c.compare("radial") == 0)
+              calibType = RADIAL_POLYNOMIAL;
+            else {
+              cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
+              exit(-1);
+            }
             break;
           case 'r':
             retryUnregistered = true;
@@ -263,13 +283,13 @@ class CalibrationOpts {
 
 
 static double computeReprojectionErrors(
-    const DistortionModel &dist,
+    const DistortionModel *dist,
     const Distortion::ObjectPointsVecVec &objectPoints,
     const Distortion::ImagePointsVecVec &imagePoints,
     const Distortion::RotVec &rvecs, const Distortion::TransVec &tvecs,
     vector<float>& perViewErrors )
 {
-  vector<Point2d> reprojImgPoints;
+  ImagePointsVec reprojImgPoints;
   int i, totalPoints = 0;
   double totalErr = 0, err;
   perViewErrors.resize(objectPoints.size());
@@ -277,10 +297,7 @@ static double computeReprojectionErrors(
   for( i = 0; i < (int)objectPoints.size(); i++ )
   {
     if( objectPoints[i].size() > 0 ) {
-      //fisheye::projectPoints( Mat( objectPoints[i] ), imagePoints2, rvecs[i], tvecs[i],
-      //    cameraMatrix, distCoeffs );
-
-      dist.projectPoints( Mat( objectPoints[i] ), reprojImgPoints, rvecs[i], tvecs[i] );
+      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
 
       err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
       int n = (int)objectPoints[i].size();
@@ -297,10 +314,10 @@ static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
     const vector< Image > &imagesUsed,
     float aspectRatio, int flags,
-    const DistortionModel &model, 
+    const DistortionModel *model, 
     const vector<Vec3d>& rvecs, const vector<Vec3d>& tvecs,
     const vector<float>& reprojErrs,
-    const vector<vector<Point2d> >& imagePoints,
+    const Distortion::ImagePointsVecVec &imagePoints,
     double totalAvgErr )
 {
 
@@ -338,7 +355,7 @@ static void saveCameraParams( const string& filename,
 
   out << "flags" << flags;
 
-  model.write( out );
+  model->write( out );
 
   out << "avg_reprojection_error" << totalAvgErr;
   if( !reprojErrs.empty() )
@@ -409,8 +426,8 @@ int main( int argc, char** argv )
   float aspectRatio = 1.f;
   bool writeExtrinsics = false, writePoints = false;
 
-  vector<vector<Point2d> > imagePoints;
-  vector<vector<Point3d> > objectPoints;
+  Distortion::ImagePointsVecVec imagePoints;
+  Distortion::ObjectPointsVecVec objectPoints;
 
   if( opts.inFiles.size() < 1 ) {
     cout << "No input files specified on command line." << endl;
@@ -473,11 +490,11 @@ int main( int argc, char** argv )
     if( detection->points.size() > 3 ) {
       imagesUsed.push_back( img );
 
-      // Whoops.  Type conversion from vec<Point2f> to vec<Point2d> that needs to be cleaned up later
-      vector< Point2d > imgPts( detection->points.size() );
+       //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
+      ImagePointsVec imgPts( detection->points.size() );
       std::copy( detection->points.begin(), detection->points.end(), imgPts.begin() );
 
-      vector< Point3d > wldPts( detection->corners.size() );
+      ObjectPointsVec wldPts( detection->corners.size() );
       std::copy( detection->corners.begin(), detection->corners.end(), wldPts.begin() );
 
       imagePoints.push_back( imgPts );
@@ -500,8 +517,23 @@ int main( int argc, char** argv )
   vector< Vec3d > rvecs, tvecs;
 
   int flags =  PinholeCamera::CALIB_FIX_SKEW;
-  AngularPolynomial distModel;
-  double rms = distModel.calibrate( objectPoints, imagePoints, 
+
+  DistortionModel *distModel = NULL;
+  switch( opts.calibType ) {
+    case CalibrationOpts::ANGULAR_POLYNOMIAL:
+      distModel = new Distortion::AngularPolynomial;
+      break;
+    case CalibrationOpts::RADIAL_POLYNOMIAL:
+      distModel = new Distortion::RadialPolynomial;
+      break;
+  }
+
+  if( !distModel ) {
+    cerr << "Something went wrong choosing a distortion model." << endl;
+    exit(-1);
+  }
+
+  double rms = distModel->calibrate( objectPoints, imagePoints, 
       imageSize, rvecs, tvecs, flags );
 
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
@@ -522,7 +554,7 @@ int main( int argc, char** argv )
         writeExtrinsics ? rvecs : vector<Vec3d>(),
         writeExtrinsics ? tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
-        writePoints ? imagePoints : vector<vector<Point2d> >(),
+        writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
         totalAvgErr );
   }
   //
@@ -536,15 +568,15 @@ int main( int argc, char** argv )
   //  Mat optimalCameraMatrix = getOptimalNewCameraMatrix(distModel.mat(), distModel.distCoeffs(), imageSize, alpha, 
   //        Size(), NULL );
 
-  Mat optimalCameraMatrix = distModel.mat();
+  Mat optimalCameraMatrix = distModel->mat();
 
   //  cout << "Distortion coefficients: " << endl << distCoeffs << endl;
-  cout << "Calculated camera matrix: " << endl << distModel.mat() << endl;
+  cout << "Calculated camera matrix: " << endl << distModel->mat() << endl;
   cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
 
 
   Mat map1, map2;
-  distModel.initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
+  distModel->initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
 
   //  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
   //  //    imageSize, CV_16SC2, map1, map2);
@@ -553,17 +585,17 @@ int main( int argc, char** argv )
 
     string outfile;
     if( objectPoints[i].size() > 0 ) {
-      vector<Point2d> reprojImgPoints;
+      Distortion::ImagePointsVec reprojImgPoints;
       Mat out;
       //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
       //   cameraMatrix, distCoeffs);
-      distModel.projectPoints(objectPoints[i], reprojImgPoints, rvecs[i], tvecs[i] );
+      distModel->projectPoints(objectPoints[i], rvecs[i], tvecs[i], reprojImgPoints );
 
       imagesUsed[i].img().copyTo( out );
       for( int j = 0; j < imagePoints[i].size(); ++j ) {
-        circle( out, imagePoints[i][j], 5, Scalar(0,0,255), 1 );
+        circle( out, Point2f(imagePoints[i][j]), 5, Scalar(0,0,255), 1 );
 
-        circle( out, reprojImgPoints[j], 5, Scalar(0,255,0), 1 );
+        circle( out, Point2f(reprojImgPoints[j]), 5, Scalar(0,255,0), 1 );
       }
 
 
@@ -578,14 +610,14 @@ int main( int argc, char** argv )
 
     const int N = 9;
     int x, y, k;
-    vector< Point2d > pts, undPts;
+    ImagePointsVec pts, undPts;
 
     for( y = k = 0; y < N; y++ )
       for( x = 0; x < N; x++ )
-        pts.push_back( Point2d((float)x*imageSize.width/(N-1),
-              (float)y*imageSize.height/(N-1)) );
+        pts.push_back( ImagePoint((float)x*imageSize.width/(N-1),
+                                  (float)y*imageSize.height/(N-1)) );
 
-    distModel.undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
+    distModel->undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
 
     for( y = k = 0; y < N; y++ )
       for( x = 0; x < N; x++ ) {
@@ -603,6 +635,7 @@ int main( int argc, char** argv )
 
   }
 
+  delete distModel;
 
   //    if( inputFilename )
   //    {

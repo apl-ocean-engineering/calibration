@@ -12,35 +12,51 @@ namespace Distortion {
   using cv::Size;
   using cv::Mat;
 
+  using cv::Vec2f;
+  using cv::Vec3f;
+  using cv::Point3f;
+  using cv::Point2f;
+
   using cv::Vec2d;
   using cv::Vec3d;
-  using cv::Vec4d;
-  using cv::Point3d;
-  using cv::Point2d;
 
   using cv::Matx33d;
 
   // For later ... it's all done double precision for now.  Not necessary.
 
-  typedef vector< Point3d > ObjectPointsVec;
-  typedef vector< vector< Point3d > > ObjectPointsVecVec;
-  typedef vector< Point2d > ImagePointsVec;
-  typedef vector< vector< Point2d > > ImagePointsVecVec;
+  typedef Vec3f ObjectPoint;
+  typedef vector< ObjectPoint > ObjectPointsVec;
+  typedef vector< vector< ObjectPoint > > ObjectPointsVecVec;
+
+  typedef Vec2f ImagePoint;
+  typedef vector< ImagePoint > ImagePointsVec;
+  typedef vector< vector< ImagePoint > > ImagePointsVecVec;
 
   typedef vector< Vec3d > RotVec, TransVec;
 
   class Camera {
     public:
 
+      virtual ~Camera() {;}
+
       virtual const std::string name( void ) const = 0;
 
-      virtual void projectPoints( const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, 
+      virtual double calibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          vector< Vec3d > &rvecs, 
+          vector< Vec3d > &tvecs,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  ) { return -1; }
+
+
+
+      virtual void projectPoints( const ObjectPointsVec &objectPoints, 
+          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
           cv::OutputArray jacobian = cv::noArray()) const = 0;
 
       //-- Undistortion functions --
-      void undistortPoints( const vector< Point2d > &distorted, 
-          vector< Point2d > &undistorted, 
+      void undistortPoints( const ImagePointsVec &distorted, 
+          ImagePointsVec &undistorted, 
           const Mat &R = cv::Mat::eye(3,3,CV_64F), 
           const Mat &P = cv::Mat());
 
@@ -50,12 +66,21 @@ namespace Distortion {
       void undistortImage( const Mat &distorted, Mat &undistorted,
           const Mat &Knew, const Size& new_size);
 
-    protected:
-      virtual Vec2d image( const Vec2d &pt ) const = 0;
-      virtual Vec2d unimage( const Vec2d &pt ) const = 0;
+      static Matx33d InitialCameraEstimate( const Size &image_size )
+      {
+        float fEstimate = std::max( image_size.width, image_size.height )/ CV_PI;
+        return Matx33d( fEstimate, 0, image_size.width/2.0 - 0.5,
+            0, fEstimate, image_size.height/2.0 - 0.5,
+            0, 0, 1. );
+      }
 
-      virtual Vec2d undistort( const Vec2d &pw ) const = 0;
-      virtual Vec2d distort( const Vec3d &w ) const = 0;
+
+    protected:
+      virtual ImagePoint image( const ImagePoint &pt ) const = 0;
+      virtual ImagePoint unimage( const ImagePoint &pt ) const = 0;
+
+      virtual ImagePoint undistort( const ImagePoint &pw ) const = 0;
+      virtual ImagePoint distort( const ObjectPoint &w ) const = 0;
 
       Camera() {;}
   };
@@ -76,13 +101,15 @@ namespace Distortion {
       PinholeCamera( const Matx33d &k );
       PinholeCamera( const Mat &k );
 
+      virtual ~PinholeCamera() {;}
+
       virtual const std::string name( void ) const { return "pinhole"; }
 
       void setCamera( const Matx33d &k );
       void setCamera( double fx, double fy, double cx, double cy, double alpha = 1 );
 
-      Vec2d image( const Vec2d &pt ) const;
-      Vec2d unimage( const Vec2d &pt ) const;
+      ImagePoint image( const ImagePoint &pt ) const;
+      ImagePoint unimage( const ImagePoint &pt ) const;
 
       Matx33d matx( void ) const;
       Mat mat( void ) const;
@@ -113,6 +140,8 @@ namespace Distortion {
 
       DistortionModel( const Matx33d &cam )
         : PinholeCamera( cam ) {;}
+
+      virtual ~DistortionModel() {;}
 
   };
 
