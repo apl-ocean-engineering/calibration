@@ -48,23 +48,9 @@ namespace Distortion {
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  ) { return -1; }
 
-
-
       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
           cv::OutputArray jacobian = cv::noArray()) const = 0;
-
-      //-- Undistortion functions --
-      void undistortPoints( const ImagePointsVec &distorted, 
-          ImagePointsVec &undistorted, 
-          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
-          const Mat &P = cv::Mat());
-
-      virtual void initUndistortRectifyMap( const Mat &R, const Mat &P,
-          const cv::Size& size, int m1type, Mat &map1, Mat &map2 );
-
-      void undistortImage( const Mat &distorted, Mat &undistorted,
-          const Mat &Knew, const Size& new_size);
 
       static Matx33d InitialCameraEstimate( const Size &image_size )
       {
@@ -74,13 +60,8 @@ namespace Distortion {
             0, 0, 1. );
       }
 
-
     protected:
-      virtual ImagePoint image( const ImagePoint &pt ) const = 0;
-      virtual ImagePoint unimage( const ImagePoint &pt ) const = 0;
 
-      virtual ImagePoint undistort( const ImagePoint &pw ) const = 0;
-      virtual ImagePoint distort( const ObjectPoint &w ) const = 0;
 
       Camera() {;}
   };
@@ -88,13 +69,18 @@ namespace Distortion {
   class PinholeCamera : public Camera {
     public:
 
+      // Must be equal to OpenCV's to avoid nasty conversions
       enum{
-        CALIB_RECOMPUTE_EXTRINSIC   = (1<<0),
-        CALIB_CHECK_COND            = (1<<1),
-        CALIB_FIX_SKEW              = (1<<2),
-        CALIB_FIX_INTRINSIC         = (1<<3)
+        CALIB_USE_INTRINSIC_GUESS   = 1,
+        CALIB_RECOMPUTE_EXTRINSIC   = 2,
+        CALIB_CHECK_COND            = 4,
+        CALIB_FIX_SKEW              = 8,
+        CALIB_FIX_K1                = 16,
+        CALIB_FIX_K2                = 32,
+        CALIB_FIX_K3                = 64,
+        CALIB_FIX_K4                = 128,
+        CALIB_FIX_INTRINSIC         = 256
       };
-      static const int CALIB_FLAG_OFFSET = 4;
 
 
       PinholeCamera( void );
@@ -108,11 +94,8 @@ namespace Distortion {
       void setCamera( const Matx33d &k );
       void setCamera( double fx, double fy, double cx, double cy, double alpha = 1 );
 
-      ImagePoint image( const ImagePoint &pt ) const;
-      ImagePoint unimage( const ImagePoint &pt ) const;
-
-      Matx33d matx( void ) const;
-      Mat mat( void ) const;
+      virtual Matx33d matx( void ) const;
+      virtual Mat mat( void ) const;
 
       Vec2d  f( void ) const      { return Vec2d( _fx, _fy ); }
       double fx( void ) const     { return _fx; }
@@ -125,7 +108,32 @@ namespace Distortion {
 
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
 
+      Mat getOptimalNewCameraMatrix( const Size &imgSize, double alpha, 
+          const Size &newImgSize, cv::Rect &validPixROI, bool centerPrincipalPoint = false );
+
+      Mat getOptimalNewCameraMatrix( const Size &imgSize, double alpha, 
+          const Size &newImgSize, bool centerPrincipalPoint = false )
+      { cv::Rect validROI;
+        return getOptimalNewCameraMatrix( imgSize, alpha, newImgSize, validROI, centerPrincipalPoint ); }
+
+
+      virtual void undistortPoints( const ImagePointsVec &distorted, 
+          ImagePointsVec &undistorted, 
+          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
+          const Mat &P = cv::Mat());
+
     protected:
+
+      virtual ImagePoint image( const ImagePoint &pt ) const;
+      virtual ImagePoint unimage( const ImagePoint &pt ) const;
+
+      virtual ImagePoint undistort( const ImagePoint &pw ) const { return pw; }
+      virtual ImagePoint distort( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
+
+
+      void getRectangles(
+          const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
+          cv::Rect_<float>& inner, cv::Rect_<float>& outer );
 
       double _fx, _fy, _alpha, _cx, _cy;
 
@@ -142,6 +150,17 @@ namespace Distortion {
         : PinholeCamera( cam ) {;}
 
       virtual ~DistortionModel() {;}
+
+      //-- Undistortion functions --
+      
+      virtual void initUndistortRectifyMap( const Mat &R, const Mat &P,
+          const cv::Size& size, int m1type, Mat &map1, Mat &map2 );
+
+      void undistortImage( const Mat &distorted, Mat &undistorted,
+          const Mat &Knew, const Size& new_size);
+
+
+
 
   };
 

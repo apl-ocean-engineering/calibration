@@ -10,10 +10,10 @@ namespace Distortion {
   using namespace std;
   using namespace cv;
 
-  Camera *CameraFactory::Load( const string &file )
+  DistortionModel *CameraFactory::LoadDistortionModel( const string &file )
   {
     FileStorage fs( file, FileStorage::READ );
-    Camera *out = NULL;
+    DistortionModel *out = NULL;
 
     string type;
     fs["camera_model"] >> type;

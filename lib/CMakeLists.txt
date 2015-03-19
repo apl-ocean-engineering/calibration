@@ -10,6 +10,7 @@ add_library( lib_camera_calibration
         synchronizer.cpp 
 	trendnet_time_code.cpp 
         camera_model.cpp
+        pinhole_camera.cpp
         distortion_model.cpp
         angular_polynomial.cpp
         radial_polynomial.cpp

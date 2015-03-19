@@ -77,7 +77,7 @@ namespace Distortion {
 
       Mat computeHomography(Mat m, Mat M);
 
-      void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
+      //void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
 
       //void computeExtrinsicRefine(const ImagePointsVec& imagePoints, const ObjectPointsVec& objectPoints, 
       //    Mat &rvec, Mat &tvec, 

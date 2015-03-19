@@ -11,7 +11,7 @@ namespace Distortion {
 
   class CameraFactory {
     public:
-      static Camera *Load( const string &file );
+      static DistortionModel *LoadDistortionModel( const string &file );
 
     private:
       CameraFactory() {;}

@@ -212,6 +212,9 @@ namespace Distortion {
     //    Vec2d err_std;
     //
 
+// Unfortunately, these algorithms all assume objectPoints and imagePoints are Vec*d, so
+// explicitly cast them
+
     rvecs.resize( objectPoints.size() );
     tvecs.resize( objectPoints.size() );
 
@@ -326,20 +329,6 @@ namespace Distortion {
     {
       Vec3d Xworld( objectPoints[i] );
       Vec3d Xcam( aff*Xworld );
-
-      //      double theta = atan2( sqrt(  Xcam[0]*Xcam[0] + Xcam[1]*Xcam[1] ), Xcam[2] );
-      //      double psi = atan2( Xcam[1], Xcam[0] );
-      //
-      //      double theta2 = theta*theta, 
-      //             theta3 = theta*theta2, 
-      //             theta5 = theta3*theta2,
-      //             theta7 = theta5*theta2, 
-      //             theta9 = theta7*theta2;
-      //
-      //      double theta_d = theta + k[0]*theta3 + k[1]*theta5 + k[2]*theta7 + k[3]*theta9;
-
-      //double inv_r = r > 1e-8 ? 1.0/r : 1;
-      //double cdist = r > 1e-8 ? theta_d * inv_r : 1;
 
       imagePoints[i] = image( distort( Xcam ) );
 
@@ -632,23 +621,31 @@ namespace Distortion {
   //  }
   //};
 
-  void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
-  {
-    ImagePointsVec undistorted;
-    undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
-    Mat(undistorted).copyTo( normalized );
-  }
+  //void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
+  //{
+  //  ImagePointsVec undistorted;
+  //  undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
+  //  Mat(undistorted).copyTo( normalized );
+  //}
 
   void AngularPolynomial::initExtrinsics(const ImagePointsVec& _imagePoints, 
       const ObjectPointsVec& _objectPoints, 
       Vec3d& omc, Vec3d& Tc)
   {
+    // These algorithms assume Vec*d data, so have explicitly case both imagePoints
+    // and objectPoints, regardless of thei native precision.
+    //
     // Splat both of these down to single-channel 2xN matrices
-    Mat ipNormalized;
-    normalizePixels( _imagePoints, ipNormalized );
-    Mat imagePointsNormalized( ipNormalized.reshape(1).t() );
+    ImagePointsVec undistorted;
+    undistortPoints( _imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
+    vector< Vec2d > undistD( undistorted.size() );
+    std::copy( undistorted.begin(), undistorted.end(), undistD.begin() );
+    Mat imagePointsNormalized( Mat(undistD).reshape(1).t() );
 
-    Mat objectPoints( Mat(_objectPoints).reshape(1).t() );
+    // explicitly cast _objectPoints to Vec3d
+    vector< Vec3d > objPtsD( _objectPoints.size() );
+    std::copy( _objectPoints.begin(), _objectPoints.end(), objPtsD.begin() );
+    Mat objectPoints( Mat(objPtsD).reshape(1).t() ); 
 
     Mat objectPointsMean, covObjectPoints;
     Mat Rckk, omckk, Tckk;

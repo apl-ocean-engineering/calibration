@@ -109,87 +109,10 @@ namespace Distortion {
       cv::TermCriteria criteria)
   {
     RadialPolynomial fe( InitialDistortionEstimate(), InitialCameraEstimate( image_size ) );
-    fe.calibrate( Mat(objectPoints), Mat(imagePoints), image_size, rvecs, tvecs, flags, criteria );
+    fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
   }
 
-
-  // Ceres functor for solving calibration problem
-  //  Based on the Bundler solver used in their examples
-//  struct CalibReprojectionError {
-//    CalibReprojectionError(double observed_x, double observed_y, double world_x, double world_y )
-//      : observed_x(observed_x), observed_y(observed_y), worldX( world_x ), worldY( world_y ) {}
-//
-//    template <typename T>
-//      bool operator()(const T* const camera,
-//          const T* const alpha,
-//          const T* const pose, 
-//          T* residuals) const
-//      {
-//        // pose is a 6-vector
-//        //    3 angles
-//        //    3 translations
-//        //
-//        // alpha is a 1-vector (separate so it can be set Constant/Variable)
-//        //
-//        // camera i s 8-vector
-//        //    2 focal length
-//        //    2 camera center
-//        //    4 distortion params
-//        //
-//        //
-//        // camera[0,1,2] are the angle-axis rotation.
-//        T point[3] = { T( worldX ), 
-//          T( worldY ), 
-//          T( 0.0 ) };
-//        T p[3];
-//        ceres::AngleAxisRotatePoint(pose, point, p);
-//        p[0] += pose[3]; p[1] += pose[4]; p[2] += pose[5];
-//
-//        T theta = atan2( sqrt( p[0]*p[0] + p[1]*p[1] ), p[2]  );
-//        T psi   = atan2( p[1], p[0] );
-//
-//        const T &fx = camera[0];
-//        const T &fy = camera[1];
-//        const T &cx = camera[2];
-//        const T &cy = camera[3];
-//        const T &k1 = camera[4];
-//        const T &k2 = camera[5];
-//        const T &k3 = camera[6];
-//        const T &k4 = camera[7];
-//
-//        T theta2 =  theta*theta;
-//        T theta4 =  theta2*theta2;
-//        T theta6 = theta4*theta2;
-//        T theta8 = theta4*theta4;
-//
-//        T thetaDist = theta * ( T(1) + k1*theta2 + k2 *theta4 + k3*theta6 + k4*theta8);
-//
-//        T xdn = thetaDist * cos( psi ),
-//          ydn = thetaDist * sin( psi );
-//
-//        T predictedX = fx*(xdn + alpha[0]*ydn) + cx;
-//        T predictedY = fy* ydn              + cy;
-//
-//        // The error is the difference between the predicted and observed position.
-//        residuals[0] = predictedX - T(observed_x);
-//        residuals[1] = predictedY - T(observed_y);
-//        return true;
-//      }
-
-//    // Factory to hide the construction of the CostFunction object from
-//    // the client code.
-//    static ceres::CostFunction* Create(const double observed_x, const double observed_y, 
-//        const double world_x, const double world_y ) {
-//      return (new ceres::AutoDiffCostFunction<CalibReprojectionError, 2, 8, 1, 6>(
-//            new CalibReprojectionError(observed_x, observed_y, world_x, world_y)));
-//    }
-//
-//    double observed_x;
-//    double observed_y;
-//
-//    double worldX, worldY;
-//  };
 
   double RadialPolynomial::calibrate(
       const ObjectPointsVecVec &objectPoints, 
@@ -204,10 +127,33 @@ namespace Distortion {
     Mat camera( mat() );
     Mat dist( _distCoeffs );
 
-    double rms = calibrateCamera( objectPoints, imagePoints, imageSize, camera, dist, rvecs, tvecs, flags, criteria );
+    vector<Mat> _rvecs, _tvecs;
+
+
+    //for( int i = 0; i < objectPoints.size(); ++i ) 
+    //  cout << i << " " << objectPoints[i].size() << " " << imagePoints[i].size() << endl;
+
+    double rms = calibrateCamera( objectPoints, imagePoints, imageSize, camera, dist, _rvecs, _tvecs, flags, criteria );
 
     setCamera( camera );
-    dist.copyTo( _distCoeffs, CV_64F );
+
+    // _distCoeffs will be variable length
+    double *d = dist.ptr<double>(0);
+
+    for( int i = 0; i < 4; ++i ) _distCoeffs[i] = d[i];
+    if( (dist.rows*dist.cols) == 5 )  _distCoeffs[4] = d[4];
+    if( (dist.rows*dist.cols) == 8 ) {
+      _distCoeffs[5] = d[5];
+      _distCoeffs[6] = d[6];
+      _distCoeffs[7] = d[7];
+    }
+
+    rvecs.resize( _rvecs.size() );
+    std::copy( _rvecs.begin(), _rvecs.end(), rvecs.begin() );
+
+    tvecs.resize( _tvecs.size() );
+    std::copy( _tvecs.begin(), _tvecs.end(), tvecs.begin() );
+
 
     return rms;
   }

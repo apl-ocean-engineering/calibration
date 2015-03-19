@@ -34,7 +34,8 @@ class CalibrationOpts {
 
     CalibrationOpts()
       : dataDir("data"),
-      boardName(), 
+      boardName(), cameraName(),
+      calibFlags(0),
       inFiles(),
       ignoreCache( false ),
       calibType( ANGULAR_POLYNOMIAL )
@@ -51,6 +52,7 @@ class CalibrationOpts {
     string dataDir;
     string boardName;
     string cameraName;
+    int calibFlags;
     vector< string > inFiles;
     bool ignoreCache, retryUnregistered;
     CalibrationType_t calibType;
@@ -86,6 +88,8 @@ class CalibrationOpts {
           "     --camera, -c <camera_name> # Name of camera\n"
           "     --ignore-cache, -i       # Ignore and overwrite files in cache\n"
           "     --retry-unregistered, -r   # Re-try to find the chessboard if the cache file is empty\n"
+          "     --calibration-model, -m   # Set the distortion model to: angular, radial, radial8\n"
+          "     --fix-skew, -k            # Fix skew (alpha) to 0\n"
           //     "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
           //     "                              # (used only for video capturing)\n"
           //     "     [-o <out_camera_params>] # the output filename for intrinsic [and extrinsic] parameters\n"
@@ -113,6 +117,7 @@ class CalibrationOpts {
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
         { "ignore-cache", false, NULL, 'i' },
+        { "fix-skew", false, NULL, 'k'},
         { "retry-unregistered", false, NULL, 'r' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
@@ -128,7 +133,7 @@ class CalibrationOpts {
       int indexPtr;
       int optVal;
       string c;
-      while( (optVal = getopt_long( argc, argv, "irb:c:d:m:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "irb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
@@ -142,13 +147,19 @@ class CalibrationOpts {
           case 'i':
             ignoreCache = true;
             break;
+          case 'k':
+            calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            break;
           case 'm':
             c = optarg;
-            if( c.compare("angular") == 0 )
+            if( c.compare("angular") == 0 ) {
               calibType = ANGULAR_POLYNOMIAL;
-            else if (c.compare("radial") == 0)
+            } else if (c.compare("radial") == 0) {
               calibType = RADIAL_POLYNOMIAL;
-            else {
+            } else if (c.compare("radial8") == 0) {
+              calibType = RADIAL_POLYNOMIAL;
+              calibFlags |= CV_CALIB_RATIONAL_MODEL;
+            } else {
               cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
               exit(-1);
             }
@@ -182,95 +193,6 @@ class CalibrationOpts {
         inFiles.push_back( infile );
       }
 
-      //    for( i = 1; i < argc; i++ )
-      //    {
-      //        const char* s = argv[i];
-      //        if( strcmp( s, "-w" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &boardSize.width ) != 1 || boardSize.width <= 0 )
-      //                return fprintf( stderr, "Invalid board width\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-h" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &boardSize.height ) != 1 || boardSize.height <= 0 )
-      //                return fprintf( stderr, "Invalid board height\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-pt" ) == 0 )
-      //        {
-      //            i++;
-      //            if( !strcmp( argv[i], "circles" ) )
-      //                pattern = CIRCLES_GRID;
-      //            else if( !strcmp( argv[i], "acircles" ) )
-      //                pattern = ASYMMETRIC_CIRCLES_GRID;
-      //            else if( !strcmp( argv[i], "chessboard" ) )
-      //                pattern = CHESSBOARD;
-      //            else
-      //                return fprintf( stderr, "Invalid pattern type: must be chessboard or circles\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-s" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%f", &squareSize ) != 1 || squareSize <= 0 )
-      //                return fprintf( stderr, "Invalid board square width\n" ), -1;
-      //        }
-      //        ..else if( strcmp( s, "-n" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &nframes ) != 1 || nframes <= 3 )
-      //                return printf("Invalid number of images\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-a" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%f", &aspectRatio ) != 1 || aspectRatio <= 0 )
-      //                return printf("Invalid aspect ratio\n" ), -1;
-      //            flags |= CV_CALIB_FIX_ASPECT_RATIO;
-      //        }
-      //        else if( strcmp( s, "-d" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &delay ) != 1 || delay <= 0 )
-      //                return printf("Invalid delay\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-op" ) == 0 )
-      //        {
-      //            writePoints = true;
-      //        }
-      //        else if( strcmp( s, "-oe" ) == 0 )
-      //        {
-      //            writeExtrinsics = true;
-      //        }
-      //        else if( strcmp( s, "-zt" ) == 0 )
-      //        {
-      //            flags |= CV_CALIB_ZERO_TANGENT_DIST;
-      //        }
-      //        else if( strcmp( s, "-p" ) == 0 )
-      //        {
-      //            flags |= CV_CALIB_FIX_PRINCIPAL_POINT;
-      //        }
-      //        else if( strcmp( s, "-v" ) == 0 )
-      //        {
-      //            flipVertical = true;
-      //        }
-      //        else if( strcmp( s, "-V" ) == 0 )
-      //        {
-      //            videofile = true;
-      //        }
-      //        else if( strcmp( s, "-o" ) == 0 )
-      //        {
-      //            outputFilename = argv[++i];
-      //        }
-      //        else if( strcmp( s, "-su" ) == 0 )
-      //        {
-      //            showUndistorted = true;
-      //        }
-      //        else if( s[0] != '-' )
-      //        {
-      //            if( isdigit(s[0]) )
-      //                sscanf(s, "%d", &cameraId);
-      //            else
-      //                inputFilename = s;
-      //        }
-      //        else
-      //            return fprintf( stderr, "Unknown option %s", s ), -1;
-      //    }
-
       string msg;
       if( !validate( msg ) ) {
         cout << "Error: " <<  msg << endl;
@@ -286,7 +208,8 @@ static double computeReprojectionErrors(
     const DistortionModel *dist,
     const Distortion::ObjectPointsVecVec &objectPoints,
     const Distortion::ImagePointsVecVec &imagePoints,
-    const Distortion::RotVec &rvecs, const Distortion::TransVec &tvecs,
+    const Distortion::RotVec &rvecs, 
+    const Distortion::TransVec &tvecs,
     vector<float>& perViewErrors )
 {
   ImagePointsVec reprojImgPoints;
@@ -490,7 +413,7 @@ int main( int argc, char** argv )
     if( detection->points.size() > 3 ) {
       imagesUsed.push_back( img );
 
-       //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
+      //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
       ImagePointsVec imgPts( detection->points.size() );
       std::copy( detection->points.begin(), detection->points.end(), imgPts.begin() );
 
@@ -516,7 +439,7 @@ int main( int argc, char** argv )
   string cameraFile( opts.cameraPath(mkCameraFileName() ) );
   vector< Vec3d > rvecs, tvecs;
 
-  int flags =  PinholeCamera::CALIB_FIX_SKEW;
+  int flags =  opts.calibFlags;
 
   DistortionModel *distModel = NULL;
   switch( opts.calibType ) {
@@ -562,13 +485,14 @@ int main( int argc, char** argv )
   //
   //
   //  // Redraw each image with rectified points
-  //  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
+  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
   //                      //                alpha = 1 means all source image pixels are included
   //                      //
-  //  Mat optimalCameraMatrix = getOptimalNewCameraMatrix(distModel.mat(), distModel.distCoeffs(), imageSize, alpha, 
-  //        Size(), NULL );
 
-  Mat optimalCameraMatrix = distModel->mat();
+  Rect validROI;
+  Mat optimalCameraMatrix = distModel->getOptimalNewCameraMatrix( imageSize, alpha, Size(), validROI );
+
+  //Mat optimalCameraMatrix = distModel->mat();
 
   //  cout << "Distortion coefficients: " << endl << distCoeffs << endl;
   cout << "Calculated camera matrix: " << endl << distModel->mat() << endl;
@@ -615,7 +539,7 @@ int main( int argc, char** argv )
     for( y = k = 0; y < N; y++ )
       for( x = 0; x < N; x++ )
         pts.push_back( ImagePoint((float)x*imageSize.width/(N-1),
-                                  (float)y*imageSize.height/(N-1)) );
+              (float)y*imageSize.height/(N-1)) );
 
     distModel->undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
 
