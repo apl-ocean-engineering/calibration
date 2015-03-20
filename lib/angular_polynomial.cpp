@@ -219,9 +219,11 @@ namespace Distortion {
     tvecs.resize( objectPoints.size() );
 
     for( int i = 0; i < objectPoints.size(); ++i )  {
-      ImagePointsVec undistorted;
+      ImagePointsVec undistorted =  normalize( imagePoints[i] );
       // If an initial distortion has been set, use it
-      undistortPoints( imagePoints[i], undistorted, Mat(), mat() );
+      //undistortPoints( imagePoints[i], undistorted, Mat(), mat() );
+      
+      cout << "---------------" << endl;
 
       // Found the approach provided by initExtrinsics to be more reliable (!)
       // will need to investigate why that is.
@@ -742,12 +744,12 @@ namespace Distortion {
       const ObjectPointsVec& _objectPoints, 
       Vec3d& omc, Vec3d& Tc)
   {
+    // Splat both of these down to single-channel 2xN matrices of normalized points
+    ImagePointsVec undistorted = undistort( normalize( _imagePoints ));
+    //undistortPoints( _imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
+    
     // These algorithms assume Vec*d data, so have explicitly case both imagePoints
     // and objectPoints, regardless of thei native precision.
-    //
-    // Splat both of these down to single-channel 2xN matrices
-    ImagePointsVec undistorted;
-    undistortPoints( _imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
     vector< Vec2d > undistD( undistorted.size() );
     std::copy( undistorted.begin(), undistorted.end(), undistD.begin() );
     Mat imagePointsNormalized( Mat(undistD).reshape(1).t() );

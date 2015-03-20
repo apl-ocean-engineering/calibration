@@ -145,19 +145,6 @@ namespace Distortion {
   }
 
 
-  struct TxReprojector {
-    TxReprojector( const Matx33d &mat ) : _mat( mat ) {;}
-    Matx33d _mat;
-
-    ImagePoint operator()( const ImagePoint &pt )
-    {
-      Vec3d pth( pt[0], pt[1], 1.0 );
-      Vec3d out = _mat * pth;
-      return ImagePoint( out[0]/out[2], out[1]/out[2] );
-    }
-  };
-
-
   void PinholeCamera::getRectangles(
       const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
       Rect_<float>& inner, Rect_<float>& outer )
@@ -198,6 +185,20 @@ namespace Distortion {
     inner = Rect_<float>(iX0, iY0, iX1-iX0, iY1-iY0);
     outer = Rect_<float>(oX0, oY0, oX1-oX0, oY1-oY0);
   }
+
+  struct TxReprojector {
+    TxReprojector( const Matx33d &mat ) : _mat( mat ) {;}
+    Matx33d _mat;
+
+    ImagePoint operator()( const ImagePoint &pt )
+    {
+      Vec3d pth( pt[0], pt[1], 1.0 );
+      Vec3d out = _mat * pth;
+      return ImagePoint( out[0]/out[2], out[1]/out[2] );
+    }
+  };
+
+
 
   void PinholeCamera::undistortPoints( const ImagePointsVec &distorted, 
       ImagePointsVec &undistorted, 
