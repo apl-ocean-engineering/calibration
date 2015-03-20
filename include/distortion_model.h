@@ -191,8 +191,9 @@ namespace Distortion {
 
       void undistortImage( const Mat &distorted, Mat &undistorted,
           const Mat &Knew, const Size& new_size);
+      
       void undistortImage( const Mat &distorted, Mat &undistorted )
-      { undistortImage( distorted, undistorted, Mat(), Size() ); }
+      { undistortImage( distorted, undistorted, mat(), distorted.size() ); }
 
 
 

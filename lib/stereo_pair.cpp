@@ -1,4 +1,5 @@
 
+#include <opencv2/core/core.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <vector>
 
@@ -14,28 +15,44 @@ namespace Distortion {
   double stereoCalibrate( ObjectPointsVecVec _objectPoints,
       ImagePointsVecVec _imagePoints1,
       ImagePointsVecVec _imagePoints2,
-      const PinholeCamera &cam1, const PinholeCamera &cam2,
+      PinholeCamera &cam1, PinholeCamera &cam2,
       Size imageSize, OutputArray _Rmat, OutputArray _Tmat,
       OutputArray _Emat, OutputArray _Fmat, TermCriteria criteria,
       int flags )
   {
 
-    // Before I get too involvved, what if I just un-distort all image points
+    // Before I get too involved, what if I just un-distort all image points
     // then call the built-in function?
 
-    ImagePointsVecVec _undistorted1, _undistorted2;
+    ImagePointsVecVec _undistorted1( _imagePoints1.size() ), 
+                      _undistorted2( _imagePoints2.size() );
 
     std::transform( _imagePoints1.begin(), _imagePoints1.end(), 
         _undistorted1.begin(), cam1.makeVecUndistorter( ) );
     std::transform( _imagePoints2.begin(), _imagePoints2.end(), 
         _undistorted2.begin(), cam2.makeVecUndistorter( ) );
 
-    return cv::stereoCalibrate( _objectPoints, _undistorted1, _undistorted2,
-        cam1.mat(), cam2.mat(), Vec8d(), Vec8d(),
+    // These might be changed by the calibration.
+    Mat camMat1( cam1.mat() );
+    Mat camMat2( cam2.mat() );
+
+    Mat dist1 = Mat::zeros( 4,1,CV_64F ),
+        dist2 = Mat::zeros( 4,1,CV_64F );
+
+    flags |= CV_CALIB_FIX_INTRINSIC;
+
+    double rms = cv::stereoCalibrate( _objectPoints, _undistorted1, _undistorted2,
+        camMat1, camMat2, dist1, dist2,
         imageSize, _Rmat, _Tmat, _Emat, _Fmat, criteria, flags );
 
+    // I know this will never be called..
+    if( !(flags & CV_CALIB_FIX_INTRINSIC) ) {
+      cam1.setCamera( camMat1 );
+      cam2.setCamera( camMat2 );
+    }
+
   }
-}
+
 
   //
   ////int rtype = CV_64F;
@@ -534,55 +551,48 @@ namespace Distortion {
   //}
   //
   //
-  //void cv::stereoRectify( InputArray _cameraMatrix1, InputArray _distCoeffs1,
-  //                        InputArray _cameraMatrix2, InputArray _distCoeffs2,
-  //                        Size imageSize, InputArray _Rmat, InputArray _Tmat,
-  //                        OutputArray _Rmat1, OutputArray _Rmat2,
-  //                        OutputArray _Pmat1, OutputArray _Pmat2,
-  //                        OutputArray _Qmat, int flags,
-  //                        double alpha, Size newImageSize,
-  //                        Rect* validPixROI1, Rect* validPixROI2 )
-  //{
-  //    Mat cameraMatrix1 = _cameraMatrix1.getMat(), cameraMatrix2 = _cameraMatrix2.getMat();
-  //    Mat distCoeffs1 = _distCoeffs1.getMat(), distCoeffs2 = _distCoeffs2.getMat();
-  //    Mat Rmat = _Rmat.getMat(), Tmat = _Tmat.getMat();
-  //    CvMat c_cameraMatrix1 = cameraMatrix1;
-  //    CvMat c_cameraMatrix2 = cameraMatrix2;
-  //    CvMat c_distCoeffs1 = distCoeffs1;
-  //    CvMat c_distCoeffs2 = distCoeffs2;
-  //    CvMat c_R = Rmat, c_T = Tmat;
-  //
-  //    int rtype = CV_64F;
-  //    _Rmat1.create(3, 3, rtype);
-  //    _Rmat2.create(3, 3, rtype);
-  //    _Pmat1.create(3, 4, rtype);
-  //    _Pmat2.create(3, 4, rtype);
-  //    CvMat c_R1 = _Rmat1.getMat(), c_R2 = _Rmat2.getMat(), c_P1 = _Pmat1.getMat(), c_P2 = _Pmat2.getMat();
-  //    CvMat c_Q, *p_Q = 0;
-  //
-  //    if( _Qmat.needed() )
-  //    {
-  //        _Qmat.create(4, 4, rtype);
-  //        p_Q = &(c_Q = _Qmat.getMat());
-  //    }
-  //
+  void stereoRectify( const PinholeCamera &cam1, const PinholeCamera &cam2,
+      const Size &imageSize, const Mat &_Rmat, const Mat &_Tmat,
+      Mat &_Rmat1, Mat &_Rmat2,
+      Mat &_Pmat1, Mat &_Pmat2,
+      Mat &_Qmat, int flags,
+      double alpha, const Size &newImageSize,
+      Rect &validPixROI1, Rect &validPixROI2 )
+  {
+    //    Mat cameraMatrix1 = _cameraMatrix1.getMat(), cameraMatrix2 = _cameraMatrix2.getMat();
+    //    Mat distCoeffs1 = _distCoeffs1.getMat(), distCoeffs2 = _distCoeffs2.getMat();
+    //    Mat Rmat = _Rmat.getMat(), Tmat = _Tmat.getMat();
+    //    CvMat c_cameraMatrix1 = cameraMatrix1;
+    //    CvMat c_cameraMatrix2 = cameraMatrix2;
+    //    CvMat c_distCoeffs1 = distCoeffs1;
+    //    CvMat c_distCoeffs2 = distCoeffs2;
+    //    CvMat c_R = Rmat, c_T = Tmat;
+    //
+    //    int rtype = CV_64F;
+    //    _Rmat1.create(3, 3, rtype);
+    //    _Rmat2.create(3, 3, rtype);
+    //    _Pmat1.create(3, 4, rtype);
+    //    _Pmat2.create(3, 4, rtype);
+    //    CvMat c_R1 = _Rmat1.getMat(), c_R2 = _Rmat2.getMat(), c_P1 = _Pmat1.getMat(), c_P2 = _Pmat2.getMat();
+    //    CvMat c_Q, *p_Q = 0;
+    //
+    //    if( _Qmat.needed() )
+    //    {
+    //        _Qmat.create(4, 4, rtype);
+    //        p_Q = &(c_Q = _Qmat.getMat());
+    //    }
+
+
+    cv::stereoRectify( cam1.mat(), Vec8d(), cam2.mat(), Vec8d(),
+        imageSize, _Rmat, _Tmat, _Rmat1, _Rmat2, _Pmat1, _Pmat2,
+        _Qmat, flags, alpha, newImageSize, &validPixROI1, &validPixROI2 );
+
+  }
+
   //    cvStereoRectify( &c_cameraMatrix1, &c_cameraMatrix2, &c_distCoeffs1, &c_distCoeffs2,
   //        imageSize, &c_R, &c_T, &c_R1, &c_R2, &c_P1, &c_P2, p_Q, flags, alpha,
   //        newImageSize, (CvRect*)validPixROI1, (CvRect*)validPixROI2);
   //}
   //
-  //bool cv::stereoRectifyUncalibrated( InputArray _points1, InputArray _points2,
-  //                                    InputArray _Fmat, Size imgSize,
-  //                                    OutputArray _Hmat1, OutputArray _Hmat2, double threshold )
-  //{
-  //    int rtype = CV_64F;
-  //    _Hmat1.create(3, 3, rtype);
-  //    _Hmat2.create(3, 3, rtype);
-  //    Mat F = _Fmat.getMat();
-  //    Mat points1 = _points1.getMat(), points2 = _points2.getMat();
-  //    CvMat c_pt1 = points1, c_pt2 = points2;
-  //    CvMat c_F, *p_F=0, c_H1 = _Hmat1.getMat(), c_H2 = _Hmat2.getMat();
-  //    if( F.size() == Size(3, 3) )
-  //        p_F = &(c_F = F);
-  //    return cvStereoRectifyUncalibrated(&c_pt1, &c_pt2, p_F, imgSize, &c_H1, &c_H2, threshold) > 0;
 
+}

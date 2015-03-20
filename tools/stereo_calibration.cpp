@@ -21,6 +21,7 @@
 #include "detection.h"
 #include "image.h"
 #include "camera_factory.h"
+#include "stereo_pair.h"
 
 using namespace cv;
 using namespace std;
@@ -572,6 +573,9 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
+cout << "Loading camera 1 from: " << opts.cameraLatest(0) << endl;
+cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
+
   // Load the camera files
   DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( opts.cameraLatest(0) ),
     CameraFactory::LoadDistortionModel( opts.cameraLatest(1) ) };
@@ -581,6 +585,9 @@ int main( int argc, char** argv )
       cerr << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
       exit(-1);
     }
+
+  cout << "Camera 1 is a " << cameras[0]->name() << endl;
+  cout << "Camera 2 is a " << cameras[1]->name() << endl;
 
   vector< ImagePair > pairsUsed;
   vector< ImagePair > pairs;
@@ -670,7 +677,13 @@ int main( int argc, char** argv )
         CompositeCanvas canvas( thisPair );
 
         for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
+          Mat foo;
           cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
+          cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), foo );
+
+          char filename[80];
+          sprintf( filename, "/tmp/foo%d.jpg", imgIdx );
+          imwrite( filename, foo );
         }
 
         //thisPair[0].img().copyTo( rectified[0] );
@@ -724,7 +737,7 @@ int main( int argc, char** argv )
   //cout << "dist0 before: " << endl << dist[0] << endl;
   //cout << "dist1 before: " << endl << dist[1] << endl;
 
-  enum { STEREO_CALIBRATE, HARTLEY } method = HARTLEY;
+  enum { STEREO_CALIBRATE, HARTLEY } method = STEREO_CALIBRATE;
 
   if( method == HARTLEY ) {
     cout << "!!! Using Hartley !!!" << endl;
@@ -733,8 +746,8 @@ int main( int argc, char** argv )
     // that into T and R
     //
     // NEEDS undistorted points
-    // Make a set of flattened undistorted points
-    // and a set of flattened, undistorted, normalized points
+    // Make a set of flattened, undistorted points
+    //  and a set of flattened, undistorted, normalized points
     vector<Point2f> normimgpt[2], allimgpt[2];
 
     for( int k = 0; k < 2; ++k )
@@ -847,19 +860,19 @@ int main( int argc, char** argv )
   } else if( method == STEREO_CALIBRATE ) {
     cout << "!!! Using stereoCalibrate !!!" << endl;
 
-    //    int flags = CV_CALIB_FIX_INTRINSIC | CV_CALIB_RATIONAL_MODEL; 
-    //
-    //    // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
-    //    // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
-    //    // Then computes E directly (as [T]x R) then F = K^-T E F^-1
-    //    reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
-    //        cameras[0], cameras[1],
-    //        imageSize, r, t, e, f, 
-    //        TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
-    //        flags );
-    //
-    //    SVD svd(e);
-    //    cout << "sigma: " << svd.w << endl;
+    int flags = CV_CALIB_FIX_INTRINSIC;
+    
+        // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
+        // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
+        // Then computes E directly (as [T]x R) then F = K^-T E F^-1
+        reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
+            *cameras[0], *cameras[1],
+            imageSize, r, t, e, f, 
+            TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+            flags );
+    
+        SVD svd(e);
+        cout << "sigma: " << svd.w << endl;
     //
     //cout << "cam0 after: " << endl << cam0 << endl;
     //  cout << "cam1 after: " << endl << cam1 << endl;
@@ -873,16 +886,17 @@ int main( int argc, char** argv )
     exit(0);
   }
 
-  //  float alpha = -1;
-  //  stereoRectify( cam[0], dist[0], cam[1], dist[1], imageSize, r, t,
-  //      R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
-  //      alpha, imageSize, &validROI[0], &validROI[1] );
-  //
-  //  cout << "R: " << endl << r << endl;
-  //  cout << "T: " << endl << t << endl;
-  //  cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
-  //  cout << "E: " << endl << e << endl;
-  //  cout << "F: " << endl << f << endl;
+    float alpha = -1;
+    Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
+        R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
+        alpha, imageSize, validROI[0], validROI[1] );
+
+    cout << "R: " << endl << r << endl;
+    cout << "T: " << endl << t << endl;
+    cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
+    cout << "E: " << endl << e << endl;
+    cout << "F: " << endl << f << endl;
+
   //
   //
   //  Mat qx, qy, qz, Rq, Qq;
@@ -895,43 +909,45 @@ int main( int argc, char** argv )
   //  cout << "Euler around x: " << acos( qx.at<double>(1,1) ) * 180.0/M_PI << endl;
   //  cout << "Euler around y: " << acos( qy.at<double>(0,0) ) * 180.0/M_PI << endl;
   //  cout << "Euler around z: " << acos( qz.at<double>(0,0) ) * 180.0/M_PI << endl;
-  //  Mat map[2][2];
   //
-  //  cout << "r0: " << endl << R[0] << endl;
-  //  cout << "p0: " << endl << P[0] << endl;
-  //  cout << "r1: " << endl << R[1] << endl;
-  //  cout << "p1: " << endl << P[1] << endl;
-  //
-  //  // Generate undistorted images
-  //
-  //  for( int k = 0; k < 2; ++k ) {
-  //    initUndistortRectifyMap(cam[k], dist[k], R[k], P[k],
-  //        imageSize, CV_32FC1, map[k][0], map[k][1] );
-  //    //cout << "map" << k << "0: " << endl << map[k][0] << endl;
-  //    //cout << "map" << k << "1: " << endl << map[k][1] << endl;
-  //  }
-  //
-  //  for( int i = 0; i < pairs.size(); ++i ) {
-  //
-  //    ImagePair &thisPair( pairs[i] );
-  //    CompositeCanvas canvas( thisPair );
-  //
-  //    for( int idx = 0; idx < 2; ++idx ) {
-  //      remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
-  //
-  //      Scalar roiBorder( 0,255,0 );
-  //      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 5 ); 
-  //      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
-  //      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
-  //      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 5 ); 
-  //
-  //    }
-  //
-  //    string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
-  //    mkdir_p( outfile );
-  //    imwrite(  outfile, canvas );
-  //
-  //  }
+    cout << "r0: " << endl << R[0] << endl;
+    cout << "p0: " << endl << P[0] << endl;
+    cout << "r1: " << endl << R[1] << endl;
+    cout << "p1: " << endl << P[1] << endl;
+  
+    // Generate undistorted images
+  
+  
+    Mat map[2][2];
+    for( int k = 0; k < 2; ++k ) {
+      cameras[k]->initUndistortRectifyMap( R[k], P[k],
+          imageSize, CV_32FC1, map[k][0], map[k][1] );
+
+      //cout << "map" << k << "0: " << endl << map[k][0] << endl;
+      //cout << "map" << k << "1: " << endl << map[k][1] << endl;
+    }
+  
+    for( int i = 0; i < pairs.size(); ++i ) {
+  
+      ImagePair &thisPair( pairs[i] );
+      CompositeCanvas canvas( thisPair );
+  
+      for( int idx = 0; idx < 2; ++idx ) {
+        remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
+  
+        Scalar roiBorder( 0,255,0 );
+        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 5 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 5 ); 
+  
+      }
+  
+      string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
+      mkdir_p( outfile );
+      imwrite(  outfile, canvas );
+  
+    }
 
   //      if( detection->points.size() > 0 ) {
   //        imagesUsed[i].push_back( img );
