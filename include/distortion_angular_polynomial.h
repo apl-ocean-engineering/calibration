@@ -60,8 +60,7 @@ namespace Distortion {
 
 
        virtual ImagePoint undistort( const ImagePoint &pw ) const;
-      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const
-           { return PinholeCamera::undistort( pw ); };
+      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
 
        virtual ImagePoint distort( const Vec3f &w ) const ;
 

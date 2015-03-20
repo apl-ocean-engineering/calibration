@@ -454,7 +454,7 @@ namespace Distortion {
     double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta4*theta4;
     double theta_d = theta * (1 + _distCoeffs[0]*theta2 + _distCoeffs[1]*theta4 + _distCoeffs[2]*theta6 + _distCoeffs[3]*theta8);
 
-    return Vec2f( theta_d*cos( psi ), theta_d*sin(psi) );
+    return Vec2f( tan(theta_d)*cos( psi ), tan(theta_d)*sin(psi) );
   }
 
 
@@ -504,43 +504,41 @@ namespace Distortion {
   };
 
 
-//  ImagePointsVec AngularPolynomial::undistort( const ImagePointsVec &pw ) const
-//  {
-//    int Np = pw.size();
-//    double *p = new double[ Np*2 ];
-//
-//    ceres::Problem problem;
-//    for( int i = 0; i < Np; ++i ) {
-//      p[ i*2 ] = pw[i][0];
-//      p[ i*2 + 1 ] = pw[i][1];
-//
-//      ceres::CostFunction *costFunction = UndistortReprojError::Create( pw[i][0], pw[i][1], _distCoeffs );
-//      problem.AddResidualBlock( costFunction, NULL, &(p[i*2]) );
-//    }
-//
-//    ceres::Solver::Options options;
-//    options.linear_solver_type = ceres::DENSE_SCHUR;
-//    //options.minimizer_progress_to_stdout = true;
-//
-//    ceres::Solver::Summary summary;
-//    ceres::Solve(options, &problem, &summary);
-//    //std::cout << summary.FullReport() << "\n";
-//
-//
-//    ImagePointsVec out( pw.size() );
-//    for( int i = 0; i < Np; ++i ) {
-//      out[i] = ImagePoint( p[i*2], p[i*2 + 1] );
-//
-//
-//      cout << i << ": " << pw[i][0] << "," << pw[i][1] << "     " << out[i][0] << "," << out[i][1] << endl;
-//    }
-//
-//    delete[] p;
-//
-//    return out;
-//
-//
-//  }
+  ImagePointsVec AngularPolynomial::undistort( const ImagePointsVec &pw ) const
+  {
+    int Np = pw.size();
+    double *p = new double[ Np*2 ];
+
+    ceres::Problem problem;
+    for( int i = 0; i < Np; ++i ) {
+      p[ i*2 ] = pw[i][0];
+      p[ i*2 + 1 ] = pw[i][1];
+
+      ceres::CostFunction *costFunction = UndistortReprojError::Create( pw[i][0], pw[i][1], _distCoeffs );
+      problem.AddResidualBlock( costFunction, NULL, &(p[i*2]) );
+    }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    //options.minimizer_progress_to_stdout = true;
+
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+    //std::cout << summary.FullReport() << "\n";
+
+
+    ImagePointsVec out( pw.size() );
+    for( int i = 0; i < Np; ++i ) {
+      out[i] = ImagePoint( p[i*2], p[i*2 + 1] );
+      //cout << i << ": " << pw[i][0] << "," << pw[i][1] << "     " << out[i][0] << "," << out[i][1] << endl;
+    }
+
+    delete[] p;
+
+    return out;
+
+
+  }
 
   ImagePoint AngularPolynomial::undistort( const ImagePoint &pw ) const
   {
