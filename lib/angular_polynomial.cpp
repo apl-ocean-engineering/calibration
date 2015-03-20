@@ -206,14 +206,7 @@ namespace Distortion {
 
     const int check_cond = flags & CALIB_CHECK_COND ? 1 : 0;
 
-    //    const double alpha_smooth = 0.4;
     const double thresh_cond = 1e6;
-    //    double change = 1;
-    //    Vec2d err_std;
-    //
-
-    // Unfortunately, these algorithms all assume objectPoints and imagePoints are Vec*d, so
-    // explicitly cast them
 
     rvecs.resize( objectPoints.size() );
     tvecs.resize( objectPoints.size() );
@@ -222,17 +215,13 @@ namespace Distortion {
 
     for( int i = 0; i < objectPoints.size(); ++i )  {
       ImagePointsVec undistorted =  undistort( normalize( imagePoints[i] ) );
-      // If an initial distortion has been set, use it
-      //undistortPoints( imagePoints[i], undistorted, Mat(), mat() );
       
-      cout <<  i << " ---------------" << endl;
-
       // Found the approach provided by initExtrinsics to be more reliable (!)
       // will need to investigate why that is.
       bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(), 
           rvecs[i], tvecs[i], false, CV_ITERATIVE );
-      //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
 
+      //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
       //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
       //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
 
@@ -627,183 +616,183 @@ namespace Distortion {
   //  }
   //}
 
-  cv::Mat AngularPolynomial::computeHomography(Mat m, Mat M)
-  {
-    int Np = m.cols;
-
-    if (m.rows < 3)
-    {
-      vconcat(m, Mat::ones(1, Np, CV_64FC1), m);
-    }
-    if (M.rows < 3)
-    {
-      vconcat(M, Mat::ones(1, Np, CV_64FC1), M);
-    }
-
-    divide(m, Mat::ones(3, 1, CV_64FC1) * m.row(2), m);
-    divide(M, Mat::ones(3, 1, CV_64FC1) * M.row(2), M);
-
-    Mat ax = m.row(0).clone();
-    Mat ay = m.row(1).clone();
-
-    double mxx = mean(ax)[0];
-    double myy = mean(ay)[0];
-
-    ax = ax - mxx;
-    ay = ay - myy;
-
-    double scxx = mean(abs(ax))[0];
-    double scyy = mean(abs(ay))[0];
-
-    Mat Hnorm (Matx33d( 1/scxx,        0.0,     -mxx/scxx,
-          0.0,     1/scyy,     -myy/scyy,
-          0.0,        0.0,           1.0 ));
-
-    Mat inv_Hnorm (Matx33d( scxx,     0,   mxx,
-          0,  scyy,   myy,
-          0,     0,     1 ));
-    Mat mn =  Hnorm * m;
-
-    Mat L = Mat::zeros(2*Np, 9, CV_64FC1);
-
-    for (int i = 0; i < Np; ++i)
-    {
-      for (int j = 0; j < 3; j++)
-      {
-        L.at<double>(2 * i, j) = M.at<double>(j, i);
-        L.at<double>(2 * i + 1, j + 3) = M.at<double>(j, i);
-        L.at<double>(2 * i, j + 6) = -mn.at<double>(0,i) * M.at<double>(j, i);
-        L.at<double>(2 * i + 1, j + 6) = -mn.at<double>(1,i) * M.at<double>(j, i);
-      }
-    }
-
-    if (Np > 4) L = L.t() * L;
-    SVD svd(L);
-    Mat hh = svd.vt.row(8) / svd.vt.row(8).at<double>(8);
-    Mat Hrem = hh.reshape(1, 3);
-    Mat H = inv_Hnorm * Hrem;
-
-    if (Np > 4)
-    {
-      Mat hhv = H.reshape(1, 9)(Rect(0, 0, 1, 8)).clone();
-      for (int iter = 0; iter < 10; iter++)
-      {
-        Mat mrep = H * M;
-        Mat J = Mat::zeros(2 * Np, 8, CV_64FC1);
-        Mat MMM;
-        divide(M, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 2, mrep.cols, 1)), MMM);
-        divide(mrep, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 2, mrep.cols, 1)), mrep);
-        Mat m_err = m(Rect(0,0, m.cols, 2)) - mrep(Rect(0,0, mrep.cols, 2));
-        m_err = Mat(m_err.t()).reshape(1, m_err.cols * m_err.rows);
-        Mat MMM2, MMM3;
-        multiply(Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 0, mrep.cols, 1)), MMM, MMM2);
-        multiply(Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 1, mrep.cols, 1)), MMM, MMM3);
-
-        for (int i = 0; i < Np; ++i)
-        {
-          for (int j = 0; j < 3; ++j)
-          {
-            J.at<double>(2 * i, j)         = -MMM.at<double>(j, i);
-            J.at<double>(2 * i + 1, j + 3) = -MMM.at<double>(j, i);
-          }
-
-          for (int j = 0; j < 2; ++j)
-          {
-            J.at<double>(2 * i, j + 6)     = MMM2.at<double>(j, i);
-            J.at<double>(2 * i + 1, j + 6) = MMM3.at<double>(j, i);
-          }
-        }
-        divide(M, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0,2,mrep.cols,1)), MMM);
-        Mat hh_innov = (J.t() * J).inv() * (J.t()) * m_err;
-        Mat hhv_up = hhv - hh_innov;
-        Mat tmp;
-        vconcat(hhv_up, Mat::ones(1,1,CV_64FC1), tmp);
-        Mat H_up = tmp.reshape(1,3);
-        hhv = hhv_up;
-        H = H_up;
-      }
-    }
-    return H;
-  }
-  //
-  //
-  //  //struct TxNormalizePixels {
-  //  //  const PinholeCamera &camera;
-  //
-  //  //  TxNormalizePixels( const PinholeCamera &p ) : camera(p) {;}
-  //
-  //  //  Vec2d operator()( const Vec2d &in )
-  //  //  {
-  //  //    Vec2d out( in - camera.c() );
-  //  //    out = out.mul(Vec2d(1.0 / camera.fx(), 1.0 / camera.fy()));
-  //  //    out[0] -= camera.alpha() * out[1];
-  //  //    return out;
-  //  //  }
-  //  //};
-  //
-  //  //void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
-  //  //{
-  //  //  ImagePointsVec undistorted;
-  //  //  undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
-  //  //  Mat(undistorted).copyTo( normalized );
-  //  //}
-  //
-  void AngularPolynomial::initExtrinsics(const ImagePointsVec& _imagePoints, 
-      const ObjectPointsVec& _objectPoints, 
-      Vec3d& omc, Vec3d& Tc)
-  {
-    // Splat both of these down to single-channel 2xN matrices of normalized points
-    ImagePointsVec undistorted = undistort( normalize( _imagePoints ));
-    //undistortPoints( _imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
-    
-    // These algorithms assume Vec*d data, so have explicitly case both imagePoints
-    // and objectPoints, regardless of thei native precision.
-    vector< Vec2d > undistD( undistorted.size() );
-    std::copy( undistorted.begin(), undistorted.end(), undistD.begin() );
-    Mat imagePointsNormalized( Mat(undistD).reshape(1).t() );
-
-    // explicitly cast _objectPoints to Vec3d
-    vector< Vec3d > objPtsD( _objectPoints.size() );
-    std::copy( _objectPoints.begin(), _objectPoints.end(), objPtsD.begin() );
-    Mat objectPoints( Mat(objPtsD).reshape(1).t() ); 
-
-    Mat objectPointsMean, covObjectPoints;
-    Mat Rckk, omckk, Tckk;
-
-    calcCovarMatrix( objectPoints, covObjectPoints, objectPointsMean, COVAR_NORMAL | COVAR_COLS);
-    SVD svd(covObjectPoints);
-    Mat R(svd.vt);
-
-    if (norm(R(Rect(2, 0, 1, 2))) < 1e-6)
-      R = Mat::eye(3,3, CV_64FC1);
-    if (determinant(R) < 0)
-      R = -R;
-
-    Mat T = -R * objectPointsMean;
-    Mat X_new = R * objectPoints + T * Mat::ones(1, imagePointsNormalized.cols, CV_64F);
-
-    Mat H = computeHomography(imagePointsNormalized, X_new(Rect(0,0,X_new.cols,2)));
-
-    double sc = .5 * (norm(H.col(0)) + norm(H.col(1)));
-    H = H / sc;
-    Mat u1 = H.col(0).clone();
-    u1  = u1 / norm(u1);
-    Mat u2 = H.col(1).clone() - u1.dot(H.col(1).clone()) * u1;
-    u2 = u2 / norm(u2);
-    Mat u3 = u1.cross(u2);
-    Mat RRR;
-    hconcat(u1, u2, RRR);
-    hconcat(RRR, u3, RRR);
-    Rodrigues(RRR, omckk);
-    Rodrigues(omckk, Rckk);
-    Tckk = H.col(2).clone();
-    Tckk = Tckk + Rckk * T;
-    Rckk = Rckk * R;
-    Rodrigues(Rckk, omckk);
-
-    omc = omckk;
-    Tc = Tckk;
-  }
+//  cv::Mat AngularPolynomial::computeHomography(Mat m, Mat M)
+//  {
+//    int Np = m.cols;
+//
+//    if (m.rows < 3)
+//    {
+//      vconcat(m, Mat::ones(1, Np, CV_64FC1), m);
+//    }
+//    if (M.rows < 3)
+//    {
+//      vconcat(M, Mat::ones(1, Np, CV_64FC1), M);
+//    }
+//
+//    divide(m, Mat::ones(3, 1, CV_64FC1) * m.row(2), m);
+//    divide(M, Mat::ones(3, 1, CV_64FC1) * M.row(2), M);
+//
+//    Mat ax = m.row(0).clone();
+//    Mat ay = m.row(1).clone();
+//
+//    double mxx = mean(ax)[0];
+//    double myy = mean(ay)[0];
+//
+//    ax = ax - mxx;
+//    ay = ay - myy;
+//
+//    double scxx = mean(abs(ax))[0];
+//    double scyy = mean(abs(ay))[0];
+//
+//    Mat Hnorm (Matx33d( 1/scxx,        0.0,     -mxx/scxx,
+//          0.0,     1/scyy,     -myy/scyy,
+//          0.0,        0.0,           1.0 ));
+//
+//    Mat inv_Hnorm (Matx33d( scxx,     0,   mxx,
+//          0,  scyy,   myy,
+//          0,     0,     1 ));
+//    Mat mn =  Hnorm * m;
+//
+//    Mat L = Mat::zeros(2*Np, 9, CV_64FC1);
+//
+//    for (int i = 0; i < Np; ++i)
+//    {
+//      for (int j = 0; j < 3; j++)
+//      {
+//        L.at<double>(2 * i, j) = M.at<double>(j, i);
+//        L.at<double>(2 * i + 1, j + 3) = M.at<double>(j, i);
+//        L.at<double>(2 * i, j + 6) = -mn.at<double>(0,i) * M.at<double>(j, i);
+//        L.at<double>(2 * i + 1, j + 6) = -mn.at<double>(1,i) * M.at<double>(j, i);
+//      }
+//    }
+//
+//    if (Np > 4) L = L.t() * L;
+//    SVD svd(L);
+//    Mat hh = svd.vt.row(8) / svd.vt.row(8).at<double>(8);
+//    Mat Hrem = hh.reshape(1, 3);
+//    Mat H = inv_Hnorm * Hrem;
+//
+//    if (Np > 4)
+//    {
+//      Mat hhv = H.reshape(1, 9)(Rect(0, 0, 1, 8)).clone();
+//      for (int iter = 0; iter < 10; iter++)
+//      {
+//        Mat mrep = H * M;
+//        Mat J = Mat::zeros(2 * Np, 8, CV_64FC1);
+//        Mat MMM;
+//        divide(M, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 2, mrep.cols, 1)), MMM);
+//        divide(mrep, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 2, mrep.cols, 1)), mrep);
+//        Mat m_err = m(Rect(0,0, m.cols, 2)) - mrep(Rect(0,0, mrep.cols, 2));
+//        m_err = Mat(m_err.t()).reshape(1, m_err.cols * m_err.rows);
+//        Mat MMM2, MMM3;
+//        multiply(Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 0, mrep.cols, 1)), MMM, MMM2);
+//        multiply(Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0, 1, mrep.cols, 1)), MMM, MMM3);
+//
+//        for (int i = 0; i < Np; ++i)
+//        {
+//          for (int j = 0; j < 3; ++j)
+//          {
+//            J.at<double>(2 * i, j)         = -MMM.at<double>(j, i);
+//            J.at<double>(2 * i + 1, j + 3) = -MMM.at<double>(j, i);
+//          }
+//
+//          for (int j = 0; j < 2; ++j)
+//          {
+//            J.at<double>(2 * i, j + 6)     = MMM2.at<double>(j, i);
+//            J.at<double>(2 * i + 1, j + 6) = MMM3.at<double>(j, i);
+//          }
+//        }
+//        divide(M, Mat::ones(3, 1, CV_64FC1) * mrep(Rect(0,2,mrep.cols,1)), MMM);
+//        Mat hh_innov = (J.t() * J).inv() * (J.t()) * m_err;
+//        Mat hhv_up = hhv - hh_innov;
+//        Mat tmp;
+//        vconcat(hhv_up, Mat::ones(1,1,CV_64FC1), tmp);
+//        Mat H_up = tmp.reshape(1,3);
+//        hhv = hhv_up;
+//        H = H_up;
+//      }
+//    }
+//    return H;
+//  }
+//  //
+//  //
+//  //  //struct TxNormalizePixels {
+//  //  //  const PinholeCamera &camera;
+//  //
+//  //  //  TxNormalizePixels( const PinholeCamera &p ) : camera(p) {;}
+//  //
+//  //  //  Vec2d operator()( const Vec2d &in )
+//  //  //  {
+//  //  //    Vec2d out( in - camera.c() );
+//  //  //    out = out.mul(Vec2d(1.0 / camera.fx(), 1.0 / camera.fy()));
+//  //  //    out[0] -= camera.alpha() * out[1];
+//  //  //    return out;
+//  //  //  }
+//  //  //};
+//  //
+//  //  //void AngularPolynomial::normalizePixels(const ImagePointsVec &imagePoints, Mat &normalized )
+//  //  //{
+//  //  //  ImagePointsVec undistorted;
+//  //  //  undistortPoints(imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
+//  //  //  Mat(undistorted).copyTo( normalized );
+//  //  //}
+//  //
+//  void AngularPolynomial::initExtrinsics(const ImagePointsVec& _imagePoints, 
+//      const ObjectPointsVec& _objectPoints, 
+//      Vec3d& omc, Vec3d& Tc)
+//  {
+//    // Splat both of these down to single-channel 2xN matrices of normalized points
+//    ImagePointsVec undistorted = undistort( normalize( _imagePoints ));
+//    //undistortPoints( _imagePoints, undistorted, Mat::eye(3,3,CV_64F) );
+//    
+//    // These algorithms assume Vec*d data, so have explicitly case both imagePoints
+//    // and objectPoints, regardless of thei native precision.
+//    vector< Vec2d > undistD( undistorted.size() );
+//    std::copy( undistorted.begin(), undistorted.end(), undistD.begin() );
+//    Mat imagePointsNormalized( Mat(undistD).reshape(1).t() );
+//
+//    // explicitly cast _objectPoints to Vec3d
+//    vector< Vec3d > objPtsD( _objectPoints.size() );
+//    std::copy( _objectPoints.begin(), _objectPoints.end(), objPtsD.begin() );
+//    Mat objectPoints( Mat(objPtsD).reshape(1).t() ); 
+//
+//    Mat objectPointsMean, covObjectPoints;
+//    Mat Rckk, omckk, Tckk;
+//
+//    calcCovarMatrix( objectPoints, covObjectPoints, objectPointsMean, COVAR_NORMAL | COVAR_COLS);
+//    SVD svd(covObjectPoints);
+//    Mat R(svd.vt);
+//
+//    if (norm(R(Rect(2, 0, 1, 2))) < 1e-6)
+//      R = Mat::eye(3,3, CV_64FC1);
+//    if (determinant(R) < 0)
+//      R = -R;
+//
+//    Mat T = -R * objectPointsMean;
+//    Mat X_new = R * objectPoints + T * Mat::ones(1, imagePointsNormalized.cols, CV_64F);
+//
+//    Mat H = computeHomography(imagePointsNormalized, X_new(Rect(0,0,X_new.cols,2)));
+//
+//    double sc = .5 * (norm(H.col(0)) + norm(H.col(1)));
+//    H = H / sc;
+//    Mat u1 = H.col(0).clone();
+//    u1  = u1 / norm(u1);
+//    Mat u2 = H.col(1).clone() - u1.dot(H.col(1).clone()) * u1;
+//    u2 = u2 / norm(u2);
+//    Mat u3 = u1.cross(u2);
+//    Mat RRR;
+//    hconcat(u1, u2, RRR);
+//    hconcat(RRR, u3, RRR);
+//    Rodrigues(RRR, omckk);
+//    Rodrigues(omckk, Rckk);
+//    Tckk = H.col(2).clone();
+//    Tckk = Tckk + Rckk * T;
+//    Rckk = Rckk * R;
+//    Rodrigues(Rckk, omckk);
+//
+//    omc = omckk;
+//    Tc = Tckk;
+//  }
 
 
   FileStorage &AngularPolynomial::write( FileStorage &out ) const
