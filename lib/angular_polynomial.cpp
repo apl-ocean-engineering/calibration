@@ -78,8 +78,13 @@ namespace Distortion {
   using namespace cv;
   using namespace std;
 
+  // Polynomial expansion from (pg 16): 
+  // http://www.research.scea.com/research/pdfs/RGREENfastermath_GDC02.pdf
+  //
+const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350, 0.092151584, 0 );
+
   AngularPolynomial::AngularPolynomial( void )
-    : DistortionModel(), _distCoeffs( 0.0, 0.0, 0.0, 0.0 )
+    : DistortionModel(), _distCoeffs( ZeroDistortion )
   {;}
 
   AngularPolynomial::AngularPolynomial( const Vec4d &distCoeffs )
@@ -100,7 +105,7 @@ namespace Distortion {
       int flags, 
       cv::TermCriteria criteria)
   {
-    AngularPolynomial fe( Vec4d(0.0, 0.0, 0.0, 0.0), Camera::InitialCameraEstimate( image_size ) );
+    AngularPolynomial fe( ZeroDistortion, Camera::InitialCameraEstimate( image_size ) );
     fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
     return fe;
   }
@@ -158,8 +163,8 @@ namespace Distortion {
 
         T thetaDist = theta * ( T(1) + k1*theta2 + k2 *theta4 + k3*theta6 + k4*theta8);
 
-        T xdn = tan(thetaDist) * cos( psi ),
-          ydn = tan(thetaDist) * sin( psi );
+        T xdn = thetaDist * cos( psi ),
+          ydn = thetaDist * sin( psi );
 
         T predictedX = fx*(xdn + alpha[0]*ydn) + cx;
         T predictedY = fy* ydn              + cy;
@@ -447,7 +452,7 @@ namespace Distortion {
     double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta4*theta4;
     double theta_d = theta * (1 + _distCoeffs[0]*theta2 + _distCoeffs[1]*theta4 + _distCoeffs[2]*theta6 + _distCoeffs[3]*theta8);
 
-    return Vec2f( tan(theta_d)*cos( psi ), tan(theta_d)*sin(psi) );
+    return Vec2f( theta_d*cos( psi ), theta_d*sin(psi) );
   }
 
 
@@ -478,8 +483,8 @@ namespace Distortion {
 
         T thetaDist = theta * ( T(1) + _k[0]*theta2 + _k[1]*theta4 + _k[2]*theta6 + _k[3]*theta8);
 
-        T xdn = tan(thetaDist) * cos( psi ),
-          ydn = tan(thetaDist) * sin( psi );
+        T xdn = thetaDist * cos( psi ),
+          ydn = thetaDist * sin( psi );
 
         // The error is the difference between the predicted and observed position.
         residuals[0] = xdn - T(observed_x);

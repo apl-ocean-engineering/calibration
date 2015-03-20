@@ -11,12 +11,13 @@ namespace Distortion {
   class AngularPolynomial : public DistortionModel {
     public:
 
+      static const Vec4d ZeroDistortion;
 
       AngularPolynomial( void );
       AngularPolynomial( const Vec4d &distCoeffs );
       AngularPolynomial( const Vec4d &distCoeffs, const Matx33d &cam );
 
-      void set(const cv::Vec2d& f, const cv::Vec2d& c, const double &alpha = 0, const cv::Vec4d& k = Vec4d(0,0,0,0) )
+      void set(const cv::Vec2d& f, const cv::Vec2d& c, const double &alpha = 0, const cv::Vec4d& k = ZeroDistortion )
       {
         setCamera( f[0], f[1], c[0], c[1], alpha );
         _distCoeffs = k;
