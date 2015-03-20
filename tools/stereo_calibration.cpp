@@ -447,6 +447,8 @@ struct CompositeCanvas
   operator Mat &() { return canvas; }
   operator _InputArray() { return _InputArray(canvas); }
 
+  Size size( void ) const { return canvas.size(); }
+
 
   ImagePair _pair;
   Mat canvas, roi[2];
@@ -644,7 +646,7 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
   //cout << "dist0 before: " << endl << dist[0] << endl;
   //cout << "dist1 before: " << endl << dist[1] << endl;
 
-  enum { STEREO_CALIBRATE, HARTLEY } method = STEREO_CALIBRATE;
+  enum { STEREO_CALIBRATE, HARTLEY } method = HARTLEY;
 
   if( method == HARTLEY ) {
     cout << "!!! Using Hartley !!!" << endl;
@@ -836,18 +838,38 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
         remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
   
         Scalar roiBorder( 0,255,0 );
-        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 5 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 5 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 5 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
   
       }
+
+
+      // Draw the standard red horizontal lines
+      int spacing = 200;
+      for( int y = 0; y < canvas.size().height; y += spacing ) 
+        line( canvas, Point( 0, y ), Point( canvas.size().width, y ), Scalar( 0,0,255 ), 2 );
+
   
       string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
       mkdir_p( outfile );
       imwrite(  outfile, canvas );
   
     }
+
+
+
+   //Think about some reconstruction
+   for( int i = 0; i < pairs.size(); ++i ) {
+Mat worldPoints;
+
+triangulatePoint(  p0, p1, undistortedImagePoints[i][0], undistortedImagePoints[i][1], worldPoints );
+
+cout << "World points: " << worldPoints << endl;
+   }
+
+
 
   //      if( detection->points.size() > 0 ) {
   //        imagesUsed[i].push_back( img );
