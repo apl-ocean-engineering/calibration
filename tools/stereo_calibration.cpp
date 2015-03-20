@@ -892,7 +892,7 @@ int main( int argc, char** argv )
     cloud.points[at].y = pt[1]/pt[3];
     cloud.points[at].z = pt[2]/pt[3];
 
-    uint8_t r = 255 * ((float)i / pairs.size() ),
+    uint8_t r = 255 * ((float)i / (float)pairs.size() ),
             g = 255-r, b = 255-r;
     uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
     cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
