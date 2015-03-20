@@ -29,6 +29,7 @@ namespace Distortion {
 
     std::transform( _imagePoints1.begin(), _imagePoints1.end(), 
         _undistorted1.begin(), cam1.makeVecUndistorter( ) );
+
     std::transform( _imagePoints2.begin(), _imagePoints2.end(), 
         _undistorted2.begin(), cam2.makeVecUndistorter( ) );
 

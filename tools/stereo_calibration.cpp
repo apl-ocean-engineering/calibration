@@ -242,95 +242,6 @@ class StereoCalibrationOpts {
         inFiles.push_back( infile );
       }
 
-      //    for( i = 1; i < argc; i++ )
-      //    {
-      //        const char* s = argv[i];
-      //        if( strcmp( s, "-w" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &boardSize.width ) != 1 || boardSize.width <= 0 )
-      //                return fprintf( stderr, "Invalid board width\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-h" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &boardSize.height ) != 1 || boardSize.height <= 0 )
-      //                return fprintf( stderr, "Invalid board height\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-pt" ) == 0 )
-      //        {
-      //            i++;
-      //            if( !strcmp( argv[i], "circles" ) )
-      //                pattern = CIRCLES_GRID;
-      //            else if( !strcmp( argv[i], "acircles" ) )
-      //                pattern = ASYMMETRIC_CIRCLES_GRID;
-      //            else if( !strcmp( argv[i], "chessboard" ) )
-      //                pattern = CHESSBOARD;
-      //            else
-      //                return fprintf( stderr, "Invalid pattern type: must be chessboard or circles\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-s" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%f", &squareSize ) != 1 || squareSize <= 0 )
-      //                return fprintf( stderr, "Invalid board square width\n" ), -1;
-      //        }
-      //        ..else if( strcmp( s, "-n" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &nframes ) != 1 || nframes <= 3 )
-      //                return printf("Invalid number of images\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-a" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%f", &aspectRatio ) != 1 || aspectRatio <= 0 )
-      //                return printf("Invalid aspect ratio\n" ), -1;
-      //            flags |= CV_CALIB_FIX_ASPECT_RATIO;
-      //        }
-      //        else if( strcmp( s, "-d" ) == 0 )
-      //        {
-      //            if( sscanf( argv[++i], "%u", &delay ) != 1 || delay <= 0 )
-      //                return printf("Invalid delay\n" ), -1;
-      //        }
-      //        else if( strcmp( s, "-op" ) == 0 )
-      //        {
-      //            writePoints = true;
-      //        }
-      //        else if( strcmp( s, "-oe" ) == 0 )
-      //        {
-      //            writeExtrinsics = true;
-      //        }
-      //        else if( strcmp( s, "-zt" ) == 0 )
-      //        {
-      //            flags |= CV_CALIB_ZERO_TANGENT_DIST;
-      //        }
-      //        else if( strcmp( s, "-p" ) == 0 )
-      //        {
-      //            flags |= CV_CALIB_FIX_PRINCIPAL_POINT;
-      //        }
-      //        else if( strcmp( s, "-v" ) == 0 )
-      //        {
-      //            flipVertical = true;
-      //        }
-      //        else if( strcmp( s, "-V" ) == 0 )
-      //        {
-      //            videofile = true;
-      //        }
-      //        else if( strcmp( s, "-o" ) == 0 )
-      //        {
-      //            outputFilename = argv[++i];
-      //        }
-      //        else if( strcmp( s, "-su" ) == 0 )
-      //        {
-      //            showUndistorted = true;
-      //        }
-      //        else if( s[0] != '-' )
-      //        {
-      //            if( isdigit(s[0]) )
-      //                sscanf(s, "%d", &cameraId);
-      //            else
-      //                inputFilename = s;
-      //        }
-      //        else
-      //            return fprintf( stderr, "Unknown option %s", s ), -1;
-      //    }
-
       return validate(msg);
     }
 
@@ -543,17 +454,6 @@ struct CompositeCanvas
 };
 
 
-struct PointNormalizer {
-  PointNormalizer( const PinholeCamera &cam )
-    : _cam( cam ) {;}
-
-  Point2f operator()( const Point2f &pt ) { 
-    return _cam.unimage( pt );
-  }
-
-  const PinholeCamera &_cam;
-};
-
 int main( int argc, char** argv )
 {
 
@@ -566,6 +466,10 @@ int main( int argc, char** argv )
 
   ImagePointsVecVec imagePoints[2];
   ImagePointsVecVec undistortedImagePoints[2];
+
+  // Make ``flattened'' versions as well
+ImagePointsVec undistortedImagePts[2];
+
   ObjectPointsVecVec objectPoints;
 
   if( opts.inFiles.size() < 1 ) {
@@ -665,12 +569,15 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
           ImagePointsVec( shared.imagePoints[0].size() ), 
           ImagePointsVec( shared.imagePoints[1].size() )  };
 
+        // Generate undistorted image points as well
         for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
           imagePoints[imgIdx].push_back( shared.imagePoints[imgIdx] );
 
-          // Generate undistorted image points as well
-          cameras[imgIdx]->undistortPoints( shared.imagePoints[imgIdx], undistortedPoints[imgIdx] ); 
-          undistortedImagePoints[imgIdx].push_back( undistortedPoints[imgIdx] );
+          // Technically this is normalize->undistort->reimage
+          ImagePointsVec undist = cameras[imgIdx]->undistort( shared.imagePoints[imgIdx] );
+
+          undistortedImagePoints[imgIdx].push_back( undist );
+          std::copy( undist.begin(), undist.end(), back_inserter( undistortedImagePts[imgIdx] ) );
         }
 
         ImagePair &thisPair( pairs[i] );
@@ -742,28 +649,21 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
   if( method == HARTLEY ) {
     cout << "!!! Using Hartley !!!" << endl;
 
-    // Hartley method calculated F directly.  Then decomposes that into E and decomposes
+    // Hartley method calculates F directly.  Then decomposes that into E and decomposes
     // that into T and R
     //
-    // NEEDS undistorted points
+    // In this case, assume the cameras are calibrated properly, find E directly, then
+    // generate F, T, R
+    //
+    // NEEDS a single vector of undistorted points
     // Make a set of flattened, undistorted points
     //  and a set of flattened, undistorted, normalized points
-    vector<Point2f> normimgpt[2], allimgpt[2];
+    ImagePointsVec normimgpt[2];
 
     for( int k = 0; k < 2; ++k )
-      for( int  i = 0; i < undistortedImagePoints[k].size(); i++ )  {
-        std::copy(undistortedImagePoints[k][i].begin(), undistortedImagePoints[k][i].end(), 
-            back_inserter(allimgpt[k]));
-        std::transform(undistortedImagePoints[k][i].begin(), undistortedImagePoints[k][i].end(), 
-            back_inserter(normimgpt[k]), PointNormalizer( *cameras[k] )  );
-      }
-
-    //        for( int j = 0; j < undistortedImagePoints[k][i].size(); ++j ) 
-    //        {
-    //          // Currently unsightly...
-    //          Mat uncal( camInv[k]  * Mat( Vec3d( undistortedImagePoints[k][i][j].x, undistortedImagePoints[k][i][j].y, 1.0 ) ) );
-    //          allimgpt[k].push_back(  Point2f( uncal.at<double>(0,0) / uncal.at<double>(2,0), uncal.at<double>(1,0) / uncal.at<double>(2,0) ) );
-    //        }
+        std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
+            back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
+      
 
     Mat status, estE;
     estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 3. / 1600., 0.99, status);
@@ -782,14 +682,14 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
     int count = 0;
     for( int i = 0; i < status.size().area(); ++i ) 
       if( status.at<unsigned int>(i,0) > 0 ) ++count;
-    cout << count << "/" << allimgpt[0].size() << " points considered inlier." << endl;
+    cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
 
     // Calculate the mean reprojection error under this f
     double error = 0;
     for( int i = 0; i < normimgpt[0].size(); ++i ) {
       if( status.data[i] > 0 ) {
-        Mat err( Mat(Vec3d( normimgpt[1][i].x, normimgpt[1][i].y, 1.0 )).t() *
-            e * Mat(Vec3d( normimgpt[0][i].x, normimgpt[0][i].y, 1.0 ) ) );
+        Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
+            e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
         error += pow(err.at<double>(0,0),2);
       }
     }
@@ -803,10 +703,10 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
 
     // Calculate the mean reprojection error under this f
     error = 0.0;
-    for( int i = 0; i < allimgpt[0].size(); ++i ) {
+    for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
       if( status.data[i] > 0 ) {
-        Mat err(  Mat(Vec3d( allimgpt[1][i].x, allimgpt[1][i].y, 1.0 ) ) .t() *
-            f * Mat(Vec3d( allimgpt[0][i].x, allimgpt[0][i].y, 1.0 ) ) );
+        Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
+            f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
         error += pow(err.at<double>(0,0),2);
       }
     }
@@ -831,8 +731,8 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
       double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
       Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
 
-      Point3d x1( normimgpt[0][0].x, normimgpt[0][0].y, 1.0 ),
-              x2( normimgpt[1][0].x, normimgpt[1][0].y, 1.0 );
+      Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
+              x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
 
       Mat X1 = Mx * Mat(x1),
           X2 = Mx * rcand.t() * Mat(x2);
@@ -864,7 +764,7 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
     
         // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
         // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
-        // Then computes E directly (as [T]x R) then F = K^-T E F^-1
+        // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
         reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
             *cameras[0], *cameras[1],
             imageSize, r, t, e, f, 

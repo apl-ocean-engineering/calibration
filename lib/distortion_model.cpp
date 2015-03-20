@@ -59,7 +59,7 @@ namespace Distortion {
 
       for( int j = 0; j < size.width; ++j)
       {
-        ImagePoint pt( image( distort( world ) ) );
+        ImagePoint pt( image( warp( world ) ) );
         double u = pt[0], v = pt[1];
 
         if( m1type == CV_16SC2 )

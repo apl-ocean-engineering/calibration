@@ -120,55 +120,107 @@ namespace Distortion {
 
         // This is the public API which includes normalization with the camera matrix,
         // as well as re-normalization and rectification with R,P
-      virtual void undistortPoints( const ImagePointsVec &distorted, 
-          ImagePointsVec &undistorted, 
-          const Mat &R = cv::Mat::eye(3,3,CV_64F), 
-          const Mat &P = cv::Mat()) const;
+        virtual void undistortPoints( const ImagePointsVec &distorted, 
+            ImagePointsVec &undistorted, 
+            const Mat &R = cv::Mat::eye(3,3,CV_64F), 
+            const Mat &P = cv::Mat()) const;
 
-      struct VecUndistorter {
-        VecUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
-        const PinholeCamera &_cam;
+        virtual ImagePoint undistort( const ImagePoint &pt, bool reimage = true ) const
+        { ImagePoint p( undistort( normalize( pt ) ) );
+          return ( reimage ? image( p ) : p ); }
 
-        ImagePointsVec operator()( const ImagePointsVec &vec )
-        { ImagePointsVec out( vec.size() );
-          _cam.undistortPoints( vec, out );
-          return out;
-        }
-      };
-      VecUndistorter makeVecUndistorter( void ) const { return VecUndistorter( *this ); }
+        virtual ImagePointsVec undistort( const ImagePointsVec &vec, bool reimage = true ) const
+        { ImagePointsVec  v( undistort( normalize( vec ) ) );
+          return ( reimage ? image( v ) : v ); }
+
+        // For clarification, "undistort" is normalize->remove distortion->(optionally) re-image
+        // "warp"/"unwawrp" is add/remove distortion
+
+        // A couple of operator functions suitable for std::transform
+        struct TxUndistorter {
+          TxUndistorter( const PinholeCamera &cam, bool reimage = true ) 
+            : _cam(cam), _reimage(reimage) {;}
+          const PinholeCamera &_cam;
+          bool _reimage;
+
+          ImagePoint operator()( const ImagePoint &pt )
+          { return _cam.undistort( pt, _reimage ); }
+        };
+        TxUndistorter makeUndistorter( bool reimage = true ) const { return TxUndistorter( *this, reimage ); }
+
+        struct TxVecUndistorter {
+          TxVecUndistorter( const PinholeCamera &cam, bool reimage = true ) 
+            : _cam(cam), _reimage(reimage)  {;}
+          const PinholeCamera &_cam;
+          bool _reimage;
+
+          ImagePointsVec operator()( const ImagePointsVec &vec )
+          { return _cam.undistort( vec,_reimage ); }
+        };
+        TxVecUndistorter makeVecUndistorter( bool reimage = true ) const { return TxVecUndistorter( *this, reimage ); }
 
 
 
-      // These are "internal" functions, though they are public as they are sometimes useful
-      virtual ImagePoint image( const ImagePoint &pt ) const;
-      virtual ImagePoint unimage( const ImagePoint &pt ) const;
-      virtual ImagePointsVec normalize( const ImagePointsVec &vec ) const;
+        // These are "internal" functions, though they are public as they are sometimes useful
+        virtual ImagePoint image( const ImagePoint &pt ) const;
+        virtual ImagePointsVec image( const ImagePointsVec &vec ) const;
 
+        virtual ImagePoint normalize( const ImagePoint &pt ) const;
+        virtual ImagePointsVec normalize( const ImagePointsVec &vec ) const;
 
-      virtual ImagePoint undistort( const ImagePoint &pw ) const { return pw; }
-      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
+        virtual ImagePoint unwarp( const ImagePoint &pw ) const { return pw; }
+        virtual ImagePointsVec unwarp( const ImagePointsVec &pw ) const;
 
-      virtual ImagePoint distort( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
+        virtual ImagePoint warp( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
 
-
-//      struct Undistorter {
-//        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+//        struct TxVecNormalizerUndistorter {
+//          TxVecNormalizerUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+//          const PinholeCamera &_cam;
 //
-//        const PinholeCamera &_cam;
-//
-//        ImagePoint operator()( const ImagePoint &pt ) 
-//        { return _cam.undistort( pt ); }
-//      };
+//          ImagePointsVec operator()( const ImagePointsVec &vec )
+//          { ImagePointsVec out = _cam.normalize( vec );
+//            return _cam.undistort(  out ); }
+//        };
+//        TxVecNormalizerUndistorter makeVecNormalizerUndistorter( void ) const { return TxVecNormalizerUndistorter( *this ); }
+
+        struct TxNormalizer {
+          TxNormalizer( const PinholeCamera &cam ) : _cam(cam) {;}
+          const PinholeCamera &_cam;
+
+          ImagePoint operator()( const ImagePoint &pt )
+          { return _cam.normalize( pt ); }
+        };
+        TxNormalizer makeNormalizer( void ) const { return TxNormalizer( *this ); }
+
+        struct TxImager {
+          TxImager( const PinholeCamera &cam ) : _cam(cam) {;}
+          const PinholeCamera &_cam;
+
+          ImagePoint operator()( const ImagePoint &pt )
+          { return _cam.image( pt ); }
+        };
+        TxImager makeImager( void ) const { return TxImager( *this ); }
+
+
+
+        //      struct Undistorter {
+        //        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+        //
+        //        const PinholeCamera &_cam;
+        //
+        //        ImagePoint operator()( const ImagePoint &pt ) 
+        //        { return _cam.undistort( pt ); }
+        //      };
 
 
 
     protected:
 
-      void getRectangles(
-          const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
-          cv::Rect_<float>& inner, cv::Rect_<float>& outer );
+        void getRectangles(
+            const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
+            cv::Rect_<float>& inner, cv::Rect_<float>& outer );
 
-      double _fx, _fy, _alpha, _cx, _cy;
+        double _fx, _fy, _alpha, _cx, _cy;
 
   };
 
@@ -185,13 +237,13 @@ namespace Distortion {
       virtual ~DistortionModel() {;}
 
       //-- Undistortion functions --
-      
+
       virtual void initUndistortRectifyMap( const Mat &R, const Mat &P,
           const cv::Size& size, int m1type, Mat &map1, Mat &map2 );
 
       void undistortImage( const Mat &distorted, Mat &undistorted,
           const Mat &Knew, const Size& new_size);
-      
+
       void undistortImage( const Mat &distorted, Mat &undistorted )
       { undistortImage( distorted, undistorted, mat(), distorted.size() ); }
 

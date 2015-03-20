@@ -51,7 +51,7 @@ namespace Distortion {
         _fy *   xd[1]                    + _cy );
   }
 
-  ImagePoint PinholeCamera::unimage( const ImagePoint &pt ) const
+  ImagePoint PinholeCamera::normalize( const ImagePoint &pt ) const
   {
     return ImagePoint( 1.0 / _fx * (pt[0] - _cx ),
         1.0 / _fy * (pt[1] - _cy ) );
@@ -228,7 +228,7 @@ namespace Distortion {
       RR = PP * RR;
     }
 
-    undistorted = undistort( normalize(distorted ) );
+    undistorted = unwarp( normalize(distorted ) );
 
     std::transform( undistorted.begin(), undistorted.end(), undistorted.begin(),
         TxReprojector( RR ) );
@@ -248,22 +248,22 @@ namespace Distortion {
 
   }
 
-  ImagePointsVec PinholeCamera::normalize( const ImagePointsVec &vec ) const
+
+  ImagePointsVec PinholeCamera::image( const ImagePointsVec &vec ) const
   {
     ImagePointsVec out( vec.size() );
-    std::transform( vec.begin(), vec.end(), out.begin(), TxReprojector( matx().inv() ) );
+    std::transform( vec.begin(), vec.end(), out.begin(), makeImager() );
     return out; 
   }
 
-  struct TxUndistorter {
-    TxUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
-    const PinholeCamera &_cam;
+  ImagePointsVec PinholeCamera::normalize( const ImagePointsVec &vec ) const
+  {
+    ImagePointsVec out( vec.size() );
+    std::transform( vec.begin(), vec.end(), out.begin(), makeNormalizer() );
+    return out; 
+  }
 
-    ImagePoint operator()( const ImagePoint &pt )
-    { return _cam.undistort( pt); }
-  };
-
-  ImagePointsVec PinholeCamera::undistort( const ImagePointsVec &pw ) const
+  ImagePointsVec PinholeCamera::unwarp( const ImagePointsVec &pw ) const
   {
     ImagePointsVec out( pw.size() );
     std::transform( pw.begin(), pw.end(), out.begin(), TxUndistorter( *this ) );

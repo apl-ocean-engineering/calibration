@@ -27,8 +27,8 @@ namespace Distortion {
       virtual const std::string name( void ) const { return AngularPolynomial::Name(); }
 
 
-//      void set( const AngularPolynomial &other )
-//      { set( other.f(), other.c(), other.alpha(), other.distCoeffs() ); }
+      //      void set( const AngularPolynomial &other )
+      //      { set( other.f(), other.c(), other.alpha(), other.distCoeffs() ); }
 
       void set( const double *c, const double alpha )
       {
@@ -52,7 +52,7 @@ namespace Distortion {
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
-       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
+      virtual void projectPoints( const ObjectPointsVec &objectPoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
           cv::OutputArray jacobian = cv::noArray() ) const;
 
@@ -60,28 +60,28 @@ namespace Distortion {
       static AngularPolynomial *Load( cv::FileStorage &in );
 
 
-       virtual ImagePoint undistort( const ImagePoint &pw ) const;
-      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
+      virtual ImagePoint unwarp( const ImagePoint &pw ) const;
+      virtual ImagePointsVec unwarp( const ImagePointsVec &pw ) const;
 
-       virtual ImagePoint distort( const Vec3f &w ) const ;
+      virtual ImagePoint warp( const ObjectPoint &w ) const;
 
 
     protected: 
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
-//      void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
-//          const ImagePointsVecVec &imagePoints,
-//          const int check_cond,
-//          const double thresh_cond,
-//          vector< Vec3d > &omc, 
-//          vector< Vec3d > &Tc );
+      //      void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
+      //          const ImagePointsVecVec &imagePoints,
+      //          const int check_cond,
+      //          const double thresh_cond,
+      //          vector< Vec3d > &omc, 
+      //          vector< Vec3d > &Tc );
 
-//      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-//          Vec3d& omckk, Vec3d& Tckk);
-//
-//      Mat computeHomography(Mat m, Mat M);
-//
+      //      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
+      //          Vec3d& omckk, Vec3d& Tckk);
+      //
+      //      Mat computeHomography(Mat m, Mat M);
+      //
       //void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
 
       //void computeExtrinsicRefine(const ImagePointsVec& imagePoints, const ObjectPointsVec& objectPoints, 

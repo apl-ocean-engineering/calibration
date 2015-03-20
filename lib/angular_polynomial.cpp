@@ -219,7 +219,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     int totalPoints = 0;
 
     for( int i = 0; i < objectPoints.size(); ++i )  {
-      ImagePointsVec undistorted =  undistort( normalize( imagePoints[i] ) );
+      ImagePointsVec undistorted =  unwarp( normalize( imagePoints[i] ) );
       
       // Found the approach provided by initExtrinsics to be more reliable (!)
       // will need to investigate why that is.
@@ -344,7 +344,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
       Vec3d Xworld( objectPoints[i] );
       Vec3d Xcam( aff*Xworld );
 
-      imagePoints[i] = image( distort( Xcam ) );
+      imagePoints[i] = image( warp( Xcam ) );
 
       //      if (jacobian.needed())
       //      {
@@ -444,12 +444,16 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
   }
 
 
-  Vec2f AngularPolynomial::distort( const Vec3f &w ) const
+  ImagePoint AngularPolynomial::warp( const ObjectPoint &w ) const
   {
     double theta = atan2( sqrt( w[0]*w[0] + w[1]*w[1] ), w[2] );
     double psi = atan2( w[1], w[0] );
 
-    double theta2 = theta*theta, theta4 = theta2*theta2, theta6 = theta4*theta2, theta8 = theta4*theta4;
+    double theta2 = theta*theta, 
+           theta4 = theta2*theta2, 
+           theta6 = theta4*theta2, 
+           theta8 = theta4*theta4;
+
     double theta_d = theta * (1 + _distCoeffs[0]*theta2 + _distCoeffs[1]*theta4 + _distCoeffs[2]*theta6 + _distCoeffs[3]*theta8);
 
     return Vec2f( theta_d*cos( psi ), theta_d*sin(psi) );
@@ -502,7 +506,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
   };
 
 
-  ImagePointsVec AngularPolynomial::undistort( const ImagePointsVec &pw ) const
+  ImagePointsVec AngularPolynomial::unwarp( const ImagePointsVec &pw ) const
   {
     int Np = pw.size();
     double *p = new double[ Np*2 ];
@@ -537,7 +541,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
   }
 
-  ImagePoint AngularPolynomial::undistort( const ImagePoint &pw ) const
+  ImagePoint AngularPolynomial::unwarp( const ImagePoint &pw ) const
   {
     double p[2] = { pw[0], pw[1] };
 
