@@ -158,8 +158,8 @@ namespace Distortion {
 
         T thetaDist = theta * ( T(1) + k1*theta2 + k2 *theta4 + k3*theta6 + k4*theta8);
 
-        T xdn = thetaDist * cos( psi ),
-          ydn = thetaDist * sin( psi );
+        T xdn = tan(thetaDist) * cos( psi ),
+          ydn = tan(thetaDist) * sin( psi );
 
         T predictedX = fx*(xdn + alpha[0]*ydn) + cx;
         T predictedY = fy* ydn              + cy;
@@ -485,8 +485,8 @@ namespace Distortion {
 
         T thetaDist = theta * ( T(1) + _k[0]*theta2 + _k[1]*theta4 + _k[2]*theta6 + _k[3]*theta8);
 
-        T xdn = thetaDist * cos( psi ),
-          ydn = thetaDist * sin( psi );
+        T xdn = tan(thetaDist) * cos( psi ),
+          ydn = tan(thetaDist) * sin( psi );
 
         // The error is the difference between the predicted and observed position.
         residuals[0] = xdn - T(observed_x);
@@ -552,7 +552,7 @@ namespace Distortion {
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
-    options.num_threads = 2;
+    //options.num_threads = 2;
     //options.minimizer_progress_to_stdout = true;
 
     ceres::Solver::Summary summary;
@@ -560,7 +560,7 @@ namespace Distortion {
     //std::cout << summary.FullReport() << "\n";
       
     ImagePoint out( p[0], p[1] );
-    cout << pw[0] << "," << pw[1] << "     " << out[0] << "," << out[1] << endl;
+    //cout << pw[0] << "," << pw[1] << "     " << out[0] << "," << out[1] << endl;
 
     return out;
 
