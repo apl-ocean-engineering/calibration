@@ -864,7 +864,7 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
    for( int i = 0; i < pairs.size(); ++i ) {
 Mat worldPoints;
 
-triangulatePoint(  p0, p1, undistortedImagePoints[i][0], undistortedImagePoints[i][1], worldPoints );
+triangulatePoints( P[0], P[1], undistortedImagePoints[i][0], undistortedImagePoints[i][1], worldPoints );
 
 cout << "World points: " << worldPoints << endl;
    }
