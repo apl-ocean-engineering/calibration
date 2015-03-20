@@ -63,6 +63,8 @@ namespace Distortion {
        virtual ImagePoint undistort( const ImagePoint &pw ) const;
        virtual ImagePoint distort( const Vec3f &w ) const ;
 
+      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
+
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
 //      void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
@@ -72,10 +74,10 @@ namespace Distortion {
 //          vector< Vec3d > &omc, 
 //          vector< Vec3d > &Tc );
 
-//      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-//          Vec3d& omckk, Vec3d& Tckk);
-//
-//      Mat computeHomography(Mat m, Mat M);
+      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
+          Vec3d& omckk, Vec3d& Tckk);
+
+      Mat computeHomography(Mat m, Mat M);
 
       //void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
 

@@ -145,6 +145,19 @@ namespace Distortion {
   }
 
 
+  struct TxReprojector {
+    TxReprojector( const Matx33d &mat ) : _mat( mat ) {;}
+    Matx33d _mat;
+
+    ImagePoint operator()( const ImagePoint &pt )
+    {
+      Vec3d pth( pt[0], pt[1], 1.0 );
+      Vec3d out = _mat * pth;
+      return ImagePoint( out[0]/out[2], out[1]/out[2] );
+    }
+  };
+
+
   void PinholeCamera::getRectangles(
       const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
       Rect_<float>& inner, Rect_<float>& outer )
@@ -214,19 +227,49 @@ namespace Distortion {
       RR = PP * RR;
     }
 
-    for(size_t i = 0; i < distorted.size(); i++ )
-    {
-      Vec2d pw( unimage( distorted[i] ) );
-      Vec2d pu( undistort( pw ) );
+    undistorted = undistort( normalize(distorted ) );
 
-      // reproject
-      Vec3d pr = RR * Vec3d(pu[0], pu[1], 1.0); // rotated point optionally multiplied by new camera matrix
-      Vec2d fi(pr[0]/pr[2], pr[1]/pr[2]);       // final
+    std::transform( undistorted.begin(), undistorted.end(), undistorted.begin(),
+        TxReprojector( RR ) );
 
-      undistorted[i] = fi;
-    }
+
+    //    for(size_t i = 0; i < distorted.size(); i++ )
+    //    {
+    //      Vec2d pw( unimage( distorted[i] ) );
+    //      Vec2d pu( undistort( pw ) );
+    //
+    //      // reproject
+    //      Vec3d pr = RR * Vec3d(pu[0], pu[1], 1.0); // rotated point optionally multiplied by new camera matrix
+    //      Vec2d fi(pr[0]/pr[2], pr[1]/pr[2]);       // final
+    //
+    //      undistorted[i] = fi;
+    //    }
 
   }
+
+  ImagePointsVec PinholeCamera::normalize( const ImagePointsVec &vec ) const
+  {
+    ImagePointsVec out( vec.size() );
+    std::transform( vec.begin(), vec.end(), out.begin(), TxReprojector( matx().inv() ) );
+    return out; 
+  }
+
+  struct TxUndistorter {
+    TxUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+    const PinholeCamera &_cam;
+
+    ImagePoint operator()( const ImagePoint &pt )
+    { return _cam.undistort( pt); }
+  };
+
+  ImagePointsVec PinholeCamera::undistort( const ImagePointsVec &pw ) const
+  {
+    ImagePointsVec out( pw.size() );
+    std::transform( pw.begin(), pw.end(), out.begin(), TxUndistorter( *this ) );
+    return out; 
+  }
+
+
 
 
 };

@@ -118,26 +118,12 @@ namespace Distortion {
         return getOptimalNewCameraMatrix( imgSize, alpha, newImgSize, validROI, centerPrincipalPoint ); }
 
 
+        // This is the public API which includes normalization with the camera matrix,
+        // as well as re-normalization and rectification with R,P
       virtual void undistortPoints( const ImagePointsVec &distorted, 
           ImagePointsVec &undistorted, 
           const Mat &R = cv::Mat::eye(3,3,CV_64F), 
           const Mat &P = cv::Mat()) const;
-
-      virtual ImagePoint image( const ImagePoint &pt ) const;
-      virtual ImagePoint unimage( const ImagePoint &pt ) const;
-
-      virtual ImagePoint undistort( const ImagePoint &pw ) const { return pw; }
-      virtual ImagePoint distort( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
-
-
-//      struct Undistorter {
-//        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
-//
-//        const PinholeCamera &_cam;
-//
-//        ImagePoint operator()( const ImagePoint &pt ) 
-//        { return _cam.undistort( pt ); }
-//      };
 
       struct VecUndistorter {
         VecUndistorter( const PinholeCamera &cam ) : _cam(cam) {;}
@@ -149,9 +135,30 @@ namespace Distortion {
           return out;
         }
       };
-
-
       VecUndistorter makeVecUndistorter( void ) const { return VecUndistorter( *this ); }
+
+
+
+      // These are "internal" functions, though they are public as they are sometimes useful
+      virtual ImagePoint image( const ImagePoint &pt ) const;
+      virtual ImagePoint unimage( const ImagePoint &pt ) const;
+      virtual ImagePointsVec normalize( const ImagePointsVec &vec ) const;
+
+
+      virtual ImagePoint undistort( const ImagePoint &pw ) const { return pw; }
+      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
+
+      virtual ImagePoint distort( const ObjectPoint &w ) const { return ImagePoint( w[0]/w[2], w[1]/w[2] ); }
+
+
+//      struct Undistorter {
+//        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
+//
+//        const PinholeCamera &_cam;
+//
+//        ImagePoint operator()( const ImagePoint &pt ) 
+//        { return _cam.undistort( pt ); }
+//      };
 
 
 
