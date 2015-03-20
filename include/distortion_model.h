@@ -126,11 +126,11 @@ namespace Distortion {
             const Mat &P = cv::Mat()) const;
 
         virtual ImagePoint undistort( const ImagePoint &pt, bool reimage = true ) const
-        { ImagePoint p( undistort( normalize( pt ) ) );
+        { ImagePoint p( unwarp( normalize( pt ) ) );
           return ( reimage ? image( p ) : p ); }
 
         virtual ImagePointsVec undistort( const ImagePointsVec &vec, bool reimage = true ) const
-        { ImagePointsVec  v( undistort( normalize( vec ) ) );
+        { ImagePointsVec  v( unwarp( normalize( vec ) ) );
           return ( reimage ? image( v ) : v ); }
 
         // For clarification, "undistort" is normalize->remove distortion->(optionally) re-image

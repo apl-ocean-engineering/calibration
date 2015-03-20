@@ -258,8 +258,8 @@ namespace Distortion {
 
   ImagePointsVec PinholeCamera::normalize( const ImagePointsVec &vec ) const
   {
-    ImagePointsVec out( vec.size() );
-    std::transform( vec.begin(), vec.end(), out.begin(), makeNormalizer() );
+    ImagePointsVec out;
+    std::transform( vec.begin(), vec.end(), back_inserter( out ), makeNormalizer() );
     return out; 
   }
 
