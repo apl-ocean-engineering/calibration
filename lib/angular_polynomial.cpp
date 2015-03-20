@@ -218,6 +218,8 @@ namespace Distortion {
     rvecs.resize( objectPoints.size() );
     tvecs.resize( objectPoints.size() );
 
+    int totalPoints = 0;
+
     for( int i = 0; i < objectPoints.size(); ++i )  {
       ImagePointsVec undistorted =  undistort( normalize( imagePoints[i] ) );
       // If an initial distortion has been set, use it
@@ -229,10 +231,12 @@ namespace Distortion {
       // will need to investigate why that is.
       bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(), 
           rvecs[i], tvecs[i], false, CV_ITERATIVE );
-      cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
+      //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
 
-      initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
-      cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
+      //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
+      //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
+
+      totalPoints += objectPoints[i].size();
     }
 
     double camera[9] = { _fx, _fy, _cx, _cy,
@@ -288,7 +292,7 @@ namespace Distortion {
 
     set(camera, alpha);
 
-    double rms = 0;
+    double rms = sqrt( summary.final_cost / (float)totalPoints );
 
     ////-------------------------------Validation
     //double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
@@ -519,13 +523,12 @@ namespace Distortion {
     }
 
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.linear_solver_type = ceres::DENSE_QR;
     //options.minimizer_progress_to_stdout = true;
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     //std::cout << summary.FullReport() << "\n";
-
 
     ImagePointsVec out( pw.size() );
     for( int i = 0; i < Np; ++i ) {
