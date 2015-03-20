@@ -859,12 +859,11 @@ int main( int argc, char** argv )
 
   }
 
-  pcl::PointCloud<pcl::PointXYZ> cloud;
+  pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
   cloud.width = numPoints;
   cloud.height = 1;
   cloud.points.resize( cloud.width * cloud.height );
-
 
   int at = 0;
 
@@ -874,7 +873,7 @@ int main( int argc, char** argv )
 
     triangulatePoints( P[0], P[1], undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
-    cout << "World points: " << worldPoints << endl;
+    //cout << "World points: " << worldPoints << endl;
 
     for( int j = 0; j < worldPoints.cols; ++j ) {
       Vec4f pt;
@@ -884,11 +883,15 @@ int main( int argc, char** argv )
     cloud.points[at].y = pt[1]/pt[3];
     cloud.points[at].z = pt[2]/pt[3];
 
+    uint8_t r = 255 * ((float)i / pairs.size() ),
+            g = 255-r, b = 255-r;
+    uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+    cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
+
     ++at;
     }
   }
 
-  
    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
      std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
 
