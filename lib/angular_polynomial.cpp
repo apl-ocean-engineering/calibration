@@ -219,11 +219,11 @@ namespace Distortion {
     tvecs.resize( objectPoints.size() );
 
     for( int i = 0; i < objectPoints.size(); ++i )  {
-      ImagePointsVec undistorted =  normalize( imagePoints[i] );
+      ImagePointsVec undistorted =  undistort( normalize( imagePoints[i] ) );
       // If an initial distortion has been set, use it
       //undistortPoints( imagePoints[i], undistorted, Mat(), mat() );
       
-      cout << "---------------" << endl;
+      cout <<  i << " ---------------" << endl;
 
       // Found the approach provided by initExtrinsics to be more reliable (!)
       // will need to investigate why that is.
@@ -468,19 +468,20 @@ namespace Distortion {
     double observed_x, observed_y;
 
     template <typename T>
-      bool operator()(const T* const point, 
+      bool operator()(const T* const p,
           T* residuals) const
       {
         // point is a 2-vector
-        T p[2] = { point[0], point[1] };
+        //T p[2] = { point[0], point[1] };
 
+        // Important to use atan2?
         T theta = atan( sqrt( p[0]*p[0] + p[1]*p[1] )  );
         T psi   = atan2( p[1], p[0] );
 
         T theta2 =  theta*theta;
         T theta4 =  theta2*theta2;
-        T theta6 = theta4*theta2;
-        T theta8 = theta4*theta4;
+        T theta6 =  theta4*theta2;
+        T theta8 =  theta4*theta4;
 
         T thetaDist = theta * ( T(1) + _k[0]*theta2 + _k[1]*theta4 + _k[2]*theta6 + _k[3]*theta8);
 
@@ -503,40 +504,43 @@ namespace Distortion {
   };
 
 
-  ImagePointsVec AngularPolynomial::undistort( const ImagePointsVec &pw ) const
-  {
-    int Np = pw.size();
-    double *p = new double[ Np*2 ];
-
-    ceres::Problem problem;
-    for( int i = 0; i < Np; ++i ) {
-      p[ i*2 ] = pw[i][0];
-      p[ i*2 + 1 ] = pw[i][1];
-
-      ceres::CostFunction *costFunction = UndistortReprojError::Create( pw[i][0], pw[i][1], _distCoeffs );
-      problem.AddResidualBlock( costFunction, NULL, &(p[i*2]) );
-    }
-
-    ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_SCHUR;
-    //options.minimizer_progress_to_stdout = true;
-
-    ceres::Solver::Summary summary;
-    ceres::Solve(options, &problem, &summary);
-    //std::cout << summary.FullReport() << "\n";
-
-
-    ImagePointsVec out( pw.size() );
-    for( int i = 0; i < Np; ++i ) {
-      out[i] = ImagePoint( p[i*2], p[i*2 + 1] );
-    }
-
-    delete[] p;
-
-    return out;
-
-
-  }
+//  ImagePointsVec AngularPolynomial::undistort( const ImagePointsVec &pw ) const
+//  {
+//    int Np = pw.size();
+//    double *p = new double[ Np*2 ];
+//
+//    ceres::Problem problem;
+//    for( int i = 0; i < Np; ++i ) {
+//      p[ i*2 ] = pw[i][0];
+//      p[ i*2 + 1 ] = pw[i][1];
+//
+//      ceres::CostFunction *costFunction = UndistortReprojError::Create( pw[i][0], pw[i][1], _distCoeffs );
+//      problem.AddResidualBlock( costFunction, NULL, &(p[i*2]) );
+//    }
+//
+//    ceres::Solver::Options options;
+//    options.linear_solver_type = ceres::DENSE_SCHUR;
+//    //options.minimizer_progress_to_stdout = true;
+//
+//    ceres::Solver::Summary summary;
+//    ceres::Solve(options, &problem, &summary);
+//    //std::cout << summary.FullReport() << "\n";
+//
+//
+//    ImagePointsVec out( pw.size() );
+//    for( int i = 0; i < Np; ++i ) {
+//      out[i] = ImagePoint( p[i*2], p[i*2 + 1] );
+//
+//
+//      cout << i << ": " << pw[i][0] << "," << pw[i][1] << "     " << out[i][0] << "," << out[i][1] << endl;
+//    }
+//
+//    delete[] p;
+//
+//    return out;
+//
+//
+//  }
 
   ImagePoint AngularPolynomial::undistort( const ImagePoint &pw ) const
   {
@@ -547,15 +551,18 @@ namespace Distortion {
     problem.AddResidualBlock( costFunction, NULL, p );
 
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.linear_solver_type = ceres::DENSE_QR;
     options.num_threads = 2;
-    options.minimizer_progress_to_stdout = true;
+    //options.minimizer_progress_to_stdout = true;
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
-    std::cout << summary.FullReport() << "\n";
+    //std::cout << summary.FullReport() << "\n";
+      
+    ImagePoint out( p[0], p[1] );
+    cout << pw[0] << "," << pw[1] << "     " << out[0] << "," << out[1] << endl;
 
-    return ImagePoint( p[0], p[1] );
+    return out;
 
     //double scale = 1.0;
 

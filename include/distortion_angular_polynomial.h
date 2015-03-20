@@ -58,12 +58,15 @@ namespace Distortion {
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
       static AngularPolynomial *Load( cv::FileStorage &in );
 
-    protected: 
 
        virtual ImagePoint undistort( const ImagePoint &pw ) const;
+      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const
+           { return PinholeCamera::undistort( pw ); };
+
        virtual ImagePoint distort( const Vec3f &w ) const ;
 
-      virtual ImagePointsVec undistort( const ImagePointsVec &pw ) const;
+
+    protected: 
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
