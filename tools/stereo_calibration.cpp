@@ -791,7 +791,7 @@ int main( int argc, char** argv )
 
   float alpha = -1;
   Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
-      R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
+      R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
       alpha, imageSize, validROI[0], validROI[1] );
 
   cout << "R: " << endl << r << endl;
@@ -867,11 +867,20 @@ int main( int argc, char** argv )
 
   int at = 0;
 
+
+  Mat newP0 = Mat::eye( 3,4, CV_64F ), newP1( 3,4,CV_64F );
+  Mat subR( newP1, Rect(0,0,3,3) ), subT( newP1.col(3) );
+
+  r.copyTo( subR );
+  t.copyTo( subT );
+
+
+
   //Think about some reconstruction
   for( int i = 0; i < pairs.size(); ++i ) {
     Mat worldPoints;
 
-    triangulatePoints( P[0], P[1], undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
+    triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
     //cout << "World points: " << worldPoints << endl;
 
