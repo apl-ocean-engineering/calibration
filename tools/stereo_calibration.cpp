@@ -9,6 +9,10 @@
 
 #include <boost/filesystem.hpp>
 
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+
+
 #include <cctype>
 #include <stdio.h>
 #include <string.h>
@@ -466,11 +470,12 @@ int main( int argc, char** argv )
   float aspectRatio = 1.f;
   bool writeExtrinsics = false, writePoints = false;
 
+  int numPoints = 0;
   ImagePointsVecVec imagePoints[2];
   ImagePointsVecVec undistortedImagePoints[2];
 
   // Make ``flattened'' versions as well
-ImagePointsVec undistortedImagePts[2];
+  ImagePointsVec undistortedImagePts[2];
 
   ObjectPointsVecVec objectPoints;
 
@@ -479,8 +484,8 @@ ImagePointsVec undistortedImagePts[2];
     exit(-1);
   }
 
-cout << "Loading camera 1 from: " << opts.cameraLatest(0) << endl;
-cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
+  cout << "Loading camera 1 from: " << opts.cameraLatest(0) << endl;
+  cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
 
   // Load the camera files
   DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( opts.cameraLatest(0) ),
@@ -566,10 +571,11 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
 
       if( shared.worldPoints.size() > 0 ) {
         objectPoints.push_back( shared.worldPoints );
+        numPoints += shared.worldPoints.size();
 
-        ImagePointsVec undistortedPoints[2] = {
-          ImagePointsVec( shared.imagePoints[0].size() ), 
-          ImagePointsVec( shared.imagePoints[1].size() )  };
+        //:ImagePointsVec undistortedPoints[2] = {
+        //:  ImagePointsVec( shared.imagePoints[0].size() ), 
+        //:  ImagePointsVec( shared.imagePoints[1].size() )  };
 
         // Generate undistorted image points as well
         for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
@@ -586,13 +592,7 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
         CompositeCanvas canvas( thisPair );
 
         for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
-          Mat foo;
           cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
-          cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), foo );
-
-          char filename[80];
-          sprintf( filename, "/tmp/foo%d.jpg", imgIdx );
-          imwrite( filename, foo );
         }
 
         //thisPair[0].img().copyTo( rectified[0] );
@@ -605,10 +605,11 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
           float i = (float)j / shared.worldPoints.size();
           Scalar color( 255*i, 0, (1-i)*255);
 
-          cv::circle( canvas.roi[0], Point(undistortedPoints[0][j]), 5, color, -1 );
-          cv::circle( canvas.roi[1], Point(undistortedPoints[1][j]), 5, color, -1 );
+          cv::circle( canvas.roi[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
+          cv::circle( canvas.roi[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
-          cv::line(  canvas, Point(undistortedPoints[0][j]), canvas.origin[1] + Point2f(undistortedPoints[1][j]),
+          cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
+                     canvas.origin[1] + Point2f(undistortedImagePoints[1].back()[j]),
               color, 1 );
         }
 
@@ -663,9 +664,9 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
     ImagePointsVec normimgpt[2];
 
     for( int k = 0; k < 2; ++k )
-        std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
-            back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
-      
+      std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
+          back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
+
 
     Mat status, estE;
     estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 3. / 1600., 0.99, status);
@@ -763,18 +764,18 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
     cout << "!!! Using stereoCalibrate !!!" << endl;
 
     int flags = CV_CALIB_FIX_INTRINSIC;
-    
-        // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
-        // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
-        // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
-        reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
-            *cameras[0], *cameras[1],
-            imageSize, r, t, e, f, 
-            TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
-            flags );
-    
-        SVD svd(e);
-        cout << "sigma: " << svd.w << endl;
+
+    // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
+    // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
+    // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
+    reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
+        *cameras[0], *cameras[1],
+        imageSize, r, t, e, f, 
+        TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+        flags );
+
+    SVD svd(e);
+    cout << "sigma: " << svd.w << endl;
     //
     //cout << "cam0 after: " << endl << cam0 << endl;
     //  cout << "cam1 after: " << endl << cam1 << endl;
@@ -788,16 +789,16 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
     exit(0);
   }
 
-    float alpha = -1;
-    Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
-        R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
-        alpha, imageSize, validROI[0], validROI[1] );
+  float alpha = -1;
+  Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
+      R[0], R[1], P[0], P[1],  disparity, 0, //CALIB_ZERO_DISPARITY, 
+      alpha, imageSize, validROI[0], validROI[1] );
 
-    cout << "R: " << endl << r << endl;
-    cout << "T: " << endl << t << endl;
-    cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
-    cout << "E: " << endl << e << endl;
-    cout << "F: " << endl << f << endl;
+  cout << "R: " << endl << r << endl;
+  cout << "T: " << endl << t << endl;
+  cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
+  cout << "E: " << endl << e << endl;
+  cout << "F: " << endl << f << endl;
 
   //
   //
@@ -812,63 +813,84 @@ cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
   //  cout << "Euler around y: " << acos( qy.at<double>(0,0) ) * 180.0/M_PI << endl;
   //  cout << "Euler around z: " << acos( qz.at<double>(0,0) ) * 180.0/M_PI << endl;
   //
-    cout << "r0: " << endl << R[0] << endl;
-    cout << "p0: " << endl << P[0] << endl;
-    cout << "r1: " << endl << R[1] << endl;
-    cout << "p1: " << endl << P[1] << endl;
-  
-    // Generate undistorted images
-  
-  
-    Mat map[2][2];
-    for( int k = 0; k < 2; ++k ) {
-      cameras[k]->initUndistortRectifyMap( R[k], P[k],
-          imageSize, CV_32FC1, map[k][0], map[k][1] );
+  cout << "r0: " << endl << R[0] << endl;
+  cout << "p0: " << endl << P[0] << endl;
+  cout << "r1: " << endl << R[1] << endl;
+  cout << "p1: " << endl << P[1] << endl;
 
-      //cout << "map" << k << "0: " << endl << map[k][0] << endl;
-      //cout << "map" << k << "1: " << endl << map[k][1] << endl;
-    }
-  
-    for( int i = 0; i < pairs.size(); ++i ) {
-  
-      ImagePair &thisPair( pairs[i] );
-      CompositeCanvas canvas( thisPair );
-  
-      for( int idx = 0; idx < 2; ++idx ) {
-        remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
-  
-        Scalar roiBorder( 0,255,0 );
-        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-        line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
-  
-      }
+  // Generate undistorted images
 
 
-      // Draw the standard red horizontal lines
-      int spacing = 200;
-      for( int y = 0; y < canvas.size().height; y += spacing ) 
-        line( canvas, Point( 0, y ), Point( canvas.size().width, y ), Scalar( 0,0,255 ), 2 );
+  Mat map[2][2];
+  for( int k = 0; k < 2; ++k ) {
+    cameras[k]->initUndistortRectifyMap( R[k], P[k],
+        imageSize, CV_32FC1, map[k][0], map[k][1] );
 
-  
-      string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
-      mkdir_p( outfile );
-      imwrite(  outfile, canvas );
-  
+    //cout << "map" << k << "0: " << endl << map[k][0] << endl;
+    //cout << "map" << k << "1: " << endl << map[k][1] << endl;
+  }
+
+  for( int i = 0; i < pairs.size(); ++i ) {
+
+    ImagePair &thisPair( pairs[i] );
+    CompositeCanvas canvas( thisPair );
+
+    for( int idx = 0; idx < 2; ++idx ) {
+      remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
+
+      Scalar roiBorder( 0,255,0 );
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
+
     }
 
 
+    // Draw the standard red horizontal lines
+    int spacing = 200;
+    for( int y = 0; y < canvas.size().height; y += spacing ) 
+      line( canvas, Point( 0, y ), Point( canvas.size().width, y ), Scalar( 0,0,255 ), 2 );
 
-   //Think about some reconstruction
-   for( int i = 0; i < pairs.size(); ++i ) {
-Mat worldPoints;
 
-triangulatePoints( P[0], P[1], undistortedImagePoints[i][0], undistortedImagePoints[i][1], worldPoints );
+    string outfile( opts.tmpPath( String("stereo_rectified/") +  thisPair[0].basename() + ".jpg" ) );
+    mkdir_p( outfile );
+    imwrite(  outfile, canvas );
 
-cout << "World points: " << worldPoints << endl;
-   }
+  }
 
+  pcl::PointCloud<pcl::PointXYZ> cloud;
+
+  cloud.width = numPoints;
+  cloud.height = 1;
+  cloud.points.resize( cloud.width * cloud.height );
+
+
+  int at = 0;
+
+  //Think about some reconstruction
+  for( int i = 0; i < pairs.size(); ++i ) {
+    Mat worldPoints;
+
+    triangulatePoints( P[0], P[1], undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
+
+    cout << "World points: " << worldPoints << endl;
+
+    for( int j = 0; j < worldPoints.cols; ++j ) {
+      Vec4f pt;
+      worldPoints.col(j).convertTo( pt, CV_32F );
+
+    cloud.points[at].x = pt[0]/pt[3];
+    cloud.points[at].y = pt[1]/pt[3];
+    cloud.points[at].z = pt[2]/pt[3];
+
+    ++at;
+    }
+  }
+
+  
+   pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+     std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
 
 
   //      if( detection->points.size() > 0 ) {

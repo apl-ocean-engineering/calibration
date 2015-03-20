@@ -12,6 +12,7 @@ set(MAKE_CXX_FLAGS_RELEASE, "-Werror")
 set( EIGEN_INCLUDE_DIR "/usr/local/include/eigen3/" )
 
 find_package( OpenCV REQUIRED )
+find_package( PCL 1.2 REQUIRED )
 find_package( GSL REQUIRED )
 find_package( Ceres REQUIRED )
 
@@ -21,6 +22,8 @@ find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 
 
 include_directories( "/usr/local/include/eigen3" )
+
+link_directories( ${PCL_LIBRARY_DIRS} )
 
 option( USE_APRILTAGS "Use AprilTags" ON )
 
