@@ -460,6 +460,20 @@ struct CompositeCanvas
 };
 
 
+struct TxRectifier {
+  TxRectifier( const Mat &r )
+    : _r( r) {;}
+  const Mat &_r;
+
+  ImagePoint operator()( const ImagePoint &pt )
+  {
+    Vec3d p( pt[0], pt[1], 1.0 );
+    Mat r = _r * Mat(p);
+    return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
+  }
+};
+
+
 int main( int argc, char** argv )
 {
 
@@ -609,7 +623,7 @@ int main( int argc, char** argv )
           cv::circle( canvas.roi[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
           cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
-                     canvas.origin[1] + Point2f(undistortedImagePoints[1].back()[j]),
+              canvas.origin[1] + Point2f(undistortedImagePoints[1].back()[j]),
               color, 1 );
         }
 
@@ -668,8 +682,13 @@ int main( int argc, char** argv )
           back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
 
 
-    Mat status, estE;
-    estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 3. / 1600., 0.99, status);
+    Mat status, estF;
+    estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
+    cout << "Est F: " << endl << estF << endl;
+
+
+    Mat estE;
+    estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
 
     cout << "estimated e: " << endl << estE << endl;
     // Normalize e
@@ -677,6 +696,7 @@ int main( int argc, char** argv )
     Matx33d idealSigma( 1,0,0,
         0,1,0,
         0,0,0 );
+    cout << "eigenvalues of calculated e: " << svdE.w << endl;
     e = svdE.u * Mat(idealSigma) * svdE.vt;
     e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
     cout << "ideal e: " << e << endl;
@@ -690,7 +710,7 @@ int main( int argc, char** argv )
     // Calculate the mean reprojection error under this f
     double error = 0;
     for( int i = 0; i < normimgpt[0].size(); ++i ) {
-      if( status.data[i] > 0 ) {
+      if( status.at<uint8_t>(i) > 0 ) {
         Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
             e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
         error += pow(err.at<double>(0,0),2);
@@ -818,12 +838,18 @@ int main( int argc, char** argv )
   cout << "r1: " << endl << R[1] << endl;
   cout << "p1: " << endl << P[1] << endl;
 
+//  cout << "r0^T r1: " << endl << R[0].t() * R[1] << endl;
+//  cout << "r0 T: " << endl << R[0] * t << endl;
+//  cout << "r0^T T: " << endl << R[0].t() * t << endl;
+//  cout << "r1 T: " << endl << R[1] * t << endl;
+//  cout << "r1^T T: " << endl << R[1].t() * t << endl;
+
   // Generate undistorted images
 
 
   Mat map[2][2];
   for( int k = 0; k < 2; ++k ) {
-    cameras[k]->initUndistortRectifyMap( R[k], P[k],
+    cameras[k]->initUndistortRectifyMap( R[k], cameras[k]->mat(), //P[k],
         imageSize, CV_32FC1, map[k][0], map[k][1] );
 
     //cout << "map" << k << "0: " << endl << map[k][0] << endl;
@@ -859,50 +885,102 @@ int main( int argc, char** argv )
 
   }
 
-  pcl::PointCloud<pcl::PointXYZRGB> cloud;
+//  {
+//    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+//
+//    cloud.width = numPoints;
+//    cloud.height = 1;
+//    cloud.points.resize( cloud.width * cloud.height );
+//
+//    int at = 0;
+//
+//    //Think about some reconstruction
+//    for( int i = 0; i < pairs.size(); ++i ) {
+//      Mat worldPoints;
+//
+//    vector< ImagePoint > rectifiedPoints[2];
+//
+//    for( int j = 0; j < 2; ++j ) {
+//      std::transform( undistortedImagePoints[j][i].begin(), undistortedImagePoints[j][i].end(),
+//          back_inserter( rectifiedPoints[j] ), cameras[j]->makeNormalizer() );
+//
+//      Mat cam( P[0], Rect(0,0,3,3) );
+//      std::transform( rectifiedPoints[j].begin(), rectifiedPoints[j].end(),
+//          rectifiedPoints[j].begin(), TxRectifier( cam*R[j] ) );
+//    }
+//
+//
+//      triangulatePoints( P[0], P[1],rectifiedPoints[0], rectifiedPoints[1], worldPoints );
+//
+//      //cout << "World points: " << worldPoints << endl;
+//
+//      for( int j = 0; j < worldPoints.cols; ++j ) {
+//        Vec4f pt;
+//        worldPoints.col(j).convertTo( pt, CV_32F );
+//
+//        cloud.points[at].x = pt[0]/pt[3];
+//        cloud.points[at].y = pt[1]/pt[3];
+//        cloud.points[at].z = pt[2]/pt[3];
+//
+//        uint8_t r = 255 * ((float)i / (float)pairs.size() ),
+//                g = 255-r, b = 255-r;
+//
+//        uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+//        cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
+//
+//        ++at;
+//      }
+//    }
+//
+//    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+//    std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
+//  }
 
-  cloud.width = numPoints;
-  cloud.height = 1;
-  cloud.points.resize( cloud.width * cloud.height );
+  {
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
-  int at = 0;
+    cloud.width = numPoints;
+    cloud.height = 1;
+    cloud.points.resize( cloud.width * cloud.height );
 
+    int at = 0;
 
-  Mat newP0 = Mat::eye( 3,4, CV_64F ), newP1( 3,4,CV_64F );
-  Mat subR( newP1, Rect(0,0,3,3) ), subT( newP1.col(3) );
+    Mat newP0 = Mat::eye( 3,4, CV_64F ), newP1( 3,4,CV_64F );
+    Mat subR( newP1, Rect(0,0,3,3) ), subT( newP1.col(3) );
 
-  r.copyTo( subR );
-  t.copyTo( subT );
+    r.copyTo( subR );
+    t.copyTo( subT );
 
+    //Think about some reconstruction
+    for( int i = 0; i < pairs.size(); ++i ) {
+      Mat worldPoints;
 
+      triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, 
+          undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
-  //Think about some reconstruction
-  for( int i = 0; i < pairs.size(); ++i ) {
-    Mat worldPoints;
+      //cout << "World points: " << worldPoints << endl;
 
-    triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
+      for( int j = 0; j < worldPoints.cols; ++j ) {
+        Vec4f pt;
+        worldPoints.col(j).convertTo( pt, CV_32F );
 
-    //cout << "World points: " << worldPoints << endl;
+        cloud.points[at].x = pt[0]/pt[3];
+        cloud.points[at].y = pt[1]/pt[3];
+        cloud.points[at].z = pt[2]/pt[3];
 
-    for( int j = 0; j < worldPoints.cols; ++j ) {
-      Vec4f pt;
-      worldPoints.col(j).convertTo( pt, CV_32F );
+        uint8_t r = 255 * ((float)i / (float)pairs.size() ),
+                g = 255-r, b = 255-r;
 
-    cloud.points[at].x = pt[0]/pt[3];
-    cloud.points[at].y = pt[1]/pt[3];
-    cloud.points[at].z = pt[2]/pt[3];
+        uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+        cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
 
-    uint8_t r = 255 * ((float)i / (float)pairs.size() ),
-            g = 255-r, b = 255-r;
-    uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
-    cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
-
-    ++at;
+        ++at;
+      }
     }
-  }
 
-   pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-     std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
+    pcl::io::savePCDFileASCII ("test_pcd_rectified.pcd", cloud);
+    std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd_rectified.pcd." << std::endl;
+  }
 
 
   //      if( detection->points.size() > 0 ) {
