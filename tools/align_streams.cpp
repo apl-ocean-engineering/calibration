@@ -43,14 +43,14 @@ using AprilTags::TagDetection;
 struct AlignmentOptions
 {
 
-  typedef enum { PLAYER, DETECTOR, NONE = -1 } Verb;
+  typedef enum { PLAYER, DETECTOR, COMPOSITE, NONE = -1 } Verb;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( int argc, char **argv )
     : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2),
     minSharedTags( 10 ),
     seekTo(0), offset(0),  waitKey(0), 
-    standoffFrames( 100 ),
+    standoffFrames( 100 ), interval( 10 ),
     offsetGiven(false),
     doExtract( false ),
     extractPath( "/tmp/extracted" ),
@@ -65,7 +65,7 @@ struct AlignmentOptions
 
 
   float window, maxDelta, lookahead;
-  int minSharedTags, seekTo, offset, waitKey, standoffFrames;
+  int minSharedTags, seekTo, offset, waitKey, standoffFrames, interval;
   bool offsetGiven, doExtract;
   string extractPath;
 
@@ -81,6 +81,7 @@ struct AlignmentOptions
       { "seek-to", required_argument, NULL, 's' },
       { "shared-tags", required_argument, NULL, 'f' },
       { "standoff-frames", required_argument, NULL, 'y' },
+      { "interval", required_argument, NULL, 'i' },
       { "wait-key", required_argument, NULL, 'k' },
       { "max-delta", required_argument, NULL, 'd'},
       { "offset", required_argument, NULL, 'o'},
@@ -91,7 +92,7 @@ struct AlignmentOptions
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, "e::w:y:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, "e::w:y:i:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'd':
           maxDelta = atof(optarg);
@@ -105,6 +106,9 @@ struct AlignmentOptions
           break;
         case 'y':
           standoffFrames = atoi( optarg );
+          break;
+        case 'i':
+          interval = atoi( optarg );
           break;
         case 's':
           seekTo = atoi( optarg );
@@ -150,6 +154,8 @@ struct AlignmentOptions
     } else if( verbStr.compare( "extract" ) == 0 ) {
       verb = DETECTOR;
       doExtract = true;
+    } else if( verbStr.compare( "composite" ) == 0 ) {
+      verb = COMPOSITE;
     } else {
       msg = "Don't understand the verb \"" + verbStr + "\"";
       return false;
@@ -219,6 +225,9 @@ class AlignStreamsMain {
         case AlignmentOptions::DETECTOR:
           retval = doDetector( );
           break;
+        case AlignmentOptions::COMPOSITE:
+          retval = doComposite();
+          break;
         case AlignmentOptions::NONE:
         default:
           cout << "No verb selected, oh well." << endl;
@@ -255,6 +264,19 @@ class AlignStreamsMain {
 
       return 0;
     }
+
+    int doComposite( void )
+    {
+      Mat img;
+      int count = 0;
+      while( sync.nextCompositeFrame( img ) ) {
+        if( (count % opts.interval) == 0 )
+            imwrite( extractPath.composite( video0.frame(), video1.frame() ).c_str(), img );
+
+        ++count;
+      }
+    }
+
 
     int doDetector( )
     {
