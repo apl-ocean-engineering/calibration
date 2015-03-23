@@ -820,6 +820,12 @@ int main( int argc, char** argv )
   cout << "E: " << endl << e << endl;
   cout << "F: " << endl << f << endl;
 
+
+  Mat H[2];
+  stereoRectifyUncalibrated( undistortedImagePts[0], undistortedImagePts[1], f, imageSize, H[0], H[1] );
+  cout << "H[0]: " << endl << H[0] << endl;
+  cout << "H[1]: " << endl << H[1] << endl;
+
   //
   //
   //  Mat qx, qy, qz, Rq, Qq;
@@ -838,19 +844,21 @@ int main( int argc, char** argv )
   cout << "r1: " << endl << R[1] << endl;
   cout << "p1: " << endl << P[1] << endl;
 
-//  cout << "r0^T r1: " << endl << R[0].t() * R[1] << endl;
-//  cout << "r0 T: " << endl << R[0] * t << endl;
-//  cout << "r0^T T: " << endl << R[0].t() * t << endl;
-//  cout << "r1 T: " << endl << R[1] * t << endl;
-//  cout << "r1^T T: " << endl << R[1].t() * t << endl;
+  //  cout << "r0^T r1: " << endl << R[0].t() * R[1] << endl;
+  //  cout << "r0 T: " << endl << R[0] * t << endl;
+  //  cout << "r0^T T: " << endl << R[0].t() * t << endl;
+  //  cout << "r1 T: " << endl << R[1] * t << endl;
+  //  cout << "r1^T T: " << endl << R[1].t() * t << endl;
 
   // Generate undistorted images
 
 
   Mat map[2][2];
-  for( int k = 0; k < 2; ++k ) {
-    cameras[k]->initUndistortRectifyMap( R[k], cameras[k]->mat(), //P[k],
+  for( int k = 0; k < 2; ++k ) { 
+    cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
         imageSize, CV_32FC1, map[k][0], map[k][1] );
+    //cameras[k]->initUndistortRectifyMap( R[k], P[k],
+    //    imageSize, CV_32FC1, map[k][0], map[k][1] );
 
     //cout << "map" << k << "0: " << endl << map[k][0] << endl;
     //cout << "map" << k << "1: " << endl << map[k][1] << endl;
@@ -862,13 +870,17 @@ int main( int argc, char** argv )
     CompositeCanvas canvas( thisPair );
 
     for( int idx = 0; idx < 2; ++idx ) {
-      remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
+      Mat undist;
+      cameras[idx]->undistortImage( thisPair[idx].img(), undist );
+      warpPerspective( undist, canvas.roi[idx], H[idx], imageSize );
 
-      Scalar roiBorder( 0,255,0 );
-      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
+     // remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
+
+     // Scalar roiBorder( 0,255,0 );
+     // line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
+     // line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+     // line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+     // line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
 
     }
 
@@ -885,56 +897,56 @@ int main( int argc, char** argv )
 
   }
 
-//  {
-//    pcl::PointCloud<pcl::PointXYZRGB> cloud;
-//
-//    cloud.width = numPoints;
-//    cloud.height = 1;
-//    cloud.points.resize( cloud.width * cloud.height );
-//
-//    int at = 0;
-//
-//    //Think about some reconstruction
-//    for( int i = 0; i < pairs.size(); ++i ) {
-//      Mat worldPoints;
-//
-//    vector< ImagePoint > rectifiedPoints[2];
-//
-//    for( int j = 0; j < 2; ++j ) {
-//      std::transform( undistortedImagePoints[j][i].begin(), undistortedImagePoints[j][i].end(),
-//          back_inserter( rectifiedPoints[j] ), cameras[j]->makeNormalizer() );
-//
-//      Mat cam( P[0], Rect(0,0,3,3) );
-//      std::transform( rectifiedPoints[j].begin(), rectifiedPoints[j].end(),
-//          rectifiedPoints[j].begin(), TxRectifier( cam*R[j] ) );
-//    }
-//
-//
-//      triangulatePoints( P[0], P[1],rectifiedPoints[0], rectifiedPoints[1], worldPoints );
-//
-//      //cout << "World points: " << worldPoints << endl;
-//
-//      for( int j = 0; j < worldPoints.cols; ++j ) {
-//        Vec4f pt;
-//        worldPoints.col(j).convertTo( pt, CV_32F );
-//
-//        cloud.points[at].x = pt[0]/pt[3];
-//        cloud.points[at].y = pt[1]/pt[3];
-//        cloud.points[at].z = pt[2]/pt[3];
-//
-//        uint8_t r = 255 * ((float)i / (float)pairs.size() ),
-//                g = 255-r, b = 255-r;
-//
-//        uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
-//        cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
-//
-//        ++at;
-//      }
-//    }
-//
-//    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-//    std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
-//  }
+  //  {
+  //    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+  //
+  //    cloud.width = numPoints;
+  //    cloud.height = 1;
+  //    cloud.points.resize( cloud.width * cloud.height );
+  //
+  //    int at = 0;
+  //
+  //    //Think about some reconstruction
+  //    for( int i = 0; i < pairs.size(); ++i ) {
+  //      Mat worldPoints;
+  //
+  //    vector< ImagePoint > rectifiedPoints[2];
+  //
+  //    for( int j = 0; j < 2; ++j ) {
+  //      std::transform( undistortedImagePoints[j][i].begin(), undistortedImagePoints[j][i].end(),
+  //          back_inserter( rectifiedPoints[j] ), cameras[j]->makeNormalizer() );
+  //
+  //      Mat cam( P[0], Rect(0,0,3,3) );
+  //      std::transform( rectifiedPoints[j].begin(), rectifiedPoints[j].end(),
+  //          rectifiedPoints[j].begin(), TxRectifier( cam*R[j] ) );
+  //    }
+  //
+  //
+  //      triangulatePoints( P[0], P[1],rectifiedPoints[0], rectifiedPoints[1], worldPoints );
+  //
+  //      //cout << "World points: " << worldPoints << endl;
+  //
+  //      for( int j = 0; j < worldPoints.cols; ++j ) {
+  //        Vec4f pt;
+  //        worldPoints.col(j).convertTo( pt, CV_32F );
+  //
+  //        cloud.points[at].x = pt[0]/pt[3];
+  //        cloud.points[at].y = pt[1]/pt[3];
+  //        cloud.points[at].z = pt[2]/pt[3];
+  //
+  //        uint8_t r = 255 * ((float)i / (float)pairs.size() ),
+  //                g = 255-r, b = 255-r;
+  //
+  //        uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+  //        cloud.points[at].rgb = *reinterpret_cast<float*>(&rgb);
+  //
+  //        ++at;
+  //      }
+  //    }
+  //
+  //    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+  //    std::cerr << "Saved " << cloud.points.size () << " data points to test_pcd.pcd." << std::endl;
+  //  }
 
   {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
