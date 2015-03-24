@@ -57,7 +57,8 @@ struct Options
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options( int argc, char **argv )
-    : seekTo(0), waitKey(0), scale(-1.0), doRectify( false ),
+    : seekTo(0), waitKey(0), scale(-1.0), doRectify( false ), doDenseStereo( false ), doUndistort( false ),
+    suppressFeaturesInTimecode( true ),
     dataDir("../data"), stereoPair(),
     features( FEATURES_NONE ),
     verb( VERB_NONE )
@@ -71,7 +72,7 @@ struct Options
 
   int seekTo, waitKey;
   float scale;
-  bool doRectify, doDenseStereo;
+  bool doRectify, doDenseStereo, doUndistort, suppressFeaturesInTimecode;
   string dataDir, stereoPair;
   Features features;
 
@@ -105,6 +106,7 @@ struct Options
       { "data-directory", required_argument, NULL, 'D' },
       { "stereo-pair", required_argument, NULL, 'P' },
       { "rectify", no_argument, NULL, 'R'},
+      { "undistort", no_argument, NULL, 'U' },
       { "disparity", no_argument, NULL, 'B' },
       { "features", required_argument, NULL, 'F'},
       { "help", no_argument, NULL, '?' },
@@ -142,6 +144,10 @@ struct Options
           break;
         case 'S':
           scale = atof( optarg );
+          break;
+        case 'U':
+          doUndistort = true;
+          break;
         case 'k':
           waitKey = atoi( optarg );
           break;
@@ -266,7 +272,11 @@ class CompositeVideoMain {
           if( opts.doDenseStereo ) {
             doDenseStereo( canvas );
           }
-        } else if( opts.features != Options::FEATURES_NONE ) {
+        } else if( opts.doUndistort ) {
+         doUndistort( canvas ); 
+        }
+        
+       if( opts.features != Options::FEATURES_NONE ) {
           doFeatures( canvas );
         }
 
@@ -338,6 +348,16 @@ class CompositeVideoMain {
       disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
 
       imshow( "disparity", disp8 );
+
+      return true;
+    }
+
+    bool doUndistort( CompositeCanvas &canvas )
+    {
+        for( int k = 0; k < 2; ++k ) 
+          cameras[k]->undistortImage( canvas[k], canvas[k] );
+
+        return true;
     }
 
     bool doFeatures( CompositeCanvas &canvas )
@@ -352,12 +372,22 @@ class CompositeVideoMain {
         }
       }
 
-        for( int k = 0; k < 2; ++k ) 
+        for( int k = 0; k < 2; ++k )  {
+if( opts.suppressFeaturesInTimecode ) {
+  std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode );
+}
+
             drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255), 
                 cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+        }
 
+return true;
     }
 
+static bool TxKeyPointInTimecode( const KeyPoint &kp )
+{
+return timeCodeROI_1920x1080.contains( kp.pt );
+}
 
 
 
