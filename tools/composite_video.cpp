@@ -53,11 +53,13 @@ struct Options
 {
 
   typedef enum { PLAYER, VERB_NONE = -1 } Verb;
+  typedef enum { FAST, FEATURES_NONE = -1 } Features;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options( int argc, char **argv )
     : seekTo(0), waitKey(0), scale(-1.0), doRectify( false ),
     dataDir("../data"), stereoPair(),
+    features( FEATURES_NONE ),
     verb( VERB_NONE )
   {
     string msg;
@@ -71,6 +73,7 @@ struct Options
   float scale;
   bool doRectify, doDenseStereo;
   string dataDir, stereoPair;
+  Features features;
 
   Verb verb;
 
@@ -103,13 +106,15 @@ struct Options
       { "stereo-pair", required_argument, NULL, 'P' },
       { "rectify", no_argument, NULL, 'R'},
       { "disparity", no_argument, NULL, 'B' },
+      { "features", required_argument, NULL, 'F'},
       { "help", no_argument, NULL, '?' },
       { 0, 0, 0, }
     };
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, "BD:P:Rs:k:?", long_options, &indexPtr )) != -1 ) {
+    stringstream sstr;
+    while( (optVal = getopt_long( argc, argv, "BD:F:P:Rs:k:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
         case 'B':
           doDenseStereo = true;
@@ -117,6 +122,14 @@ struct Options
           break;
         case 'D':
           dataDir = optarg;
+          break;
+        case 'F':
+          features = parseFeatures( optarg );
+          if( features == FEATURES_NONE ) {
+            sstr << "Had trouble parsing feature type \"" << optarg << "\"";
+            msg = sstr.str();
+            return false;
+          }
           break;
         case 'P':
           stereoPair = optarg;
@@ -163,6 +176,15 @@ struct Options
     video = argv[optind++];
 
     return validate( msg );
+  }
+
+  Features parseFeatures( const string &optarg )
+  {
+    if( optarg.compare("fast") == 0 ) 
+      return FAST;
+    
+
+    return FEATURES_NONE;
   }
 
   bool validate( string &msg )
@@ -244,6 +266,8 @@ class CompositeVideoMain {
           if( opts.doDenseStereo ) {
             doDenseStereo( canvas );
           }
+        } else if( opts.features != Options::FEATURES_NONE ) {
+          doFeatures( canvas );
         }
 
         if( opts.scale > 0 )
@@ -294,24 +318,44 @@ class CompositeVideoMain {
       //sgbm.disp12MaxDiff = 1;
       sgbm.fullDP = false;
 
+      Mat scaled[2];
+
+      if( opts.scale > 0 ) {
+        resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+        resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+      } else {
+        scaled[0] = canvas[0];
+        scaled[1] = canvas[1];
+      }
+
       Mat disparity;
       int64 t = getTickCount();
-      sgbm( canvas[0], canvas[1], disparity );
+      sgbm( scaled[0], scaled[1], disparity );
       t = getTickCount() - t;
       cout << "Dense stereo elapsed time: " <<  t * 1000 / getTickFrequency() << endl;
 
       Mat disp8;
       disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
 
-      Mat scaled;
+      imshow( "disparity", disp8 );
+    }
 
-      if( opts.scale > 0 )
-      resize( disp8, scaled, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-      else
-        scaled = disp8;
+    bool doFeatures( CompositeCanvas &canvas )
+    {
+      vector<KeyPoint> keypoints[2];
 
+      if( opts.features == Options::FAST ) {
+        for( int k = 0; k < 2; ++k ) {
+          Mat grey;
+          cvtColor( canvas[k], grey, CV_BGR2GRAY );
+          FAST( grey, keypoints[k], 10, true );
+        }
+      }
 
-      imshow( "disparity", scaled );
+        for( int k = 0; k < 2; ++k ) 
+            drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255), 
+                cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+
     }
 
 
