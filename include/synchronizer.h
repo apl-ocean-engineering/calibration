@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 
 #include "video.h"
+#include "composite_canvas.h"
 
 
 class Synchronizer
@@ -24,11 +25,11 @@ class Synchronizer
     bool advanceToNextTransition( int which );
     void advanceOnly( int which );
 
-    cv::Size compositeSize( void );
+    //cv::Size compositeSize( void );
     virtual bool nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 );
-    virtual bool nextCompositeFrame( cv::Mat &img );
+    virtual bool nextCompositeFrame( AplCam::CompositeCanvas &canvas );
 
-    void compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale = Scale );
+    //void compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale = Scale );
 
     // Tools for estimating initial offset
     IndexPair getSpan( const TransitionVec &transition,  int start, int length );

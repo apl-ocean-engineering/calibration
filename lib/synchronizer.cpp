@@ -2,6 +2,7 @@
 #include <Eigen/LU>
 
 #include "synchronizer.h"
+#include "composite_canvas.h"
 
 using namespace std;
 using namespace cv;
@@ -84,10 +85,10 @@ bool Synchronizer::advanceToNextTransition( int which )
   return false;
 }
 
-Size Synchronizer::compositeSize( void )
-{ 
-  return  Size( Scale*(_video0.width() + _video1.width()), Scale*std::max(_video0.height(), _video1.height()) ); 
-}
+//Size Synchronizer::compositeSize( void )
+//{ 
+//  return  Size( Scale*(_video0.width() + _video1.width()), Scale*std::max(_video0.height(), _video1.height()) ); 
+//}
 
 void Synchronizer::advanceOnly( int which )
 {
@@ -111,26 +112,27 @@ bool Synchronizer::nextSynchronizedFrames( cv::Mat &video0, cv::Mat &video1 )
   return false;
 }
 
-bool Synchronizer::nextCompositeFrame( Mat &img )
+bool Synchronizer::nextCompositeFrame( AplCam::CompositeCanvas &canvas )
 {
 
-  img.create( compositeSize(), CV_8UC3 );
-
-  Mat video0ROI( img, Rect( 0, 0, Scale*_video0.width(), Scale*_video0.height() ) );
-  Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
+//  img.create( compositeSize(), CV_8UC3 );
+//
+//  Mat video0ROI( img, Rect( 0, 0, Scale*_video0.width(), Scale*_video0.height() ) );
+//  Mat video1ROI( img, Rect( Scale*_video0.width(), 0, Scale*_video1.width(), Scale*_video1.height() ) );
 
 
   Mat frame0, frame1;
   if( nextSynchronizedFrames( frame0, frame1 ) ) {
-    if( Scale != 1.0 )
-      resize( frame0, video0ROI, video0ROI.size() );
-    else
-      frame0.copyTo( video0ROI );
+    canvas = AplCam::CompositeCanvas( frame0, frame1 );
+    //if( Scale != 1.0 )
+    //  resize( frame0, video0ROI, video0ROI.size() );
+    //else
+    //  frame0.copyTo( video0ROI );
 
-    if( Scale != 1.0 )
-      resize( frame1, video1ROI, video1ROI.size() );
-    else
-      frame1.copyTo( video1ROI );
+    //if( Scale != 1.0 )
+    //  resize( frame1, video1ROI, video1ROI.size() );
+    //else
+    //  frame1.copyTo( video1ROI );
   } else return false;
 
   cout << "Frames: " << _video0.frame() << ' ' << _video1.frame() <<  ' ' << _offset << endl;
@@ -138,25 +140,25 @@ bool Synchronizer::nextCompositeFrame( Mat &img )
   return true;
 }
 
-void Synchronizer::compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale )
-{
-  // TODO.  Should check size of input images
-
-  Size compSize( scale*(img0.cols + img1.cols),
-      scale*std::max(img0.rows, img1.rows) ); 
-  composite.create( compSize, CV_8UC3 );
-
-  Mat video0ROI( composite, Rect( 0, 0,               scale*img0.cols, scale*img0.rows) );
-  Mat video1ROI( composite, Rect( scale*img0.cols, 0, scale*img1.cols, scale*img1.rows) );
-
-  if( scale != 1.0 ) {
-    resize( img0, video0ROI, video0ROI.size() );
-    resize( img1, video1ROI, video1ROI.size() );
-  } else {
-    img0.copyTo( video0ROI );
-    img1.copyTo( video1ROI );
-  }
-}
+//void Synchronizer::compose( const cv::Mat &img0, cv::Mat &img1, cv::Mat &composite, float scale )
+//{
+//  // TODO.  Should check size of input images
+//
+//  Size compSize( scale*(img0.cols + img1.cols),
+//      scale*std::max(img0.rows, img1.rows) ); 
+//  composite.create( compSize, CV_8UC3 );
+//
+//  Mat video0ROI( composite, Rect( 0, 0,               scale*img0.cols, scale*img0.rows) );
+//  Mat video1ROI( composite, Rect( scale*img0.cols, 0, scale*img1.cols, scale*img1.rows) );
+//
+//  if( scale != 1.0 ) {
+//    resize( img0, video0ROI, video0ROI.size() );
+//    resize( img1, video1ROI, video1ROI.size() );
+//  } else {
+//    img0.copyTo( video0ROI );
+//    img1.copyTo( video1ROI );
+//  }
+//}
 
 
 

@@ -31,6 +31,7 @@ using namespace cv;
 using namespace std;
 
 using namespace Distortion;
+using namespace AplCam;
 
 namespace fs = boost::filesystem;
 
@@ -439,51 +440,6 @@ static string mkStereoPairFileName( const string &cam0, const string &cam1 )
   snprintf( filename, 80, "cal_%s_%s_%s.yml", cam0.c_str(), cam1.c_str(), strtime );
   return  string( filename );
 }
-
-
-class ImagePair
-{
-  public:
-    ImagePair( const Image &a, const Image &b )
-      : _a(a), _b(b) {;}
-
-    const Image &operator[](int i) {
-      switch(i) {
-        case 0: return _a; break;
-        case 1: return _b; break;
-      }
-    }
-
-  private:
-    Image _a, _b;
-};
-
-struct CompositeCanvas
-{
-  CompositeCanvas( const ImagePair &pair )
-    : _pair( pair ) 
-  {
-    // I really should do this with undistorted images...
-    canvas.create( std::max( _pair[0].size().height, _pair[1].size().height ),
-        _pair[0].size().width + _pair[1].size().width,
-        _pair[0].img().type() );
-
-    origin[0] = Point2f(0,0);
-    origin[1] = Point2f( _pair[0].size().width, 0 );
-    roi[0] = Mat( canvas, Rect( origin[0], _pair[0].size()) );
-    roi[1] = Mat( canvas, Rect( origin[1], _pair[1].size()) );
-  }
-
-  operator Mat &() { return canvas; }
-  operator _InputArray() { return _InputArray(canvas); }
-
-  Size size( void ) const { return canvas.size(); }
-
-
-  ImagePair _pair;
-  Mat canvas, roi[2];
-  Point2f origin[2];
-};
 
 
 struct TxRectifier {

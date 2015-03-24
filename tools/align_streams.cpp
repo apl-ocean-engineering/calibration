@@ -34,27 +34,31 @@
 
 #include "video.h"
 #include "synchronizer.h"
+#include "composite_canvas.h"
 
 using namespace cv;
 using namespace std;
 
 using AprilTags::TagDetection;
 
+using namespace AplCam;
+
 struct AlignmentOptions
 {
 
-  typedef enum { PLAYER, DETECTOR, COMPOSITE, NONE = -1 } Verb;
+  typedef enum { PLAYER, EXTRACT, COMPOSITE, VERB_NONE = -1 } Verb;
+  typedef enum { TRIGGER_NONE = -1, DT, SHARED_TAGS } ExtractTrigger;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   AlignmentOptions( int argc, char **argv )
-    : window( 4.2 ), maxDelta( 5.0 ), lookahead(1.2),
+    : window( 4.2 ), maxDelta( 3.0 ), lookahead(1.2),
     minSharedTags( 10 ),
     seekTo(0), offset(0),  waitKey(0), 
-    standoffFrames( 100 ), interval( 10 ),
+    extractDt( 30 ), 
     offsetGiven(false),
-    doExtract( false ),
-    extractPath( "/tmp/extracted" ),
-    verb( NONE )
+    outputPath( "/tmp/extracted" ),
+    extractTrigger( DT ),
+    verb( VERB_NONE )
   {
     string msg;
     if( parseArgv( argc, argv, msg ) == false ) {
@@ -65,26 +69,46 @@ struct AlignmentOptions
 
 
   float window, maxDelta, lookahead;
-  int minSharedTags, seekTo, offset, waitKey, standoffFrames, interval;
-  bool offsetGiven, doExtract;
-  string extractPath;
+  int minSharedTags, seekTo, offset, waitKey, standoffFrames, extractDt;
+  bool offsetGiven;
+  string outputPath;
+  ExtractTrigger extractTrigger;
 
   Verb verb;
 
   string video1, video2;
 
+  void help( string &msg )
+  {
+    stringstream strm;
+    strm << "  Usage: align_streams [options] <verb> <video1> <video2>" << endl;
+    strm << "Attempts to automatically align two video streams, and optionally re-exports the result." << endl;
+    strm << endl;
+    strm << "Options: " << endl;
+
+    int fw = 30;
+    strm.setf( std::ios::left );
+    strm << setw(fw) << "--seek-to [offset]" << "Start alignment processing and exporting at [offset] frames from start of videos" << endl;
+    strm << setw(fw) << "--extract-trigger [type]" << "Set behavior for saving composite images: dt, tags" << endl;
+    strm << setw(fw) << "--output-path [path]" << "Root of tree where outputs will be saved" << endl;
+
+    msg = strm.str();
+  }
+
+
+
   bool parseArgv( int argc, char **argv, string &msg )
   {
     static struct option long_options[] = {
-      { "do-extract", optional_argument, NULL, 'e' },
       { "window", required_argument, NULL, 'w' },
       { "seek-to", required_argument, NULL, 's' },
+      { "extract-trigger", required_argument, NULL, 'x' },
+      { "extract-interval", required_argument, NULL, 'i' },
       { "shared-tags", required_argument, NULL, 'f' },
-      { "standoff-frames", required_argument, NULL, 'y' },
-      { "interval", required_argument, NULL, 'i' },
       { "wait-key", required_argument, NULL, 'k' },
       { "max-delta", required_argument, NULL, 'd'},
-      { "offset", required_argument, NULL, 'o'},
+      { "offset", required_argument, NULL, 'O'},
+      { "output-path", required_argument, NULL, 'o' },
       { "lookahead", required_argument, NULL, 'l'},
       { "help", no_argument, NULL, '?' },
       { 0, 0, 0, }
@@ -92,14 +116,15 @@ struct AlignmentOptions
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, "e::w:y:i:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
+    string str;
+    while( (optVal = getopt_long( argc, argv, "O:e:x:w:y:i:s:f:k:d:o:l:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
+        case 'O':
+          offset = atoi( optarg );
+          offsetGiven = true;
+          break;
         case 'd':
           maxDelta = atof(optarg);
-          break;
-        case 'e':   // Extract images
-          doExtract = true;
-          if( optarg ) extractPath = optarg;
           break;
         case 'w':
           window = atof( optarg );
@@ -107,8 +132,11 @@ struct AlignmentOptions
         case 'y':
           standoffFrames = atoi( optarg );
           break;
+        case 'x':
+          extractTrigger = parseExtractTrigger( optarg );
+          break;
         case 'i':
-          interval = atoi( optarg );
+          extractDt = atoi( optarg );
           break;
         case 's':
           seekTo = atoi( optarg );
@@ -120,8 +148,7 @@ struct AlignmentOptions
           waitKey = atoi( optarg );
           break;
         case 'o':
-          offset = atoi( optarg );
-          offsetGiven = true;
+          outputPath = optarg;
           break;
         case 'l':
           lookahead = atof( optarg );
@@ -149,11 +176,8 @@ struct AlignmentOptions
 
     if( verbStr.compare( 0, 4, "play" ) == 0 ) {
       verb = PLAYER;
-    } else if( verbStr.compare( "detect" ) == 0 ) {
-      verb = DETECTOR;
     } else if( verbStr.compare( "extract" ) == 0 ) {
-      verb = DETECTOR;
-      doExtract = true;
+      verb = EXTRACT;
     } else if( verbStr.compare( "composite" ) == 0 ) {
       verb = COMPOSITE;
     } else {
@@ -178,16 +202,25 @@ struct AlignmentOptions
       return false;
     }
 
+    if( (extractTrigger == TRIGGER_NONE) && verb == EXTRACT ) {
+      msg = "Extract trigger unknown";
+      return false;
+    }
+
     return true;
   }
 
-  void help( string &msg )
+  ExtractTrigger parseExtractTrigger( const char *optarg )
   {
-    stringstream strm;
-    strm << "Help!" << endl;
+    string str( optarg );
+    if( str.compare( "tags" ) == 0 ) 
+      return SHARED_TAGS;
+    else if( str.compare( "dt" ) == 0 )
+      return DT;
 
-    msg = strm.str();
+        return TRIGGER_NONE;
   }
+
 };
 
 
@@ -198,7 +231,7 @@ class AlignStreamsMain {
       video0( opts.video1, opts.lookahead ), 
       video1( opts.video2, opts.lookahead ),
       sync( video0, video1 ),
-      extractPath( opts.extractPath )
+      outputPath( opts.outputPath )
   {;}
 
     int go( void )
@@ -222,13 +255,13 @@ class AlignStreamsMain {
         case AlignmentOptions::PLAYER:
           retval = doPlayer( );
           break;
-        case AlignmentOptions::DETECTOR:
-          retval = doDetector( );
+        case AlignmentOptions::EXTRACT:
+          retval = doExtract();
           break;
         case AlignmentOptions::COMPOSITE:
           retval = doComposite();
           break;
-        case AlignmentOptions::NONE:
+        case AlignmentOptions::VERB_NONE:
         default:
           cout << "No verb selected, oh well." << endl;
           retval = 0;
@@ -239,9 +272,9 @@ class AlignStreamsMain {
 
     int doPlayer( void )
     {
-      Mat img;
-      while( sync.nextCompositeFrame( img ) ) {
-        imshow( "Composite", img );
+      CompositeCanvas canvas;
+      while( sync.nextCompositeFrame( canvas ) ) {
+        imshow( "Composite", canvas );
 
         int ch;
         ch = waitKey( opts.waitKey );
@@ -267,102 +300,133 @@ class AlignStreamsMain {
 
     int doComposite( void )
     {
-      Mat img;
-      int count = 0;
-      while( sync.nextCompositeFrame( img ) ) {
-        if( (count % opts.interval) == 0 )
-            imwrite( extractPath.composite( video0.frame(), video1.frame() ).c_str(), img );
+      // Need to generate first composite to get frame size
+      CompositeCanvas composite;
+      sync.nextCompositeFrame( composite );
 
-        ++count;
+      string outfile = outputPath.compositeVideo();
+      //VideoWriter writer( outfile, CV_FOURCC('X','2','6','4'), 
+      //VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
+      VideoWriter writer( outfile, CV_FOURCC('X','V','I','D'),
+          std::min( video0.fps(), video1.fps() ), composite.size(), true );
+
+      if( !writer.isOpened() ) {
+        cerr << "Couldn't open video writer for \"" << outfile << "\"" << endl;
+        return -1;
       }
+
+      int count = 0;
+      do { 
+        writer << composite;
+        ++count;
+      } while( sync.nextCompositeFrame( composite ) ); 
+
+      return true;
     }
 
 
-    int doDetector( )
+    int doExtract()
     {
-      Mat frame[2];
-      while( sync.nextSynchronizedFrames( frame[0], frame[1] ) ) {
+      CompositeCanvas composite;
+      int count = 0;
+      while( sync.nextCompositeFrame( composite ) ) {
 
-        Mat bw[2];
-        cvtColor( frame[0], bw[0], CV_BGR2GRAY );
-        cvtColor( frame[1], bw[1], CV_BGR2GRAY );
+        if( opts.extractTrigger == AlignmentOptions::DT ) {
+          if( (count % opts.extractDt) == 0 )
+            saveComposite( composite );
 
-        vector<AprilTags::TagDetection> tags[2];
+        } else if( opts.extractTrigger == AlignmentOptions::SHARED_TAGS ) {
+
+
+          Mat bw[2];
+          cvtColor( composite[0], bw[0], CV_BGR2GRAY );
+          cvtColor( composite[1], bw[1], CV_BGR2GRAY );
+
+          vector<AprilTags::TagDetection> tags[2];
 
 #ifdef THREADED_APRILTAG_DETECTION
-        boost::thread detector0( AprilTagDetectorCallable( tags[0], bw[0] ) ),
-          detector1( AprilTagDetectorCallable( tags[1], bw[1] ) );
+          boost::thread detector0( AprilTagDetectorCallable( tags[0], bw[0] ) ),
+            detector1( AprilTagDetectorCallable( tags[1], bw[1] ) );
 
-        detector0.join();
-        detector1.join();
+          detector0.join();
+          detector1.join();
 
 #else
-        AprilTags::TagDetector detector( AprilTags::tagCodes36h11 );
-        tags[0] = detector.extractTags( bw[0] );
-        tags[1] = detector.extractTags( bw[1] );
+          AprilTags::TagDetector detector( AprilTags::tagCodes36h11 );
+          tags[0] = detector.extractTags( bw[0] );
+          tags[1] = detector.extractTags( bw[1] );
 #endif
 
-        //const int tagCount = 80;
+          //const int tagCount = 80;
 
 
-        // Calculate the number of tags in common
-        vector< pair< AprilTags::TagDetection, AprilTags::TagDetection > > pairs = findCommonPairs( tags[0], tags[1] );
+          // Calculate the number of tags in common
+          vector< pair< AprilTags::TagDetection, AprilTags::TagDetection > > pairs = findCommonPairs( tags[0], tags[1] );
 
-        cout << "Found " << tags[0].size() << " and " << tags[1].size();
-        cout << "  with " << pairs.size() << " tags in common" << endl;
+          cout << "Found " << tags[0].size() << " and " << tags[1].size();
+          cout << "  with " << pairs.size() << " tags in common" << endl;
 
-        bool extracted = false;
-        if( opts.doExtract ) {
-          //          if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
-          //              ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
+          bool extracted = false;
 
-          if ( pairs.size() >= opts.minSharedTags  ) {
-            cout << "!!! I'm doing something" << endl;
-            extracted = true;
+            //          if( ((float)tags[0].size() / tagCount) > opts.minFractionOfSharedTags &&
+            //              ((float)tags[1].size() / tagCount) > opts.minFractionOfSharedTags ) {
 
-            imwrite( extractPath.video0( video0.frame(), video1.frame() ).c_str(), frame[0] );
-            imwrite( extractPath.video1( video0.frame(), video1.frame() ).c_str(), frame[1] );
+            if ( pairs.size() >= opts.minSharedTags  ) {
+              cout << "!!! I'm doing something" << endl;
+              extracted = true;
 
-            Mat composite;
-            sync.compose( frame[0], frame[1], composite );
-            imwrite( extractPath.composite( video0.frame(), video1.frame() ).c_str(), composite );
+              //imwrite( outputPath.video0( video0.frame(), video1.frame() ).c_str(), frame[0] );
+              //imwrite( outputPath.video1( video0.frame(), video1.frame() ).c_str(), frame[1] );
 
-            Mat discard;
-            for( int i = 0; i < opts.standoffFrames && sync.nextCompositeFrame( discard ); ++i ) {;}
+              saveComposite( composite );
+
+              //Mat composite;
+              //sync.compose( frame[0], frame[1], composite );
+              //imwrite( extractPath.composite( video0.frame(), video1.frame() ).c_str(), composite );
+
+              CompositeCanvas discard;
+              for( int i = 0; i < opts.extractDt && sync.nextCompositeFrame( discard ); ++i ) {;}
+            }
+
+
+          for( int j = 0; j < 2; ++j ) {
+            for( int i = 0; i < tags[j].size(); ++i ) {
+              tags[j][i].draw( composite[j] );
+            }
           }
-        }
-
-
-        for( int j = 0; j < 2; ++j ) {
-          for( int i = 0; i < tags[j].size(); ++i ) {
-            tags[j][i].draw( frame[j] );
+          } else {
+            cerr << "Hm, no extraction trigger set." << endl;
+            return -1;
           }
+
+          imshow( "Composite", composite.scaled( 0.5 ) );
+
+          int ch;
+          ch = waitKey( opts.waitKey );
+
+          if( ch == 'q' )
+            break;
+
+
+
+          //Mat shrunk;
+          //sync.compose( frame[0], frame[1], shrunk, 0.5 );
+          //else if (ch == ',')
+          //  sync.scrub(-2);
+          //else if (ch == '[')
+          //  sync.advanceToNextTransition( 0 );
+          //else if (ch == ']')
+          //  sync.advanceToNextTransition( 1 );
+          //else if (ch == 'R')
+          //  sync.rewind();
+          //else if (ch == 'l')
+          //  sync.advanceOnly( 0 );
+          //else if (ch == 'r')
+          //  sync.advanceOnly( 1 );
+
+          ++count;
         }
 
-        Mat shrunk;
-        sync.compose( frame[0], frame[1], shrunk, 0.5 );
-        imshow( "Composite", shrunk );
-
-        int ch;
-        ch = waitKey( opts.waitKey );
-
-        if( ch == 'q' )
-          break;
-
-        //else if (ch == ',')
-        //  sync.scrub(-2);
-        //else if (ch == '[')
-        //  sync.advanceToNextTransition( 0 );
-        //else if (ch == ']')
-        //  sync.advanceToNextTransition( 1 );
-        //else if (ch == 'R')
-        //  sync.rewind();
-        //else if (ch == 'l')
-        //  sync.advanceOnly( 0 );
-        //else if (ch == 'r')
-        //  sync.advanceOnly( 1 );
-
-        }
 
         return 0;
       }
@@ -384,14 +448,22 @@ class AlignStreamsMain {
       }
 
 
+      protected:
+
+      void saveComposite( CompositeCanvas &composite )
+      {
+        imwrite( outputPath.compositeImages( video0.frame(), video1.frame() ).c_str(), composite );
+      }
+
+
       private:
       AlignmentOptions opts;
       VideoLookahead video0, video1;
       KFSynchronizer sync;
 
 
-      struct ExtractPath {
-        ExtractPath( const string &root )
+      struct OutputPath {
+        OutputPath( const string &root )
           : _root( root )
         {;}
 
@@ -415,7 +487,7 @@ class AlignStreamsMain {
 
         }
 
-        const string composite( int frame0, int frame1 )
+        const string compositeImages( int frame0, int frame1 )
         {
           char path[40];
           snprintf( path, 39, "/composite/composite_%06d_%06d.jpg", frame0, frame1 );
@@ -427,32 +499,35 @@ class AlignStreamsMain {
           return total;
         }
 
-      };
+        const string compositeVideo( void )
+        {
+          return _root + "/composite.avi";
+        }
+
+      } outputPath;
 
 #ifdef THREADED_APRILTAG_DETECTION
-struct AprilTagDetectorCallable
-{
-  AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
-    : _detections( detections ),
-    _img( image ),
-    _detector( AprilTags::tagCodes36h11 )
-  {;}
+      struct AprilTagDetectorCallable
+      {
+        AprilTagDetectorCallable( vector<AprilTags::TagDetection> &detections, Mat &image )
+          : _detections( detections ),
+          _img( image ),
+          _detector( AprilTags::tagCodes36h11 )
+        {;}
 
-  vector<AprilTags::TagDetection> &_detections;
-  Mat &_img;
-  AprilTags::TagDetector _detector;
+        vector<AprilTags::TagDetection> &_detections;
+        Mat &_img;
+        AprilTags::TagDetector _detector;
 
-  void operator()( void )
-  {
-    _detections = _detector.extractTags( _img );
-  }
+        void operator()( void )
+        {
+          _detections = _detector.extractTags( _img );
+        }
 
-};
+      };
 #endif
 
 
-
-      ExtractPath extractPath;
     };
 
     int main( int argc, char **argv )

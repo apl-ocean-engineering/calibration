@@ -1,6 +1,4 @@
-calibration
-calibration_artificial
-calibration_april
 *.o
 \.*.swp
 .DS_Store
+build/
