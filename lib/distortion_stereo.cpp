@@ -3,7 +3,7 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <vector>
 
-#include "stereo_pair.h"
+#include "distortion_stereo.h"
 
 namespace Distortion {
 
@@ -25,7 +25,7 @@ namespace Distortion {
     // then call the built-in function?
 
     ImagePointsVecVec _undistorted1( _imagePoints1.size() ), 
-                      _undistorted2( _imagePoints2.size() );
+    _undistorted2( _imagePoints2.size() );
 
     std::transform( _imagePoints1.begin(), _imagePoints1.end(), 
         _undistorted1.begin(), cam1.makeVecUndistorter( ) );
@@ -52,6 +52,7 @@ namespace Distortion {
       cam2.setCamera( camMat2 );
     }
 
+    return rms;
   }
 
 
@@ -553,12 +554,12 @@ namespace Distortion {
   //
   //
   void stereoRectify( const PinholeCamera &cam1, const PinholeCamera &cam2,
-      const Size &imageSize, const Mat &_Rmat, const Mat &_Tmat,
-      Mat &_Rmat1, Mat &_Rmat2,
-      Mat &_Pmat1, Mat &_Pmat2,
-      Mat &_Qmat, int flags,
-      double alpha, const Size &newImageSize,
-      Rect &validPixROI1, Rect &validPixROI2 )
+      const Size &imageSize, const Mat &Rmat, const Mat &Tmat,
+      Mat &Rect1, Mat &Rect2,
+      Mat &Proj1, Mat &Proj2,
+      Mat &Qmat, int flags,
+      double alpha, const Size &newImgSize,
+      Rect &roi1, Rect &roi2 )
   {
     //    Mat cameraMatrix1 = _cameraMatrix1.getMat(), cameraMatrix2 = _cameraMatrix2.getMat();
     //    Mat distCoeffs1 = _distCoeffs1.getMat(), distCoeffs2 = _distCoeffs2.getMat();
@@ -584,9 +585,239 @@ namespace Distortion {
     //    }
 
 
-    cv::stereoRectify( cam1.mat(), Vec8d(), cam2.mat(), Vec8d(),
-        imageSize, _Rmat, _Tmat, _Rmat1, _Rmat2, _Pmat1, _Pmat2,
-        _Qmat, flags, alpha, newImageSize, &validPixROI1, &validPixROI2 );
+    //    cv::stereoRectify( cam1.mat(), Vec8d(), cam2.mat(), Vec8d(),
+    //        imageSize, _Rmat, _Tmat, _Rmat1, _Rmat2, _Pmat1, _Pmat2,
+    //        _Qmat, flags, alpha, newImageSize, &validPixROI1, &validPixROI2 );
+    //
+
+
+    //void cvStereoRectify( const CvMat* _cameraMatrix1, const CvMat* _cameraMatrix2,
+    //                      const CvMat* _distCoeffs1, const CvMat* _distCoeffs2,
+    //                      CvSize imageSize, const CvMat* matR, const CvMat* matT,
+    //                      CvMat* _R1, CvMat* _R2, CvMat* _P1, CvMat* _P2,
+    //                      CvMat* matQ, int flags, double alpha, CvSize newImgSize,
+    //                      CvRect* roi1, CvRect* roi2 )
+    //{
+
+    //double _t[3], _uu[3]={0,0,0}, _r_r[3][3], _pp[3][4];
+    //double _ww[3], _wr[3][3], _z[3] = {0,0,0}, _ri[3][3];
+
+    //CvMat om  = cvMat(3, 1, CV_64F, _om);
+    //CvMat t   = cvMat(3, 1, CV_64F, _t);
+    //CvMat uu  = cvMat(3, 1, CV_64F, _uu);
+    //CvMat r_r = cvMat(3, 3, CV_64F, _r_r);
+    //CvMat pp  = cvMat(3, 4, CV_64F, _pp);
+    //CvMat ww  = cvMat(3, 1, CV_64F, _ww); // temps
+    //CvMat wR  = cvMat(3, 3, CV_64F, _wr);
+    //CvMat Z   = cvMat(3, 1, CV_64F, _z);
+    //CvMat Ri  = cvMat(3, 3, CV_64F, _ri);
+
+    //    double nx = imageSize.width, ny = imageSize.height;
+
+    Mat *rect[2] = { &Rect1, &Rect2 };
+    const PinholeCamera *cameras[2] = { &cam1, &cam2};
+
+    Proj1.create(3,4,CV_64F);
+    Proj2.create(3,4,CV_64F);
+    Rect1.create(3,3,CV_64F);
+    Rect2.create(3,3,CV_64F);
+
+    Mat om;
+    if( Rmat.rows == 3 && Rmat.cols == 3 )
+      Rodrigues(Rmat, om);          // get vector rotation
+    else
+      om = Rmat; // it's already a rotation vector
+
+    om *= -0.5;
+
+    Mat r_r;
+    Rodrigues(om, r_r);        // rotate cameras to same orientation by averaging
+    Mat t = r_r * Tmat;
+
+    // Determine if we're doing horizontal or vertical rectification
+    typedef enum { HORIZ = 0, VERT = 1 } RectificationDir;
+    RectificationDir idx = fabs(t.at<double>(0)) > fabs(t.at<double>(1)) ? HORIZ : VERT;
+    double c = t.at<double>(idx), 
+           nt = norm(t, NORM_L2);
+
+    Mat uu(3,1,CV_64F);
+    uu.at<double>(idx) = (c > 0) ? 1 : -1;
+
+    // calculate global Z rotation
+    Mat ww = t.cross(uu);
+    double nw = norm(ww, NORM_L2);
+    if (nw > 0.0)
+      ww *= acos(fabs(c)/nt)/nw;
+    Mat wR;
+    Rodrigues( ww, wR );
+
+    // apply to both views
+    Rect1 = wR * r_r.t();
+    Rect2 = wR * r_r;
+
+    t = Rect2 * Tmat;
+
+    // calculate projection/camera matrices
+    // these contain the relevant rectified image internal params (fx, fy=fx, cx, cy)
+    double fc_new = DBL_MAX;
+    Point2d cc_new[2] = { Point2d(0,0), Point2d(0,0) };
+
+    for( int k = 0; k < 2; k++ ) {
+      //    const CvMat* A = k == 0 ? _cameraMatrix1 : _cameraMatrix2;
+      //    const CvMat* Dk = k == 0 ? _distCoeffs1 : _distCoeffs2;
+      //    double dk1 = Dk ? cvmGet(Dk, 0, 0) : 0;
+      //    double fc = cvmGet(A,idx^1,idx^1);
+      //    if( dk1 < 0 ) {
+      //        fc *= 1 + dk1*(nx*nx + ny*ny)/(4*fc*fc);
+      //    }
+
+      double fc = fc_new;
+      if( idx == HORIZ )
+        fc = cameras[k]->fx();
+      else
+        fc = cameras[k]->fy();
+
+      fc_new = MIN(fc_new, fc);
+    }
+
+
+    for( int k = 0; k < 2; k++ )
+    {
+      //const CvMat* A = k == 0 ? _cameraMatrix1 : _cameraMatrix2;
+      // const CvMat* Dk = k == 0 ? _distCoeffs1 : _distCoeffs2;
+      // CvPoint2D32f _pts[4];
+      // CvPoint3D32f _pts_3[4];
+      // CvMat pts = cvMat(1, 4, CV_32FC2, _pts);
+      // CvMat pts_3 = cvMat(1, 4, CV_32FC3, _pts_3);
+
+
+      ImagePointsVec pts(4);
+      pts[0] = ImagePoint( 0, 0 );
+      pts[1] = ImagePoint( imageSize.width-1, 0 );
+      pts[2] = ImagePoint( 0, imageSize.height-1 );
+      pts[3] = ImagePoint( imageSize.width, imageSize.height-1 );
+
+      cameras[k]->undistortPoints( pts, pts );
+
+      ObjectPointsVec pts_3(4);
+      for( int m = 0; m < 4; ++m ) pts_3[m] = ObjectPoint( pts[m][0], pts[m][1], 1.0 ); 
+
+      //Change camera matrix to have cc=[0,0] and fc = fc_new
+      Mat Atmp = (Mat_<double>(3,3) << fc_new, 0, 0, 0, fc_new, 0, 0, 0, 1);
+
+      PinholeCamera tmpCam( Atmp );
+      Mat rod;
+      Rodrigues( *rect[k], rod );
+      tmpCam.projectPoints( pts_3, rod, Vec3d(0,0,0), pts );
+      //     Mat Z   = Mat::zeros(3, 1, CV_64F);
+      //   cam[k].projectPoints( pts_3, (k == 0) ? Rect1 : Rect2, Z, Atmp, Mat(), pts );
+
+      Scalar avg = mean(pts);
+      cc_new[k].x = (imageSize.width-1)/2 - avg.val[0];
+      cc_new[k].y = (imageSize.height-1)/2 - avg.val[1];
+    }
+
+    // vertical focal length must be the same for both images to keep the epipolar constraint
+    // (for horizontal epipolar lines -- TBD: check for vertical epipolar lines)
+    // use fy for fx also, for simplicity
+
+    // For simplicity, set the principal points for both cameras to be the average
+    // of the two principal points (either one of or both x- and y- coordinates)
+    if( flags & CV_CALIB_ZERO_DISPARITY )
+    {
+      cc_new[0].x = cc_new[1].x = (cc_new[0].x + cc_new[1].x)*0.5;
+      cc_new[0].y = cc_new[1].y = (cc_new[0].y + cc_new[1].y)*0.5;
+    }
+    else if( idx == 0 ) // horizontal stereo
+      cc_new[0].y = cc_new[1].y = (cc_new[0].y + cc_new[1].y)*0.5;
+    else // vertical stereo
+      cc_new[0].x = cc_new[1].x = (cc_new[0].x + cc_new[1].x)*0.5;
+
+
+    Proj1  = (Mat_<double>(3,4) << fc_new, 0, cc_new[0].x, 0,
+        0, fc_new, cc_new[0].y, 0,
+        0, 0, 1, 0);
+    if( idx == 0 )
+      Proj2  = (Mat_<double>(3,4) << fc_new, 0, cc_new[1].x, t.at<double>(0)*fc_new,
+          0, fc_new, cc_new[1].y, 0,
+          0, 0, 1, 0);
+    else
+      Proj2  = (Mat_<double>(3,4) << fc_new, 0, cc_new[1].x, 0,
+                                     0, fc_new, cc_new[1].y, t.at<double>(1)*fc_new,
+                                     0, 0, 1, 0);
+
+
+    // Generate ROIs
+    alpha = MIN(alpha, 1.);
+
+    cv::Rect_<float> inner1, inner2, outer1, outer2;
+    cam1.getRectangles( Rect1, Proj1, imageSize, inner1, outer1 );
+    cam2.getRectangles( Rect2, Proj2, imageSize, inner2, outer2 );
+
+    {
+      //newImgSize = newImgSize.width*newImgSize.height != 0 ? newImgSize : imageSize;
+
+      double cx1_0 = cc_new[0].x;
+      double cy1_0 = cc_new[0].y;
+      double cx2_0 = cc_new[1].x;
+      double cy2_0 = cc_new[1].y;
+      double cx1 = newImgSize.width*cx1_0/imageSize.width;
+      double cy1 = newImgSize.height*cy1_0/imageSize.height;
+      double cx2 = newImgSize.width*cx2_0/imageSize.width;
+      double cy2 = newImgSize.height*cy2_0/imageSize.height;
+      double s = 1.;
+
+      if( alpha >= 0 )
+      {
+        double s0 = std::max(std::max(std::max((double)cx1/(cx1_0 - inner1.x), (double)cy1/(cy1_0 - inner1.y)),
+              (double)(newImgSize.width - cx1)/(inner1.x + inner1.width - cx1_0)),
+            (double)(newImgSize.height - cy1)/(inner1.y + inner1.height - cy1_0));
+        s0 = std::max(std::max(std::max(std::max((double)cx2/(cx2_0 - inner2.x), (double)cy2/(cy2_0 - inner2.y)),
+                (double)(newImgSize.width - cx2)/(inner2.x + inner2.width - cx2_0)),
+              (double)(newImgSize.height - cy2)/(inner2.y + inner2.height - cy2_0)),
+            s0);
+
+        double s1 = std::min(std::min(std::min((double)cx1/(cx1_0 - outer1.x), (double)cy1/(cy1_0 - outer1.y)),
+              (double)(newImgSize.width - cx1)/(outer1.x + outer1.width - cx1_0)),
+            (double)(newImgSize.height - cy1)/(outer1.y + outer1.height - cy1_0));
+        s1 = std::min(std::min(std::min(std::min((double)cx2/(cx2_0 - outer2.x), (double)cy2/(cy2_0 - outer2.y)),
+                (double)(newImgSize.width - cx2)/(outer2.x + outer2.width - cx2_0)),
+              (double)(newImgSize.height - cy2)/(outer2.y + outer2.height - cy2_0)),
+            s1);
+
+        s = s0*(1 - alpha) + s1*alpha;
+      }
+
+      fc_new *= s;
+      cc_new[0] = Point2d(cx1, cy1);
+      cc_new[1] = Point2d(cx2, cy2);
+
+      Proj1.at<double>(0,0) = Proj1.at<double>(1,1) = fc_new;
+      Proj1.at<double>(0,2) = cx1;
+      Proj1.at<double>(1,2) = cy1;
+
+      Proj2.at<double>(0,0) = Proj2.at<double>(1,1) = fc_new;
+      Proj2.at<double>(0,2) = cx2;
+      Proj2.at<double>(1,2) = cy2;
+      Proj2.at<double>(idx,3) = s * Proj2.at<double>(idx,3);;
+
+      roi1 = Rect(ceil((inner1.x - cx1_0)*s + cx1),
+          ceil((inner1.y - cy1_0)*s + cy1),
+          floor(inner1.width*s), floor(inner1.height*s))
+        & Rect(0, 0, newImgSize.width, newImgSize.height);
+
+      roi2 = Rect(ceil((inner2.x - cx2_0)*s + cx2),
+          ceil((inner2.y - cy2_0)*s + cy2),
+          floor(inner2.width*s), floor(inner2.height*s))
+        & cv::Rect(0, 0, newImgSize.width, newImgSize.height);
+    }
+
+    Qmat = (Mat_<double>(4,4)  << 1, 0, 0, -cc_new[0].x,
+        0, 1, 0, -cc_new[0].y,
+        0, 0, 0, fc_new,
+        0, 0, -1./t.at<double>(idx),
+        (idx == 0 ? cc_new[0].x - cc_new[1].x : cc_new[0].y - cc_new[1].y)/t.at<double>(idx) ) ;
+
 
   }
 

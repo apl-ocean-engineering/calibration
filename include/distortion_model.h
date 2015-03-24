@@ -125,6 +125,11 @@ namespace Distortion {
             const Mat &R = cv::Mat::eye(3,3,CV_64F), 
             const Mat &P = cv::Mat()) const;
 
+      virtual void projectPoints( const ObjectPointsVec &objectPoints, 
+          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
+          cv::OutputArray jacobian = cv::noArray() ) const;
+
+
         virtual ImagePoint undistort( const ImagePoint &pt, bool reimage = true ) const
         { ImagePoint p( unwarp( normalize( pt ) ) );
           return ( reimage ? image( p ) : p ); }
@@ -202,23 +207,10 @@ namespace Distortion {
         TxImager makeImager( void ) const { return TxImager( *this ); }
 
 
-
-        //      struct Undistorter {
-        //        Undistorter( const PinholeCamera &cam ) : _cam(cam) {;}
-        //
-        //        const PinholeCamera &_cam;
-        //
-        //        ImagePoint operator()( const ImagePoint &pt ) 
-        //        { return _cam.undistort( pt ); }
-        //      };
-
-
+        void getRectangles( const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
+            cv::Rect_<float>& inner, cv::Rect_<float>& outer ) const;
 
     protected:
-
-        void getRectangles(
-            const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
-            cv::Rect_<float>& inner, cv::Rect_<float>& outer );
 
         double _fx, _fy, _alpha, _cx, _cy;
 

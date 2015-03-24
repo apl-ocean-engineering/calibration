@@ -52,10 +52,6 @@ namespace Distortion {
           int flags = 0, 
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
-      virtual void projectPoints( const ObjectPointsVec &objectPoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
-          cv::OutputArray jacobian = cv::noArray() ) const;
-
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
       static AngularPolynomial *Load( cv::FileStorage &in );
 
