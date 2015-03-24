@@ -27,6 +27,9 @@
 #include "camera_factory.h"
 #include "stereo_pair.h"
 
+#include "image_pair.h"
+#include "composite_canvas.h"
+
 using namespace cv;
 using namespace std;
 
@@ -587,15 +590,10 @@ int main( int argc, char** argv )
         }
 
         ImagePair &thisPair( pairs[i] );
-        CompositeCanvas canvas( thisPair );
+        CompositeCanvas canvas( thisPair[0].img(), thisPair[1].img(), false );
 
-        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
+        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) 
           cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
-        }
-
-        //thisPair[0].img().copyTo( rectified[0] );
-        //images[i].second.img().copyTo( rectified[1] );
-
 
         for( int j = 0; j < shared.worldPoints.size(); ++j ) {
           //cout << shared.worldPoints[j] << undistortedPoints[0][j] << undistortedPoints[1][j] << endl;
@@ -603,11 +601,11 @@ int main( int argc, char** argv )
           float i = (float)j / shared.worldPoints.size();
           Scalar color( 255*i, 0, (1-i)*255);
 
-          cv::circle( canvas.roi[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
-          cv::circle( canvas.roi[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
+          cv::circle( canvas[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
+          cv::circle( canvas[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
           cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
-              canvas.origin[1] + Point2f(undistortedImagePoints[1].back()[j]),
+              canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
               color, 1 );
         }
 
@@ -862,7 +860,7 @@ int main( int argc, char** argv )
   for( int i = 0; i < pairs.size(); ++i ) {
 
     ImagePair &thisPair( pairs[i] );
-    CompositeCanvas canvas( thisPair );
+    CompositeCanvas canvas( thisPair[0].img(), thisPair[1].img(), false );
 
     for( int idx = 0; idx < 2; ++idx ) {
       Mat undist;

@@ -37,7 +37,7 @@ namespace AplCam {
       roi[1] = Mat( canvas, rect[1] );
     }
 
-    CompositeCanvas( const Mat &mat0, const Mat &mat1 )
+    CompositeCanvas( const Mat &mat0, const Mat &mat1, bool doCopy = true )
       : canvas()
     {
       Size canvasSize( mat0.size().width + mat1.size().width, 
@@ -51,24 +51,26 @@ namespace AplCam {
       roi[0] = Mat( canvas, rect[0] );
       roi[1] = Mat( canvas, rect[1] );
 
+      if( doCopy ) {
       mat0.copyTo( roi[0] );
       mat1.copyTo( roi[1] );
+      }
     }
 
 
-    CompositeCanvas( const ImagePair &pair )
-      : canvas()
-    {
-      // I really should do this with undistorted images...
-      canvas.create( std::max( pair[0].size().height, pair[1].size().height ),
-          pair[0].size().width + pair[1].size().width,
-          pair[0].img().type() );
-
-      rect[0] = Rect( 0, 0, pair[0].size().width, pair[0].size().height );
-      rect[1] = Rect( rect[0].width, 0, pair[1].size().width, pair[1].size().height );
-      roi[0] = Mat( canvas, rect[0] );
-      roi[1] = Mat( canvas, rect[1] );
-    }
+//    CompositeCanvas( const ImagePair &pair )
+//      : canvas()
+//    {
+//      // I really should do this with undistorted images...
+//      canvas.create( std::max( pair[0].size().height, pair[1].size().height ),
+//          pair[0].size().width + pair[1].size().width,
+//          pair[0].img().type() );
+//
+//      rect[0] = Rect( 0, 0, pair[0].size().width, pair[0].size().height );
+//      rect[1] = Rect( rect[0].width, 0, pair[1].size().width, pair[1].size().height );
+//      roi[0] = Mat( canvas, rect[0] );
+//      roi[1] = Mat( canvas, rect[1] );
+//    }
 
     operator Mat &() { return canvas; }
     operator cv::_InputArray() { return cv::_InputArray(canvas); }
@@ -82,6 +84,9 @@ namespace AplCam {
       return out;
     }
 
+    cv::Point origin( int i ) 
+    { return cv::Point( rect[i].x, rect[i].y ); }
+
 
     Mat canvas, roi[2];
     Rect rect[2];
@@ -90,9 +95,23 @@ namespace AplCam {
   struct CompositeVideo
   { 
     CompositeVideo( const std::string &filepath )
-      : _filepath( filepath ) {;}
+      : _filepath( filepath ), _video( filepath ) {;}
+
+    bool isOpened( void ) const { return _video.isOpened(); }
+
+    bool read(  CompositeCanvas &canvas )
+    { 
+      Mat frame;
+      if( _video.read( frame ) ) {
+        canvas = CompositeCanvas( frame );
+        return true;
+      }
+      return false;
+    }
+      
 
     std::string _filepath;
+    cv::VideoCapture _video;
   };
 
 
