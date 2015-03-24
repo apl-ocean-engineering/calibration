@@ -303,13 +303,14 @@ static string mkStereoPairFileName( const string &cam0, const string &cam1 )
 
 
 void saveStereoCalibration( const string &filename,
-                      const StereoCalibration &cal,
-                      const string &cam0, const string &cam1 )
+    const StereoCalibration &cal,
+    const StereoRectification &rect,
+    const string &cam0, const string &cam1 )
 {
 
   FileStorage fs( filename, FileStorage::WRITE );
 
-time_t tt;
+  time_t tt;
   time( &tt );
   struct tm *t2 = localtime( &tt );
   char buf[1024];
@@ -320,9 +321,9 @@ time_t tt;
   fs << "calibration_1" << cam1;
 
   cal.save( fs );
+  rect.save( fs );
 
-
-cout << "Wrote stereo calibration to " << filename << endl;
+  cout << "Wrote stereo calibration to " << filename << endl;
 }
 
 
@@ -342,130 +343,130 @@ struct TxRectifier {
 };
 
 bool hartleyMethod( ImagePointsVec *undistortedImagePts,
-                    DistortionModel *cameras[],
-                    StereoCalibration &cal )
+    DistortionModel *cameras[],
+    StereoCalibration &cal )
 {
-    cout << "!!! Using Hartley !!!" << endl;
+  cout << "!!! Using Hartley !!!" << endl;
 
-    // Hartley method calculates F directly.  Then decomposes that into E and decomposes
-    // that into T and R
-    //
-    // In this case, assume the cameras are calibrated properly, find E directly, then
-    // generate F, T, R
-    //
-    // NEEDS a single vector of undistorted points
-    // Make a set of flattened, undistorted points
-    //  and a set of flattened, undistorted, normalized points
-    ImagePointsVec normimgpt[2];
+  // Hartley method calculates F directly.  Then decomposes that into E and decomposes
+  // that into T and R
+  //
+  // In this case, assume the cameras are calibrated properly, find E directly, then
+  // generate F, T, R
+  //
+  // NEEDS a single vector of undistorted points
+  // Make a set of flattened, undistorted points
+  //  and a set of flattened, undistorted, normalized points
+  ImagePointsVec normimgpt[2];
 
-    Mat e,f, status;
+  Mat e,f, status;
 
-    for( int k = 0; k < 2; ++k )
-      std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
-          back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
-
-
-    //Mat status, estF;
-    //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
-    //cout << "Est F: " << endl << estF << endl;
+  for( int k = 0; k < 2; ++k )
+    std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
+        back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
 
 
-    Mat estE;
-    estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
-
-    cout << "estimated e: " << endl << estE << endl;
-    // Normalize e
-    SVD svdE( estE );
-    Matx33d idealSigma( 1,0,0,
-        0,1,0,
-        0,0,0 );
-    cout << "eigenvalues of calculated e: " << svdE.w << endl;
-    e = svdE.u * Mat(idealSigma) * svdE.vt;
-    e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
-    cout << "ideal e: " << e << endl;
+  //Mat status, estF;
+  //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
+  //cout << "Est F: " << endl << estF << endl;
 
 
-    int count = 0;
-    for( int i = 0; i < status.size().area(); ++i ) 
-      if( status.at<unsigned int>(i,0) > 0 ) ++count;
-    cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
+  Mat estE;
+  estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
 
-    // Calculate the mean reprojection error under this f
-    double error = 0;
-    for( int i = 0; i < normimgpt[0].size(); ++i ) {
-      if( status.at<uint8_t>(i) > 0 ) {
-        Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
-            e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
-        error += pow(err.at<double>(0,0),2);
-      }
+  cout << "estimated e: " << endl << estE << endl;
+  // Normalize e
+  SVD svdE( estE );
+  Matx33d idealSigma( 1,0,0,
+      0,1,0,
+      0,0,0 );
+  cout << "eigenvalues of calculated e: " << svdE.w << endl;
+  e = svdE.u * Mat(idealSigma) * svdE.vt;
+  e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
+  cout << "ideal e: " << e << endl;
+
+
+  int count = 0;
+  for( int i = 0; i < status.size().area(); ++i ) 
+    if( status.at<unsigned int>(i,0) > 0 ) ++count;
+  cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
+
+  // Calculate the mean reprojection error under this f
+  double error = 0;
+  for( int i = 0; i < normimgpt[0].size(); ++i ) {
+    if( status.at<uint8_t>(i) > 0 ) {
+      Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
+          e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
+      error += pow(err.at<double>(0,0),2);
     }
+  }
 
-    error /= count;
-    cout << "Mean E reproj error " << error << endl;
+  error /= count;
+  cout << "Mean E reproj error " << error << endl;
 
-    // Calculate f
-    f = cameras[1]->mat().inv().t() * e * cameras[0]->mat().inv();
-    f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
+  // Calculate f
+  f = cameras[1]->mat().inv().t() * e * cameras[0]->mat().inv();
+  f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
 
-    // Calculate the mean reprojection error under this f
-    error = 0.0;
-    for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
-      if( status.data[i] > 0 ) {
-        Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
-            f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
-        error += pow(err.at<double>(0,0),2);
-      }
+  // Calculate the mean reprojection error under this f
+  error = 0.0;
+  for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
+    if( status.data[i] > 0 ) {
+      Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
+          f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
+      error += pow(err.at<double>(0,0),2);
     }
+  }
 
-    error /= count;
-    cout << "Mean F reproj error " << error << endl;
+  error /= count;
+  cout << "Mean F reproj error " << error << endl;
 
-    // Disambiguate the four solutions by:
-    // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
-    Mat W( Matx33d(0,-1,0,
-          1,0,0,
-          0,0,1) );
-    Mat u( svdE.u ), vt( svdE.vt );
-    if( determinant(u) < 0 )  u*= -1;
-    if( determinant(vt) < 0 ) vt *= -1;
-    Mat rcand = u * W * vt;
-    Mat tcand = u.col(2);
+  // Disambiguate the four solutions by:
+  // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
+  Mat W( Matx33d(0,-1,0,
+        1,0,0,
+        0,0,1) );
+  Mat u( svdE.u ), vt( svdE.vt );
+  if( determinant(u) < 0 )  u*= -1;
+  if( determinant(vt) < 0 ) vt *= -1;
+  Mat rcand = u * W * vt;
+  Mat tcand = u.col(2);
 
-    bool done = false;
-    while( !done ) {
-      Mat M = rcand.t() * tcand;
-      double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
-      Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
+  bool done = false;
+  while( !done ) {
+    Mat M = rcand.t() * tcand;
+    double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
+    Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
 
-      Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
-              x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
+    Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
+            x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
 
-      Mat X1 = Mx * Mat(x1),
-          X2 = Mx * rcand.t() * Mat(x2);
+    Mat X1 = Mx * Mat(x1),
+        X2 = Mx * rcand.t() * Mat(x2);
 
-      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
-        rcand = u * W.t() * vt;
-      else if (X1.at<double>(2) < 0) 
-        tcand *= -1;
-      else 
-        done = true;
-    }
+    if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+      rcand = u * W.t() * vt;
+    else if (X1.at<double>(2) < 0) 
+      tcand *= -1;
+    else 
+      done = true;
+  }
 
 
-    cal.F = f;
-    cal.E = e;
-    cal.R = rcand;
-    cal.t = tcand;
+  cal.F = f;
+  cal.E = e;
+  cal.R = rcand;
+  cal.t = tcand;
 
-    return true;
+  return true;
 
-    //Mat H[2];
-    //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
+  //Mat H[2];
+  //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
 
-    //for( int k = 0; k < 2; ++k ) {
-    //  R[k] = cam[k].inv()*H[k]*cam[k];
-    //  P[k] = cam[k];
-    //}
+  //for( int k = 0; k < 2; ++k ) {
+  //  R[k] = cam[k].inv()*H[k]*cam[k];
+  //  P[k] = cam[k];
+  //}
 }
 
 
@@ -656,7 +657,7 @@ int main( int argc, char** argv )
   } else if( method == STEREO_CALIBRATE ) {
     cout << "!!! Using stereoCalibrate !!!" << endl;
 
-  Mat r, t, e, f;
+    Mat r, t, e, f;
     int flags = CV_CALIB_FIX_INTRINSIC;
 
     // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
@@ -677,10 +678,10 @@ int main( int argc, char** argv )
     //  cout << "dist0 after: " << endl << dist0 << endl;
     //  cout << "dist1 after: " << endl << dist1 << endl;
 
-  cal.F = f;
-  cal.E = e;
-  cal.R = r;
-  cal.t = t;
+    cal.F = f;
+    cal.E = e;
+    cal.R = r;
+    cal.t = t;
 
     cout << "Reprojection error: " << reprojError << endl;
   } else {
@@ -688,18 +689,9 @@ int main( int argc, char** argv )
     exit(0);
   }
 
-  saveStereoCalibration( opts.stereoPairPath( mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ) ),
-      cal, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );
-
-  cout << "R: " << endl << cal.R << endl;
-  cout << "T: " << endl << cal.t << endl;
-  cout << "norm(T): " << norm(cal.t, NORM_L2 ) << endl;
-  cout << "E: " << endl << cal.E << endl;
-  cout << "F: " << endl << cal.F << endl;
-
 
   // == Attempt to rectify images
-  
+
   Mat R[2], P[2], disparity;
   Rect validROI[2];
   float alpha = -1;
@@ -707,6 +699,22 @@ int main( int argc, char** argv )
   Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, cal.R, cal.t,
       R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
       alpha, imageSize, validROI[0], validROI[1] );
+
+  StereoRectification rect;
+  rect.R[0] = R[0];
+  rect.R[1] = R[1];
+  rect.P[0] = P[0];
+  rect.P[1] = P[1];
+
+  saveStereoCalibration( opts.stereoPairPath( mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ) ),
+      cal, rect, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );
+
+  cout << "R: " << endl << cal.R << endl;
+  cout << "T: " << endl << cal.t << endl;
+  cout << "norm(T): " << norm(cal.t, NORM_L2 ) << endl;
+  cout << "E: " << endl << cal.E << endl;
+  cout << "F: " << endl << cal.F << endl;
+
 
   //Mat H[2];
   //stereoRectifyUncalibrated( undistortedImagePts[0], undistortedImagePts[1], cal.F, imageSize, H[0], H[1] );
@@ -763,11 +771,11 @@ int main( int argc, char** argv )
 
       remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
 
-     // Scalar roiBorder( 0,255,0 );
-     // line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
-     // line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-     // line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-     // line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
+      Scalar roiBorder( 0,255,0 );
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
 
     }
 

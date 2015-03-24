@@ -36,6 +36,7 @@
 #include "video.h"
 #include "synchronizer.h"
 #include "composite_canvas.h"
+#include "stereo_calibration.h"
 
 using namespace cv;
 using namespace std;
@@ -51,7 +52,8 @@ struct Options
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options( int argc, char **argv )
-    : seekTo(0), waitKey(0), scale(-1.0),
+    : seekTo(0), waitKey(0), scale(-1.0), doRectify( false ),
+    dataDir("../data"), stereoPair(),
     verb( VERB_NONE )
   {
     string msg;
@@ -63,6 +65,8 @@ struct Options
 
   int seekTo, waitKey;
   float scale;
+  bool doRectify;
+  string dataDir, stereoPair;
 
   Verb verb;
 
@@ -91,14 +95,26 @@ struct Options
       { "seek-to", required_argument, NULL, 's' },
       { "wait-key", required_argument, NULL, 'k' },
       { "scale", required_argument, NULL, 'S' },
+      { "data-directory", required_argument, NULL, 'D' },
+      { "stereo-pair", required_argument, NULL, 'P' },
+      { "rectify", no_argument, NULL, 'R'},
       { "help", no_argument, NULL, '?' },
       { 0, 0, 0, }
     };
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, "s:k:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, "D:P:Rs:k:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
+        case 'D':
+          dataDir = optarg;
+          break;
+        case 'P':
+          stereoPair = optarg;
+          break;
+        case 'R':
+          doRectify = true;
+          break;
         case 's':
           seekTo = atoi( optarg );
           break;
@@ -147,8 +163,18 @@ struct Options
       return false;
     }
 
+    if( stereoPair.size() > 0 && !file_exists( stereoCalibrationFile() ) ) {
+      msg = "Stereo calibation file " + stereoCalibrationFile() + " doesn't exist";
+      return false;
+    }
+
     return true;
   }
+
+    string stereoCalibrationFile( void )
+    {
+      return dataDir + "/stereo_pair/" + stereoPair + ".yml";
+    }
 
 };
 
@@ -171,6 +197,25 @@ class CompositeVideoMain {
 
       video.rewind();
       if( opts.seekTo > 0 ) video.seek( opts.seekTo );
+
+      // If stereo pair is set, assume we'll need it
+      if( opts.stereoPair.size() > 0 ) {
+        FileStorage fs( opts.stereoCalibrationFile(), FileStorage::READ );
+        if( !fs.isOpened() ) {
+          cerr << "Trouble opening stereo calibration file " + opts.stereoCalibrationFile() << endl;
+          return -1;
+        }
+        if( !sCal.load( fs ) ) {
+          cerr << "Trouble loading stereo calibration from " + opts.stereoCalibrationFile() << endl;
+          return -1;
+        }
+        if( !sRect.load( fs ) ) {
+          cerr << "Trouble loading stereo rectification from " + opts.stereoCalibrationFile() << endl;
+          return -1;
+        }
+
+        // How about the camera calibrations?
+      }
 
       int retval;
       switch( opts.verb ) {
@@ -211,6 +256,9 @@ class CompositeVideoMain {
   private:
     Options opts;
     CompositeVideo video;
+
+    StereoCalibration sCal;
+    StereoRectification sRect;
 
 
 };

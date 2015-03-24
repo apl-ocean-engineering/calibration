@@ -112,7 +112,7 @@ class CalibrationOpts {
     void parseOpts( int argc, char **argv )
     {
       static struct option long_options[] = {
-        { "data_directory", true, NULL, 'd' },
+        { "data-directory", true, NULL, 'D' },
         { "board", true, NULL, 'b' },
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
@@ -133,9 +133,9 @@ class CalibrationOpts {
       int indexPtr;
       int optVal;
       string c;
-      while( (optVal = getopt_long( argc, argv, "irb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "irb:c:D:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
-          case 'd':
+          case 'D':
             dataDir = optarg;
             break;
           case 'b':

@@ -6,13 +6,18 @@ using namespace cv;
 
 namespace AplCam {
 
+  const string StereoCalibration::fundamentalTag = "fundamental",
+             StereoCalibration::essentialTag = "essential",
+             StereoCalibration::rotationTag = "rotation",
+             StereoCalibration::translationTag = "translation";
+
   void StereoCalibration::save( FileStorage &fs ) const
   {
-    fs << "fundamental" << F;
-    fs << "essential" << E;
+    fs << fundamentalTag << F;
+    fs << essentialTag << E;
 
-    fs << "rotation" << R;
-    fs << "translation" << t;
+    fs << rotationTag << R;
+    fs << translationTag << t;
 
 
     //
@@ -84,5 +89,63 @@ namespace AplCam {
     //    fs << "image_points" << imagePtMat;
     //  }
   }
+  
+      bool StereoCalibration::load( cv::FileStorage &fs )
+      {
+    fs[ fundamentalTag ] >> F;
+    fs[ essentialTag ] >> E;
+    fs[ rotationTag ] >> R;
+    fs[ translationTag ] >> t;
+
+    return true;
+      }
+
+      bool StereoCalibration::load( const string &filename )
+      {
+FileStorage fs( filename, FileStorage::READ );
+if( !fs.isOpened() ) return false;
+
+return load( fs );
+      }
+
+      //===========================================================================
+      // StereoRectification
+      // 
+  const string StereoRectification::rect0Tag = "rectification_0",
+             StereoRectification::rect1Tag = "rectification_1",
+             StereoRectification::proj0Tag = "projection_0",
+             StereoRectification::proj1Tag = "projection_1";
+
+  void StereoRectification::save( FileStorage &fs ) const
+  {
+    fs << rect0Tag << R[0];
+    fs << rect1Tag << R[1];
+
+    fs << proj0Tag << P[0];
+    fs << proj1Tag << P[1];
+  }
+
+      
+      bool StereoRectification::load( cv::FileStorage &fs )
+      {
+    fs[ rect0Tag ] >> R[0];
+    fs[ rect1Tag ] >> R[1];
+    fs[ proj0Tag ] >> P[0];
+    fs[ proj1Tag ] >> P[1];
+
+    if( R[0].empty() || R[1].empty() || P[0].empty() || P[1].empty() ) return false;
+
+    return true;
+      }
+
+      bool StereoRectification::load( const string &filename )
+      {
+FileStorage fs( filename, FileStorage::READ );
+if( !fs.isOpened() ) return false;
+
+return load( fs );
+      }
+
+
 
 }

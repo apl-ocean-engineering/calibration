@@ -553,6 +553,10 @@ namespace Distortion {
   //}
   //
   //
+
+  // I got so-so results. Not sure if this is because my calibration is bad (or hard)
+  // or if the algorithm is not as accurate as it could be.  Does not implement the
+  // epipole-mapping algorithm suggested by H&Z, for example.
   void stereoRectify( const PinholeCamera &cam1, const PinholeCamera &cam2,
       const Size &imageSize, const Mat &Rmat, const Mat &Tmat,
       Mat &Rect1, Mat &Rect2,
