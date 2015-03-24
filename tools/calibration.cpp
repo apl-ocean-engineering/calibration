@@ -323,14 +323,15 @@ static void saveCameraParams( const string& filename,
 }
 
 
-static string mkCameraFileName( void )
+static string mkCameraFileName( const string &cameraName)
 {
-  char strtime[32];
+  char strtime[32], buffer[80];
   time_t tt;
   time( &tt );
   struct tm *t2 = localtime( &tt );
-  strftime( strtime, 32, "cal_%y%m%d_%H%M%S.yml", t2 );
-  return  string( strtime );
+  strftime( strtime, 32, "%y%m%d_%H%M%S", t2 );
+  snprintf( buffer, 79, "%s_%s.yml", cameraName.c_str(), strtime );
+  return  string( buffer );
 }
 
 
@@ -442,7 +443,7 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
-  string cameraFile( opts.cameraPath(mkCameraFileName() ) );
+  string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
   vector< Vec3d > rvecs, tvecs;
 
   int flags =  opts.calibFlags;

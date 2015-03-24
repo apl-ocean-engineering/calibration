@@ -25,7 +25,8 @@
 #include "detection.h"
 #include "image.h"
 #include "camera_factory.h"
-#include "stereo_pair.h"
+#include "distortion_stereo.h"
+#include "stereo_calibration.h"
 
 #include "image_pair.h"
 #include "composite_canvas.h"
@@ -97,9 +98,6 @@ class StereoCalibrationOpts {
     const string cachePath( void )
     { return dataDir + "/cache"; }
 
-    const string stereoPath( void )
-    { return dataDir + "/stereo"; }
-
 
     const string imageCache( const Image &image, const string &suffix="" )
     { return cachePath() + "/" + image.hash() + suffix + ".yml"; }
@@ -134,7 +132,7 @@ class StereoCalibrationOpts {
 
     const string stereoPairPath( const string &filename )
     {
-      string pairDir(  dataDir + "/stereo_pairs/" + pairName() + "/" );
+      string pairDir(  dataDir + "/stereo_pairs/" );
       if( !directory_exists( pairDir ) ) fs::create_directories( pairDir );
       return pairDir + filename;
     }
@@ -290,147 +288,6 @@ static double computeReprojectionErrors(
   return std::sqrt(totalErr/totalPoints);
 }
 
-static bool runCalibration( vector<vector<Point2f> > imagePoints,
-    vector< vector<Point3f> > objectPoints,
-    Size imageSize, 
-    float aspectRatio,
-    int flags, Mat& cameraMatrix, Mat& distCoeffs,
-    vector<Mat>& rvecs, vector<Mat>& tvecs,
-    vector<float>& reprojErrs,
-    double& totalAvgErr)
-{
-  cameraMatrix = Mat::eye(3, 3, CV_64F);
-  if( flags & CV_CALIB_FIX_ASPECT_RATIO )
-    cameraMatrix.at<double>(0,0) = aspectRatio;
-
-  distCoeffs = Mat::zeros(8, 1, CV_64F);
-
-  double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix,
-      distCoeffs, rvecs, tvecs, flags|CV_CALIB_RATIONAL_MODEL);
-
-  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-  printf("RMS error reported by calibrateCamera: %g\n", rms);
-
-  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
-
-  totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints,
-      rvecs, tvecs, cameraMatrix, distCoeffs, reprojErrs);
-
-  return ok;
-}
-
-class StereoCalibration {
-  public:
-    StereoCalibration() {;}
-
-    Mat e, f, R, t;
-};
-
-static void saveStereoCalibration( const string& filename,
-const string &cameraFile0, const string &cameraFile1,
-const StereoCalibration &cal )
-//    Size imageSize, const Board &board,
-//    const vector< Image > &imagesUsed,
-//    float aspectRatio, int flags,
-//    const Mat& cameraMatrix, const Mat& distCoeffs,
-//    const vector<Mat>& rvecs, const vector<Mat>& tvecs,
-//    const vector<float>& reprojErrs,
-//    const vector<vector<Point2f> >& imagePoints,
-//    double totalAvgErr )
-{
-
-  FileStorage out( filename, FileStorage::WRITE );
-
-  time_t tt;
-  time( &tt );
-  struct tm *t2 = localtime( &tt );
-  char buf[1024];
-  strftime( buf, sizeof(buf)-1, "%c", t2 );
-
-  out << "calibration_time" << buf;
-
-  out << "camera_0" << cameraFile0;
-  out << "camera_1" << cameraFile1;
-
-  out << "fundamental" << cal.f;
-  out << "essential" << cal.e;
-
-  out << "rotation" << cal.R;
-  out << "translation" << cal.t;
-
-cout << "Wrote stereo pair calibration to " << filename << endl;
-
-
-  //
-  //  if( !rvecs.empty() || !reprojErrs.empty() )
-  //    out << "nframes" << (int)std::max(rvecs.size(), reprojErrs.size());
-  //  out << "image_width" << imageSize.width;
-  //  out << "image_height" << imageSize.height;
-  //  out << "board_name" << board.name;
-  //  out << "board_width" << board.size().width;
-  //  out << "board_height" << board.size().height;
-  //  out << "square_size" << board.squareSize;
-  //
-  //  if( flags & CV_CALIB_FIX_ASPECT_RATIO )
-  //    out << "aspectRatio" << aspectRatio;
-  //
-  //  if( flags != 0 )
-  //  {
-  //    sprintf( buf, "flags: %s%s%s%s",
-  //        flags & CV_CALIB_USE_INTRINSIC_GUESS ? "+use_intrinsic_guess" : "",
-  //        flags & CV_CALIB_FIX_ASPECT_RATIO ? "+fix_aspectRatio" : "",
-  //        flags & CV_CALIB_FIX_PRINCIPAL_POINT ? "+fix_principal_point" : "",
-  //        flags & CV_CALIB_ZERO_TANGENT_DIST ? "+zero_tangent_dist" : "" );
-  //    cvWriteComment( *out, buf, 0 );
-  //  }
-  //
-  //  out << "flags" << flags;
-  //
-  //  out << "camera_matrix" << cameraMatrix;
-  //  out << "distortion_coefficients" << distCoeffs;
-  //
-  //  out << "avg_reprojection_error" << totalAvgErr;
-  //  if( !reprojErrs.empty() )
-  //    out << "per_view_reprojection_errors" << Mat(reprojErrs);
-  //
-  //  if( !rvecs.empty() && !tvecs.empty() )
-  //  {
-  //    CV_Assert(rvecs[0].type() == tvecs[0].type());
-  //    Mat bigmat((int)rvecs.size(), 6, rvecs[0].type());
-  //    for( int i = 0; i < (int)rvecs.size(); i++ )
-  //    {
-  //      Mat r = bigmat(Range(i, i+1), Range(0,3));
-  //      Mat t = bigmat(Range(i, i+1), Range(3,6));
-  //
-  //      CV_Assert(rvecs[i].rows == 3 && rvecs[i].cols == 1);
-  //      CV_Assert(tvecs[i].rows == 3 && tvecs[i].cols == 1);
-  //      //*.t() is MatExpr (not Mat) so we can use assignment operator
-  //      r = rvecs[i].t();
-  //      t = tvecs[i].t();
-  //    }
-  //    cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
-  //    out   << "extrinsic_parameters" << bigmat;
-  //  }
-  //
-  //  out << "images_used" << "[";
-  //  for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
-  //    out << img->fileName();
-  //  }
-  //  out << "]";
-  //
-  //  if( !imagePoints.empty() )
-  //  {
-  //    Mat imagePtMat((int)imagePoints.size(), (int)imagePoints[0].size(), CV_32FC2);
-  //    for( int i = 0; i < (int)imagePoints.size(); i++ )
-  //    {
-  //      Mat r = imagePtMat.row(i).reshape(2, imagePtMat.cols);
-  //      Mat imgpti(imagePoints[i]);
-  //      imgpti.copyTo(r);
-  //    }
-  //    out << "image_points" << imagePtMat;
-  //  }
-}
-
 
 
 static string mkStereoPairFileName( const string &cam0, const string &cam1 )
@@ -445,6 +302,32 @@ static string mkStereoPairFileName( const string &cam0, const string &cam1 )
 }
 
 
+void saveStereoCalibration( const string &filename,
+                      const StereoCalibration &cal,
+                      const string &cam0, const string &cam1 )
+{
+
+  FileStorage fs( filename, FileStorage::WRITE );
+
+time_t tt;
+  time( &tt );
+  struct tm *t2 = localtime( &tt );
+  char buf[1024];
+  strftime( buf, sizeof(buf)-1, "%c", t2 );
+
+  fs << "calibration_time" << buf;
+  fs << "calibration_0" << cam0;
+  fs << "calibration_1" << cam1;
+
+  cal.save( fs );
+
+
+cout << "Wrote stereo calibration to " << filename << endl;
+}
+
+
+
+
 struct TxRectifier {
   TxRectifier( const Mat &r )
     : _r( r) {;}
@@ -457,6 +340,133 @@ struct TxRectifier {
     return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
   }
 };
+
+bool hartleyMethod( ImagePointsVec *undistortedImagePts,
+                    DistortionModel *cameras[],
+                    StereoCalibration &cal )
+{
+    cout << "!!! Using Hartley !!!" << endl;
+
+    // Hartley method calculates F directly.  Then decomposes that into E and decomposes
+    // that into T and R
+    //
+    // In this case, assume the cameras are calibrated properly, find E directly, then
+    // generate F, T, R
+    //
+    // NEEDS a single vector of undistorted points
+    // Make a set of flattened, undistorted points
+    //  and a set of flattened, undistorted, normalized points
+    ImagePointsVec normimgpt[2];
+
+    Mat e,f, status;
+
+    for( int k = 0; k < 2; ++k )
+      std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
+          back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
+
+
+    //Mat status, estF;
+    //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
+    //cout << "Est F: " << endl << estF << endl;
+
+
+    Mat estE;
+    estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
+
+    cout << "estimated e: " << endl << estE << endl;
+    // Normalize e
+    SVD svdE( estE );
+    Matx33d idealSigma( 1,0,0,
+        0,1,0,
+        0,0,0 );
+    cout << "eigenvalues of calculated e: " << svdE.w << endl;
+    e = svdE.u * Mat(idealSigma) * svdE.vt;
+    e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
+    cout << "ideal e: " << e << endl;
+
+
+    int count = 0;
+    for( int i = 0; i < status.size().area(); ++i ) 
+      if( status.at<unsigned int>(i,0) > 0 ) ++count;
+    cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
+
+    // Calculate the mean reprojection error under this f
+    double error = 0;
+    for( int i = 0; i < normimgpt[0].size(); ++i ) {
+      if( status.at<uint8_t>(i) > 0 ) {
+        Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
+            e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
+        error += pow(err.at<double>(0,0),2);
+      }
+    }
+
+    error /= count;
+    cout << "Mean E reproj error " << error << endl;
+
+    // Calculate f
+    f = cameras[1]->mat().inv().t() * e * cameras[0]->mat().inv();
+    f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
+
+    // Calculate the mean reprojection error under this f
+    error = 0.0;
+    for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
+      if( status.data[i] > 0 ) {
+        Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
+            f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
+        error += pow(err.at<double>(0,0),2);
+      }
+    }
+
+    error /= count;
+    cout << "Mean F reproj error " << error << endl;
+
+    // Disambiguate the four solutions by:
+    // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
+    Mat W( Matx33d(0,-1,0,
+          1,0,0,
+          0,0,1) );
+    Mat u( svdE.u ), vt( svdE.vt );
+    if( determinant(u) < 0 )  u*= -1;
+    if( determinant(vt) < 0 ) vt *= -1;
+    Mat rcand = u * W * vt;
+    Mat tcand = u.col(2);
+
+    bool done = false;
+    while( !done ) {
+      Mat M = rcand.t() * tcand;
+      double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
+      Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
+
+      Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
+              x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
+
+      Mat X1 = Mx * Mat(x1),
+          X2 = Mx * rcand.t() * Mat(x2);
+
+      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+        rcand = u * W.t() * vt;
+      else if (X1.at<double>(2) < 0) 
+        tcand *= -1;
+      else 
+        done = true;
+    }
+
+
+    cal.F = f;
+    cal.E = e;
+    cal.R = rcand;
+    cal.t = tcand;
+
+    return true;
+
+    //Mat H[2];
+    //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
+
+    //for( int k = 0; k < 2; ++k ) {
+    //  R[k] = cam[k].inv()*H[k]*cam[k];
+    //  P[k] = cam[k];
+    //}
+}
 
 
 int main( int argc, char** argv )
@@ -624,9 +634,6 @@ int main( int argc, char** argv )
   cout << "Calibrating stereo pair with " << objectPoints.size() << " sets of points." << endl;
 
   double reprojError;
-  Mat r, t, e, f;
-  Mat R[2], P[2], disparity;
-  Rect validROI[2];
 
   Size imageSize( pairs[0][0].size( ) );
   //cout << "image size: " <<  imageSize << endl;
@@ -643,126 +650,13 @@ int main( int argc, char** argv )
 
   enum { STEREO_CALIBRATE, HARTLEY } method = HARTLEY;
 
+  StereoCalibration cal;
   if( method == HARTLEY ) {
-    cout << "!!! Using Hartley !!!" << endl;
-
-    // Hartley method calculates F directly.  Then decomposes that into E and decomposes
-    // that into T and R
-    //
-    // In this case, assume the cameras are calibrated properly, find E directly, then
-    // generate F, T, R
-    //
-    // NEEDS a single vector of undistorted points
-    // Make a set of flattened, undistorted points
-    //  and a set of flattened, undistorted, normalized points
-    ImagePointsVec normimgpt[2];
-
-    for( int k = 0; k < 2; ++k )
-      std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
-          back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
-
-
-    Mat status, estF;
-    estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
-    cout << "Est F: " << endl << estF << endl;
-
-
-    Mat estE;
-    estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
-
-    cout << "estimated e: " << endl << estE << endl;
-    // Normalize e
-    SVD svdE( estE );
-    Matx33d idealSigma( 1,0,0,
-        0,1,0,
-        0,0,0 );
-    cout << "eigenvalues of calculated e: " << svdE.w << endl;
-    e = svdE.u * Mat(idealSigma) * svdE.vt;
-    e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
-    cout << "ideal e: " << e << endl;
-
-
-    int count = 0;
-    for( int i = 0; i < status.size().area(); ++i ) 
-      if( status.at<unsigned int>(i,0) > 0 ) ++count;
-    cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
-
-    // Calculate the mean reprojection error under this f
-    double error = 0;
-    for( int i = 0; i < normimgpt[0].size(); ++i ) {
-      if( status.at<uint8_t>(i) > 0 ) {
-        Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
-            e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
-        error += pow(err.at<double>(0,0),2);
-      }
-    }
-
-    error /= count;
-    cout << "Mean E reproj error " << error << endl;
-
-    // Calculate f
-    f = cameras[1]->mat().inv().t() * e * cameras[0]->mat().inv();
-    f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
-
-    // Calculate the mean reprojection error under this f
-    error = 0.0;
-    for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
-      if( status.data[i] > 0 ) {
-        Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
-            f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
-        error += pow(err.at<double>(0,0),2);
-      }
-    }
-
-    error /= count;
-    cout << "Mean F reproj error " << error << endl;
-
-    // Disambiguate the four solutions by:
-    // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
-    Mat W( Matx33d(0,-1,0,
-          1,0,0,
-          0,0,1) );
-    Mat u( svdE.u ), vt( svdE.vt );
-    if( determinant(u) < 0 )  u*= -1;
-    if( determinant(vt) < 0 ) vt *= -1;
-    Mat rcand = u * W * vt;
-    Mat tcand = u.col(2);
-
-    bool done = false;
-    while( !done ) {
-      Mat M = rcand.t() * tcand;
-      double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
-      Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
-
-      Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
-              x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
-
-      Mat X1 = Mx * Mat(x1),
-          X2 = Mx * rcand.t() * Mat(x2);
-
-      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
-        rcand = u * W.t() * vt;
-      else if (X1.at<double>(2) < 0) 
-        tcand *= -1;
-      else 
-        done = true;
-    }
-
-
-    r = rcand;
-    t = tcand;
-
-    //Mat H[2];
-    //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
-
-    //for( int k = 0; k < 2; ++k ) {
-    //  R[k] = cam[k].inv()*H[k]*cam[k];
-    //  P[k] = cam[k];
-    //}
-
+    hartleyMethod( undistortedImagePts, cameras, cal );
   } else if( method == STEREO_CALIBRATE ) {
     cout << "!!! Using stereoCalibrate !!!" << endl;
 
+  Mat r, t, e, f;
     int flags = CV_CALIB_FIX_INTRINSIC;
 
     // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
@@ -783,39 +677,41 @@ int main( int argc, char** argv )
     //  cout << "dist0 after: " << endl << dist0 << endl;
     //  cout << "dist1 after: " << endl << dist1 << endl;
 
+  cal.F = f;
+  cal.E = e;
+  cal.R = r;
+  cal.t = t;
+
     cout << "Reprojection error: " << reprojError << endl;
   } else {
     cout << "No method specified.  Stopping..." << endl;
     exit(0);
   }
 
+  saveStereoCalibration( opts.stereoPairPath( mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ) ),
+      cal, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );
 
-  StereoCalibration cal;
-  cal.f = f;
-  cal.e = e;
-  cal.R = r;
-  cal.t = t;
+  cout << "R: " << endl << cal.R << endl;
+  cout << "T: " << endl << cal.t << endl;
+  cout << "norm(T): " << norm(cal.t, NORM_L2 ) << endl;
+  cout << "E: " << endl << cal.E << endl;
+  cout << "F: " << endl << cal.F << endl;
 
-  saveStereoCalibration( opts.stereoPath() + mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ),
-      cameraCalibrationFiles[0], cameraCalibrationFiles[1],
-      cal );
 
+  // == Attempt to rectify images
+  
+  Mat R[2], P[2], disparity;
+  Rect validROI[2];
   float alpha = -1;
-  Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
+
+  Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, cal.R, cal.t,
       R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
       alpha, imageSize, validROI[0], validROI[1] );
 
-  cout << "R: " << endl << r << endl;
-  cout << "T: " << endl << t << endl;
-  cout << "norm(T): " << norm(t, NORM_L2 ) << endl;
-  cout << "E: " << endl << e << endl;
-  cout << "F: " << endl << f << endl;
-
-
-  Mat H[2];
-  stereoRectifyUncalibrated( undistortedImagePts[0], undistortedImagePts[1], f, imageSize, H[0], H[1] );
-  cout << "H[0]: " << endl << H[0] << endl;
-  cout << "H[1]: " << endl << H[1] << endl;
+  //Mat H[2];
+  //stereoRectifyUncalibrated( undistortedImagePts[0], undistortedImagePts[1], cal.F, imageSize, H[0], H[1] );
+  //cout << "H[0]: " << endl << H[0] << endl;
+  //cout << "H[1]: " << endl << H[1] << endl;
 
   //
   //
@@ -846,10 +742,10 @@ int main( int argc, char** argv )
 
   Mat map[2][2];
   for( int k = 0; k < 2; ++k ) { 
-    cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
-        imageSize, CV_32FC1, map[k][0], map[k][1] );
-    //cameras[k]->initUndistortRectifyMap( R[k], P[k],
+    //cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
     //    imageSize, CV_32FC1, map[k][0], map[k][1] );
+    cameras[k]->initUndistortRectifyMap( R[k], P[k],
+        imageSize, CV_32FC1, map[k][0], map[k][1] );
 
     //cout << "map" << k << "0: " << endl << map[k][0] << endl;
     //cout << "map" << k << "1: " << endl << map[k][1] << endl;
@@ -863,9 +759,9 @@ int main( int argc, char** argv )
     for( int idx = 0; idx < 2; ++idx ) {
       Mat undist;
       cameras[idx]->undistortImage( thisPair[idx].img(), undist );
-      warpPerspective( undist, canvas.roi[idx], H[idx], imageSize );
+      //warpPerspective( undist, canvas.roi[idx], H[idx], imageSize );
 
-     // remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
+      remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
 
      // Scalar roiBorder( 0,255,0 );
      // line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
@@ -950,9 +846,8 @@ int main( int argc, char** argv )
 
     Mat newP0 = Mat::eye( 3,4, CV_64F ), newP1( 3,4,CV_64F );
     Mat subR( newP1, Rect(0,0,3,3) ), subT( newP1.col(3) );
-
-    r.copyTo( subR );
-    t.copyTo( subT );
+    cal.R.copyTo( subR );
+    cal.t.copyTo( subT );
 
     //Think about some reconstruction
     for( int i = 0; i < pairs.size(); ++i ) {
@@ -1036,3 +931,6 @@ if( cameras[1] ) delete cameras[1];
 
 return 0;
 }
+
+
+

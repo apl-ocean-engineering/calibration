@@ -15,8 +15,8 @@ add_library( lib_camera_calibration
         angular_polynomial.cpp
         radial_polynomial.cpp
         camera_factory.cpp
-        stereo_pair.cpp )
-      # fisheye.cpp
+        distortion_stereo.cpp
+        stereo_calibration.cpp )
 
 target_include_directories( lib_camera_calibration 
 	PUBLIC ${CMAKE_SOURCE_DIR}/include )

@@ -1,6 +1,6 @@
 
-#ifndef __STEREO_PAIR_H__
-#define __STEREO_PAIR_H__
+#ifndef __DISTORTION_STEREO_H__
+#define __DISTORTION_STEREO_H__
 
 #include <opencv2/core/core.hpp>
 
