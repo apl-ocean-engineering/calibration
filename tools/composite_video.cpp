@@ -37,12 +37,15 @@
 #include "synchronizer.h"
 #include "composite_canvas.h"
 #include "stereo_calibration.h"
+#include "distortion_model.h"
+#include "camera_factory.h"
 
 using namespace cv;
 using namespace std;
 
 //using AprilTags::TagDetection;
 
+using namespace Distortion;
 using namespace AplCam;
 
 struct Options
@@ -171,10 +174,10 @@ struct Options
     return true;
   }
 
-    string stereoCalibrationFile( void )
-    {
-      return dataDir + "/stereo_pair/" + stereoPair + ".yml";
-    }
+  string stereoCalibrationFile( void )
+  {
+    return dataDir + "/stereo_pairs/" + stereoPair + ".yml";
+  }
 
 };
 
@@ -182,14 +185,13 @@ struct Options
 class CompositeVideoMain {
   public:
     CompositeVideoMain( int argc, char **argv )
-      : opts( argc, argv ),
-      video( opts.video )
-  {;}
+      : opts( argc, argv ), video( opts.video )
+    {;}
 
     int go( void )
     {
       string error;
-      
+
       if( ! video.isOpened() ) {
         cout << "Could not open video " << opts.video << endl;
         return -1;
@@ -198,24 +200,9 @@ class CompositeVideoMain {
       video.rewind();
       if( opts.seekTo > 0 ) video.seek( opts.seekTo );
 
-      // If stereo pair is set, assume we'll need it
-      if( opts.stereoPair.size() > 0 ) {
-        FileStorage fs( opts.stereoCalibrationFile(), FileStorage::READ );
-        if( !fs.isOpened() ) {
-          cerr << "Trouble opening stereo calibration file " + opts.stereoCalibrationFile() << endl;
-          return -1;
-        }
-        if( !sCal.load( fs ) ) {
-          cerr << "Trouble loading stereo calibration from " + opts.stereoCalibrationFile() << endl;
-          return -1;
-        }
-        if( !sRect.load( fs ) ) {
-          cerr << "Trouble loading stereo rectification from " + opts.stereoCalibrationFile() << endl;
-          return -1;
-        }
 
-        // How about the camera calibrations?
-      }
+      if( loadCalibrationFiles() == false ) return -1;
+
 
       int retval;
       switch( opts.verb ) {
@@ -233,8 +220,22 @@ class CompositeVideoMain {
 
     int doPlayer( void )
     {
+      Mat map[2][2];
+
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
+
+        if( opts.doRectify )  {
+          for( int k = 0; k < 2; ++k ) {
+            // JIT construct the map mostly so we have imageSize
+            if( map[k][0].empty() || map[k][1].empty() )
+              cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
+                  canvas[k].size(), CV_32FC1, map[k][0], map[k][1] );
+
+            remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+          }
+        }
+
         if( opts.scale > 0 )
           imshow("Composite", canvas.scaled( opts.scale  ) );
         else
@@ -259,7 +260,51 @@ class CompositeVideoMain {
 
     StereoCalibration sCal;
     StereoRectification sRect;
+    DistortionModel *cameras[2];
 
+
+    bool loadCalibrationFiles( void )
+    {
+      // If stereo pair is set, assume we'll need it
+      if( opts.stereoPair.size() > 0 ) {
+        FileStorage fs( opts.stereoCalibrationFile(), FileStorage::READ );
+        if( !fs.isOpened() ) {
+          cerr << "Trouble opening stereo calibration file " + opts.stereoCalibrationFile() << endl;
+          return false;
+        }
+        if( !sCal.load( fs ) ) {
+          cerr << "Trouble loading stereo calibration from " + opts.stereoCalibrationFile() << endl;
+          return false;
+        }
+        if( !sRect.load( fs ) ) {
+          cerr << "Trouble loading stereo rectification from " + opts.stereoCalibrationFile() << endl;
+          return false;
+        }
+
+        string calFile[2];
+        fs["calibration_0"] >> calFile[0];
+        fs["calibration_1"] >> calFile[1];
+
+        for( int k =0; k < 2; ++k ) {
+          // I should be smart and manipulate the path of the calibration files to looks
+          // in the current data directory, but I can't be bothered right now
+          if( !file_exists( calFile[k] ) ) {
+            cerr << "Can't find calibration file " + calFile[k] << endl;
+            return false;
+          }
+
+          cameras[k] = CameraFactory::LoadDistortionModel( calFile[k] );
+
+          if( cameras[k] == NULL) {
+            cerr << "Error loading calibration file " + calFile[k] << endl;
+            return false;
+          }
+        }
+
+      }
+
+      return true;
+    }
 
 };
 
