@@ -108,6 +108,9 @@ namespace AplCam {
       }
       return false;
     }
+
+    bool seek( double frame ) { return _video.set( CV_CAP_PROP_POS_FRAMES, frame ); }
+    bool rewind( void )       { return seek(0); }
       
 
     std::string _filepath;

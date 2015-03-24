@@ -613,8 +613,6 @@ int main( int argc, char** argv )
         mkdir_p( outfile );
         imwrite(  outfile, canvas );
 
-
-
       }
 
     }

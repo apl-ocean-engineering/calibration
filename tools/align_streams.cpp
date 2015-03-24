@@ -13,9 +13,6 @@
 
 #include <getopt.h>
 
-#include <gsl/gsl_randist.h>
-#include <gsl/gsl_cdf.h>
-
 #define THREADED_APRILTAG_DETECTION
 #ifdef THREADED_APRILTAG_DETECTION
 #include <boost/thread.hpp>
