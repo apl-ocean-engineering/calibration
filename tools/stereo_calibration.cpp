@@ -93,6 +93,10 @@ class StereoCalibrationOpts {
     const string cachePath( void )
     { return dataDir + "/cache"; }
 
+    const string stereoPath( void )
+    { return dataDir + "/stereo"; }
+
+
     const string imageCache( const Image &image, const string &suffix="" )
     { return cachePath() + "/" + image.hash() + suffix + ".yml"; }
 
@@ -311,16 +315,24 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
   return ok;
 }
 
+class StereoCalibration {
+  public:
+    StereoCalibration() {;}
 
-static void saveStereoPairParams( const string& filename,
-    Size imageSize, const Board &board,
-    const vector< Image > &imagesUsed,
-    float aspectRatio, int flags,
-    const Mat& cameraMatrix, const Mat& distCoeffs,
-    const vector<Mat>& rvecs, const vector<Mat>& tvecs,
-    const vector<float>& reprojErrs,
-    const vector<vector<Point2f> >& imagePoints,
-    double totalAvgErr )
+    Mat e, f, R, t;
+};
+
+static void saveStereoCalibration( const string& filename,
+const string &cameraFile0, const string &cameraFile1,
+const StereoCalibration &cal )
+//    Size imageSize, const Board &board,
+//    const vector< Image > &imagesUsed,
+//    float aspectRatio, int flags,
+//    const Mat& cameraMatrix, const Mat& distCoeffs,
+//    const vector<Mat>& rvecs, const vector<Mat>& tvecs,
+//    const vector<float>& reprojErrs,
+//    const vector<vector<Point2f> >& imagePoints,
+//    double totalAvgErr )
 {
 
   FileStorage out( filename, FileStorage::WRITE );
@@ -332,6 +344,19 @@ static void saveStereoPairParams( const string& filename,
   strftime( buf, sizeof(buf)-1, "%c", t2 );
 
   out << "calibration_time" << buf;
+
+  out << "camera_0" << cameraFile0;
+  out << "camera_1" << cameraFile1;
+
+  out << "fundamental" << cal.f;
+  out << "essential" << cal.e;
+
+  out << "rotation" << cal.R;
+  out << "translation" << cal.t;
+
+cout << "Wrote stereo pair calibration to " << filename << endl;
+
+
   //
   //  if( !rvecs.empty() || !reprojErrs.empty() )
   //    out << "nframes" << (int)std::max(rvecs.size(), reprojErrs.size());
@@ -404,14 +429,15 @@ static void saveStereoPairParams( const string& filename,
 
 
 
-static string mkStereoPairFileName( void )
+static string mkStereoPairFileName( const string &cam0, const string &cam1 )
 {
-  char strtime[32];
+  char strtime[32], filename[80];
   time_t tt;
   time( &tt );
   struct tm *t2 = localtime( &tt );
-  strftime( strtime, 32, "cal_%y%m%d_%H%M%S.yml", t2 );
-  return  string( strtime );
+  strftime( strtime, 32, "%y%m%d_%H%M%S", t2 );
+  snprintf( filename, 80, "cal_%s_%s_%s.yml", cam0.c_str(), cam1.c_str(), strtime );
+  return  string( filename );
 }
 
 
@@ -498,12 +524,14 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
-  cout << "Loading camera 1 from: " << opts.cameraLatest(0) << endl;
-  cout << "Loading camera 2 from: " << opts.cameraLatest(1) << endl;
+  string cameraCalibrationFiles[2] = { opts.cameraLatest(0), opts.cameraLatest(1) };
+
+  cout << "Loading camera 1 from: " << cameraCalibrationFiles[0] << endl;
+  cout << "Loading camera 2 from: " << cameraCalibrationFiles[1] << endl;
 
   // Load the camera files
-  DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( opts.cameraLatest(0) ),
-    CameraFactory::LoadDistortionModel( opts.cameraLatest(1) ) };
+  DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( cameraCalibrationFiles[0] ),
+    CameraFactory::LoadDistortionModel( cameraCalibrationFiles[1] ) };
 
   for( int i = 0; i < 2; ++i ) 
     if( !cameras[i] ) {
@@ -808,6 +836,17 @@ int main( int argc, char** argv )
     cout << "No method specified.  Stopping..." << endl;
     exit(0);
   }
+
+
+  StereoCalibration cal;
+  cal.f = f;
+  cal.e = e;
+  cal.R = r;
+  cal.t = t;
+
+  saveStereoCalibration( opts.stereoPath() + mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ),
+      cameraCalibrationFiles[0], cameraCalibrationFiles[1],
+      cal );
 
   float alpha = -1;
   Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, r, t,
