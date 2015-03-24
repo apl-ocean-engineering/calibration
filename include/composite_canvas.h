@@ -74,7 +74,9 @@ namespace AplCam {
 
     operator Mat &() { return canvas; }
     operator cv::_InputArray() { return cv::_InputArray(canvas); }
+
     Mat &operator[]( int i ){ return roi[i]; }
+    const Mat &operator[]( int i ) const { return roi[i]; }
 
     Size size( void ) const { return canvas.size(); }
 

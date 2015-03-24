@@ -11,6 +11,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 
 #include <getopt.h>
 
@@ -68,7 +69,7 @@ struct Options
 
   int seekTo, waitKey;
   float scale;
-  bool doRectify;
+  bool doRectify, doDenseStereo;
   string dataDir, stereoPair;
 
   Verb verb;
@@ -101,14 +102,19 @@ struct Options
       { "data-directory", required_argument, NULL, 'D' },
       { "stereo-pair", required_argument, NULL, 'P' },
       { "rectify", no_argument, NULL, 'R'},
+      { "disparity", no_argument, NULL, 'B' },
       { "help", no_argument, NULL, '?' },
       { 0, 0, 0, }
     };
 
     int indexPtr;
     int optVal;
-    while( (optVal = getopt_long( argc, argv, "D:P:Rs:k:?", long_options, &indexPtr )) != -1 ) {
+    while( (optVal = getopt_long( argc, argv, "BD:P:Rs:k:?", long_options, &indexPtr )) != -1 ) {
       switch(optVal) {
+        case 'B':
+          doDenseStereo = true;
+          doRectify = true;
+          break;
         case 'D':
           dataDir = optarg;
           break;
@@ -234,6 +240,10 @@ class CompositeVideoMain {
 
             remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
           }
+
+          if( opts.doDenseStereo ) {
+            doDenseStereo( canvas );
+          }
         }
 
         if( opts.scale > 0 )
@@ -261,6 +271,50 @@ class CompositeVideoMain {
     StereoCalibration sCal;
     StereoRectification sRect;
     DistortionModel *cameras[2];
+
+    bool doDenseStereo( const CompositeCanvas &canvas )
+    {
+      int numberOfDisparities = ((canvas[0].size().width / 8) + 15) & -16;
+      int SADWindowSize = 0;
+
+      StereoSGBM sgbm;
+
+      //sgbm.preFilterCap = 63;
+      //sgbm.SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 3;
+
+      //int cn = canvas.canvas.channels();
+
+      //sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+      //sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+      //sgbm.minDisparity = 0;
+      //sgbm.numberOfDisparities = numberOfDisparities;
+      //sgbm.uniquenessRatio = 10;
+      ////sgbm.speckleWindowSize = bm.state->speckleWindowSize;
+      ////sgbm.speckleRange = bm.state->speckleRange;
+      //sgbm.disp12MaxDiff = 1;
+      sgbm.fullDP = false;
+
+      Mat disparity;
+      int64 t = getTickCount();
+      sgbm( canvas[0], canvas[1], disparity );
+      t = getTickCount() - t;
+      cout << "Dense stereo elapsed time: " <<  t * 1000 / getTickFrequency() << endl;
+
+      Mat disp8;
+      disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+
+      Mat scaled;
+
+      if( opts.scale > 0 )
+      resize( disp8, scaled, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+      else
+        scaled = disp8;
+
+
+      imshow( "disparity", scaled );
+    }
+
+
 
 
     bool loadCalibrationFiles( void )
