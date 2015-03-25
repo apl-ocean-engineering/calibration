@@ -19,7 +19,9 @@ namespace AplCam {
 
       FeatureTracker( void );
 
-      void update( Mat &img, vector< KeyPoint > &kps );
+      void update( Mat &img, vector< KeyPoint > &kps, Mat &drawTo, float scale = 1.0 );
+
+      void drawTracks( Mat &img, float scale = 1.0 );
 
     protected:
 
@@ -40,6 +42,8 @@ namespace AplCam {
 
         virtual Location predict( void ) = 0;
         virtual void update( const Point2f &loc ) = 0;
+
+        virtual Point2f pt( void ) const = 0;
       };
 
       struct DecayingVelocityMotionModel : public MotionModel {
@@ -48,6 +52,8 @@ namespace AplCam {
 
         virtual Location predict( void );
         virtual void update( const Point2f &loc );
+
+        virtual Point2f pt( void ) const { return Point2f( _state(0), _state(1) ); }
 
         float alpha;
         cv::Vec4f _state;
@@ -63,7 +69,9 @@ namespace AplCam {
         bool search( const Mat &roi, Point2f &match );
         void update( const Mat &patch, const Point2f &position );
 
-        MotionModel *_motionModel;
+        Point2f pt( void ) const { return Point2f( _motionModel->pt() ); }
+
+        std::shared_ptr<MotionModel> _motionModel;
         Mat _patch;
 
         int missed;
@@ -71,8 +79,15 @@ namespace AplCam {
 
       Mat patchROI( Mat &img, const Point2f &center )
       {
-      return Mat( img, cv::Rect( center.x - _patchRadius, center.y + _patchRadius,
-            2 * _patchRadius + 1, 2+_patchRadius+1 ) );
+        return Mat( img, cv::Rect( center.x - _patchRadius, center.y - _patchRadius,
+              2*_patchRadius + 1, 2*_patchRadius+1 ) );
+      }
+
+      bool tooNearEdge( const Mat &img, const Point2f &pt )
+      {
+        return ( pt.x - _patchRadius < 0 || pt.y - _patchRadius < 0 ||
+            pt.x + _patchRadius >= img.size().width ||
+            pt.y + _patchRadius >= img.size().height );
       }
 
       Mat  _previous;

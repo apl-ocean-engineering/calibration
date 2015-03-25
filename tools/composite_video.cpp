@@ -231,6 +231,19 @@ struct TxKeyPointInTimecode {
   }
 };
 
+struct TxKeyPointScaler {
+  TxKeyPointScaler( float scale = 1.0 )
+    : _scale( 1.0 / scale ) { ;}
+  float _scale;
+
+  KeyPoint operator()( const KeyPoint &kp )
+  {
+    return KeyPoint( kp.pt * _scale, kp.size * _scale, kp.angle, kp.response, kp.octave );
+  }
+};
+
+
+
 
 class DoFeatureTracker {
   public:
@@ -243,7 +256,7 @@ class DoFeatureTracker {
   protected:
     const Options &opts;
 
-    FeatureTracker _tracker;
+    FeatureTracker _tracker[2];
 };
 
 bool DoFeatureTracker::processCompositeImage( CompositeCanvas &canvas )
@@ -265,14 +278,19 @@ bool DoFeatureTracker::processCompositeImage( CompositeCanvas &canvas )
       std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode( scale ) );
     }
 
-    drawKeypoints( pyrTwo[k], keypoints[k], pyrTwo[k], Scalar(0,0,255), 
-        cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+
+    _tracker[k].update( pyrTwo[k], keypoints[k], canvas[k], scale );
+
+    //_tracker[k].drawTracks( canvas[k], scale );
+
+    //vector<KeyPoint> scaledKeypoints;
+    //std::transform( keypoints[k].begin(), keypoints[k].end(), back_inserter(scaledKeypoints), TxKeyPointScaler( scale ) );
+    //drawKeypoints( canvas[k], scaledKeypoints, canvas[k], Scalar(0,0,255), 
+    //    cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
   }
 
 
-
-
-  imshow("TrackerOutput", pyrTwo );
+  imshow("TrackerOutput", canvas );
 
   int ch;
   ch = waitKey( opts.waitKey );

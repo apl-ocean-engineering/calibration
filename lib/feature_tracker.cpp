@@ -33,8 +33,12 @@ namespace AplCam {
     }
   };
 
-  void FeatureTracker::update( Mat &img, vector< KeyPoint > &kps )
+  void FeatureTracker::update( Mat &img, vector< KeyPoint > &kps, Mat &drawTo, float scale )
   {
+    bool doDraw = (drawTo.empty() == false);
+    float s = ( (scale == 0.0) ? 1.0 : 1.0/scale);
+    Rect imageRect( 0, 0, img.size().width, img.size().height );
+
     vector< vector<KeyPointTrack>::iterator > dropList;
 
     // Attempt to update each currently known track
@@ -42,15 +46,29 @@ namespace AplCam {
         itr != _tracks.end(); ++itr ) {
       KeyPointTrack &track( *itr );
 
+      if( doDraw ) circle( drawTo, s*track.pt(), 5, Scalar( 0, 255, 0), 1 );
+
       Location pred = track.predict( );
 
+      if( doDraw ) circle( drawTo, s * pred.pt, 5, Scalar( 0,0,255), 1 );
+
       // Nice expensive square root..
-      Rect searchArea( pred.pt.x, pred.pt.y, 2 * sqrt( pred.cov.x ), 2 * sqrt( pred.cov.y ) );
-      Point2f match;
+      float searchXw = 2 * sqrt( pred.cov.x ),
+            searchYw = 2 * sqrt( pred.cov.y );
+      Rect searchArea( pred.pt.x - searchXw, pred.pt.y - searchYw, 2 * searchXw, 2 * searchYw );
+      searchArea &= imageRect;
+
       Mat roi( img, searchArea );
+
+      Point2f match;
       bool matched = track.search( roi, match ); 
 
-      if( matched ) {
+      match  = match + Point2f(searchArea.x, searchArea.y);
+
+
+      if( matched && !tooNearEdge( img, match ) ) {
+        if( doDraw ) circle( drawTo, s * match, 5, Scalar( 255,0,0), 1 );
+
         roi = patchROI( img, match );
         track.update( roi, match );
         track.missed = 0;
@@ -75,9 +93,7 @@ namespace AplCam {
     for( vector< KeyPoint >::iterator itr = kps.begin(); itr != kps.end(); ++itr ) {
       const KeyPoint &kp( *itr );
 
-      if( kp.pt.x - _patchRadius < 0 || kp.pt.y - _patchRadius < 0 ||
-          kp.pt.x + _patchRadius >= img.size().width ||
-          kp.pt.y + _patchRadius >= img.size().height ) continue;
+      if( tooNearEdge(  img, kp.pt ) ) continue;
 
       Mat roi = patchROI( img, kp.pt );
       _tracks.push_back( KeyPointTrack( roi, new DecayingVelocityMotionModel( kp.pt ) ) );
@@ -88,29 +104,49 @@ namespace AplCam {
   }
 
 
+  void FeatureTracker::drawTracks( Mat &img, float scale )
+  {
+    float s = 1.0/scale;
+
+    for( vector<KeyPointTrack>::iterator itr = _tracks.begin();
+        itr != _tracks.end(); ++itr ) {
+      KeyPointTrack &track( *itr );
+
+      circle( img, s*track.pt(), 5, Scalar( 0, 255, 0), 1 );
+
+    }
+  }
+
 
   //===========================================================================
 
   FeatureTracker::KeyPointTrack::KeyPointTrack( const Mat &patch, MotionModel *model )
     : _patch(), _motionModel(model)
   {
-    patch.copyTo( _patch );
+    patch.convertTo( _patch, CV_32FC1, 1.0/255.0 );
   }
 
   FeatureTracker::KeyPointTrack::~KeyPointTrack( void )
   {
-    if( _motionModel != NULL ) delete _motionModel;
+    //if( _motionModel != NULL ) _motionModel;
   }
 
   bool FeatureTracker::KeyPointTrack::search( const Mat &roi, Point2f &match )
   {
     bool success = false;
+    Mat roif;
+    roi.convertTo( roif, CV_32FC1, 1.0/255.0 );
 
-    double response = 0.0;
-    Point2d l = phaseCorrelateRes( _patch, roi, noArray(), &response );
+    Mat result;
+    matchTemplate( roif, _patch, result, CV_TM_CCORR_NORMED );
 
-    // Check result here
-    match = l;
+    Point minLoc, maxLoc;
+    double mina, maxa;
+    minMaxLoc( result, &mina, &maxa, &minLoc, &maxLoc );
+
+    // Check result with heuristics here
+
+    match = maxLoc;
     success = true;
 
     return success;
@@ -119,7 +155,7 @@ namespace AplCam {
 
   void FeatureTracker::KeyPointTrack::update( const Mat &patch, const Point2f &position )
   {
-    patch.copyTo( _patch );
+    patch.convertTo( _patch, CV_32FC1, 1.0/255.0 );
 
     _motionModel->update( position );
   }
