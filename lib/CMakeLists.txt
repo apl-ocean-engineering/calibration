@@ -16,7 +16,8 @@ add_library( lib_camera_calibration
         radial_polynomial.cpp
         camera_factory.cpp
         distortion_stereo.cpp
-        stereo_calibration.cpp )
+        stereo_calibration.cpp 
+        feature_tracker.cpp )
 
 target_include_directories( lib_camera_calibration 
 	PUBLIC ${CMAKE_SOURCE_DIR}/include )

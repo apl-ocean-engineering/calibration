@@ -41,6 +41,8 @@
 #include "distortion_model.h"
 #include "camera_factory.h"
 
+#include "feature_tracker.h"
+
 using namespace cv;
 using namespace std;
 
@@ -52,7 +54,7 @@ using namespace AplCam;
 struct Options
 {
 
-  typedef enum { PLAYER, VERB_NONE = -1 } Verb;
+  typedef enum { PLAYER, TRACKER, VERB_NONE = -1 } Verb;
   typedef enum { FAST, FEATURES_NONE = -1 } Features;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
@@ -174,6 +176,8 @@ struct Options
 
     if( verbStr.compare( 0, 4, "play" ) == 0 ) {
       verb = PLAYER;
+    } else if( verbStr.compare( 0, 5, "track" ) == 0 ) {
+      verb = TRACKER;
     } else {
       msg = "Don't understand the verb \"" + verbStr + "\"";
       return false;
@@ -188,7 +192,7 @@ struct Options
   {
     if( optarg.compare("fast") == 0 ) 
       return FAST;
-    
+
 
     return FEATURES_NONE;
   }
@@ -216,10 +220,73 @@ struct Options
 };
 
 
+struct TxKeyPointInTimecode {
+  TxKeyPointInTimecode( float scale = 1.0 )
+    : _scale( 1.0 / scale ) { ;}
+  float _scale;
+
+  bool operator()( const KeyPoint &kp )
+  {
+    return timeCodeROI_1920x1080.contains( kp.pt * _scale );
+  }
+};
+
+
+class DoFeatureTracker {
+  public:
+    DoFeatureTracker( const Options &options )
+      : opts( options ), _tracker()
+    {;}
+
+    bool processCompositeImage( CompositeCanvas &canvas );
+
+  protected:
+    const Options &opts;
+
+    FeatureTracker _tracker;
+};
+
+bool DoFeatureTracker::processCompositeImage( CompositeCanvas &canvas )
+{
+  vector<KeyPoint> keypoints[2];
+
+  float scale = 0.25;
+  Mat pyrTwoMat( Size( canvas.size().width * scale, canvas.size().height * scale ), CV_8UC1 );
+  CompositeCanvas pyrTwo( pyrTwoMat );
+
+  for( int k = 0; k < 2; ++k ) {
+    Mat grey;
+    cvtColor( canvas[k], grey, CV_BGR2GRAY );
+    resize( grey, pyrTwo[k], pyrTwo[k].size(), 0, 0, INTER_LINEAR );
+
+    FAST( pyrTwo[k], keypoints[k], 10, true );
+
+    if( opts.suppressFeaturesInTimecode ) {
+      std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode( scale ) );
+    }
+
+    drawKeypoints( pyrTwo[k], keypoints[k], pyrTwo[k], Scalar(0,0,255), 
+        cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+  }
+
+
+
+
+  imshow("TrackerOutput", pyrTwo );
+
+  int ch;
+  ch = waitKey( opts.waitKey );
+
+  if( ch == 'q' )
+    return false;
+
+  return true;
+}
+
 class CompositeVideoMain {
   public:
     CompositeVideoMain( int argc, char **argv )
-      : opts( argc, argv ), video( opts.video )
+      : opts( argc, argv ), video( opts.video ), _tracker( opts )
     {;}
 
     int go( void )
@@ -241,6 +308,7 @@ class CompositeVideoMain {
       int retval;
       switch( opts.verb ) {
         case Options::PLAYER:
+        case Options::TRACKER:
           retval = doPlayer( );
           break;
         case Options::VERB_NONE:
@@ -259,40 +327,44 @@ class CompositeVideoMain {
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
 
-        if( opts.doRectify )  {
-          for( int k = 0; k < 2; ++k ) {
-            // JIT construct the map because we need the imageSize, which isn't 
-            // available until the first frame has been loaded.
-            if( map[k][0].empty() || map[k][1].empty() )
-              cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
-                  canvas[k].size(), CV_32FC1, map[k][0], map[k][1] );
+        if( opts.verb == Options::TRACKER ) {
+          if( _tracker.processCompositeImage( canvas ) == false ) break;
+        } else {
+          if( opts.doRectify )  {
+            for( int k = 0; k < 2; ++k ) {
+              // JIT construct the map because we need the imageSize, which isn't 
+              // available until the first frame has been loaded.
+              if( map[k][0].empty() || map[k][1].empty() )
+                cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
+                    canvas[k].size(), CV_32FC1, map[k][0], map[k][1] );
 
-            remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+              remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+            }
+
+            if( opts.doDenseStereo ) {
+              doDenseStereo( canvas );
+            }
+          } else if( opts.doUndistort ) {
+            doUndistort( canvas ); 
           }
 
-          if( opts.doDenseStereo ) {
-            doDenseStereo( canvas );
+          if( opts.features != Options::FEATURES_NONE ) {
+            doFeatures( canvas );
           }
-        } else if( opts.doUndistort ) {
-         doUndistort( canvas ); 
+
+          if( opts.scale > 0 )
+            imshow("Composite", canvas.scaled( opts.scale  ) );
+          else
+            imshow( "Composite", canvas );
+
+          int ch;
+          ch = waitKey( opts.waitKey );
+
+          if( ch == 'q' )
+            break;
+          else if (ch == 'R')
+            video.rewind();
         }
-        
-       if( opts.features != Options::FEATURES_NONE ) {
-          doFeatures( canvas );
-        }
-
-        if( opts.scale > 0 )
-          imshow("Composite", canvas.scaled( opts.scale  ) );
-        else
-          imshow( "Composite", canvas );
-
-        int ch;
-        ch = waitKey( opts.waitKey );
-
-        if( ch == 'q' )
-          break;
-        else if (ch == 'R')
-          video.rewind();
       }
 
       return 0;
@@ -307,6 +379,8 @@ class CompositeVideoMain {
     StereoRectification sRect;
     DistortionModel *cameras[2];
 
+    DoFeatureTracker _tracker;
+
     bool doDenseStereo( const CompositeCanvas &canvas )
     {
       int numberOfDisparities = ((canvas[0].size().width / 8) + 15) & -16;
@@ -316,10 +390,10 @@ class CompositeVideoMain {
       StereoSGBM sgbm;
 
 
-     // bm.state->roi1 = roi1;
-     // bm.state->roi2 = roi2;
-     // bm.state->preFilterCap = 31;
-     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
+      // bm.state->roi1 = roi1;
+      // bm.state->roi2 = roi2;
+      // bm.state->preFilterCap = 31;
+      // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
       bm.state->minDisparity = 0;
       bm.state->numberOfDisparities = numberOfDisparities;
       bm.state->textureThreshold = 10;
@@ -373,10 +447,10 @@ class CompositeVideoMain {
 
     bool doUndistort( CompositeCanvas &canvas )
     {
-        for( int k = 0; k < 2; ++k ) 
-          cameras[k]->undistortImage( canvas[k], canvas[k] );
+      for( int k = 0; k < 2; ++k ) 
+        cameras[k]->undistortImage( canvas[k], canvas[k] );
 
-        return true;
+      return true;
     }
 
     bool doFeatures( CompositeCanvas &canvas )
@@ -391,22 +465,17 @@ class CompositeVideoMain {
         }
       }
 
-        for( int k = 0; k < 2; ++k )  {
-if( opts.suppressFeaturesInTimecode ) {
-  std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode );
-}
-
-            drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255), 
-                cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+      for( int k = 0; k < 2; ++k )  {
+        if( opts.suppressFeaturesInTimecode ) {
+          std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode() );
         }
 
-return true;
-    }
+        drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255), 
+            cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+      }
 
-static bool TxKeyPointInTimecode( const KeyPoint &kp )
-{
-return timeCodeROI_1920x1080.contains( kp.pt );
-}
+      return true;
+    }
 
 
 
