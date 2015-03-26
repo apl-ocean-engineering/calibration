@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <iostream>
 
 #include <opencv2/imgproc/imgproc.hpp>
@@ -13,6 +14,7 @@ namespace AplCam {
   const float FeatureTracker::_dropRadius = 5;
   const float FeatureTracker::_patchRadius = 5;
   const int FeatureTracker::_maxMisses = 5;
+  const int FeatureTracker::_maxTracks = 1500;
 
   typedef Matx<float,2,4> Matx24f;
   typedef Matx<float,4,2> Matx42f;
@@ -23,16 +25,16 @@ namespace AplCam {
   {;}
 
 
-  struct TxDropCloseTo {
-    TxDropCloseTo( const Point2f &pt, float r2 )
-      : _pt(pt), _r2( r2 ) {;}
+  struct TxDistanceLessThan {
+    TxDistanceLessThan( const Point2f &pt, float r )
+      : _pt(pt), _r2( r*r ) {;}
     const Point2f &_pt;
     float _r2;
 
     bool operator()( const KeyPoint &other )
     {
-      Point2f d( other.pt - _pt );
-      return ( (d.x*d.x + d.y*d.y ) > _r2 );
+      Point2f d = other.pt - _pt;
+      return ( (d.x*d.x + d.y*d.y ) < _r2 );
     }
   };
 
@@ -44,20 +46,31 @@ namespace AplCam {
 
     vector< vector<KeyPointTrack>::iterator > dropList;
 
+    int kpsInitially = kps.size(), kpsTooClose = 0;
+
     // Attempt to update each currently known track
     for( vector<KeyPointTrack>::iterator itr = _tracks.begin();
         itr != _tracks.end(); ++itr ) {
       KeyPointTrack &track( *itr );
 
       Point2f prev = track.pt();
-      if( doDraw ) circle( drawTo, s*track.pt(), 5, Scalar( 0, 255, 0), 1 );
+      if( doDraw ) {
+        for( deque< Point2f >::reverse_iterator ritr = track.history.rbegin();
+            ritr != track.history.rend(); ++ritr ) {
+          if( ritr == track.history.rbegin() ) prev = (*ritr);
+          circle( drawTo, s*(*ritr), 5, Scalar( 0, 0, 255), 1 );
+          line( drawTo, s*prev, s*(*ritr), Scalar( 0, 0, 255), 1 );
+          prev = (*ritr);
+        }
+      }
+
 
       Location pred = track.predict( );
       if( doDraw ) circle( drawTo, s*pred.pt, 5, Scalar( 0,255,0), 2 );
 
       // Nice expensive square root..
-      float searchXw = 2 * sqrt( pred.cov.x ),
-            searchYw = 2 * sqrt( pred.cov.y );
+      float searchXw = std::max( 5, (int)ceil( 2 * sqrt( pred.cov.x )) ),
+            searchYw = std::max( 5, (int)ceil(2 * sqrt( pred.cov.y )) );
       Rect searchArea( pred.pt.x - searchXw, pred.pt.y - searchYw, 2 * searchXw, 2 * searchYw );
       searchArea &= imageRect;
 
@@ -80,7 +93,13 @@ namespace AplCam {
         track.missed = 0;
 
         // If there's been a successful match, drop any keypoints which are close by
-        std::remove_if( kps.begin(), kps.end(), TxDropCloseTo( match, _dropRadius * _dropRadius ) );
+        int before = kps.size();
+        vector< KeyPoint >::iterator newEnd = std::remove_if( kps.begin(), kps.end(), TxDistanceLessThan( match, _dropRadius ) );
+        if( newEnd != kps.end() ) {
+        kps.erase( newEnd, kps.end() );
+        kpsTooClose += before - kps.size();
+        ++track.refeatured;
+        }
 
       } else {
         ++track.missed;
@@ -96,14 +115,18 @@ namespace AplCam {
 
     // Process any new keypoints
     // for now, new points are just added
-    for( vector< KeyPoint >::iterator itr = kps.begin(); itr != kps.end(); ++itr ) {
+    int count = 0, kpsTooNearEdge = 0;
+    for( vector< KeyPoint >::iterator itr = kps.begin(); itr != kps.end() && _tracks.size() < _maxTracks; ++itr ) {
       const KeyPoint &kp( *itr );
 
-      if( tooNearEdge(  img, kp.pt ) ) continue;
+      if( tooNearEdge(  img, kp.pt ) ) { ++kpsTooNearEdge;  continue; }
 
+      ++count;
       Mat roi = patchROI( img, kp.pt );
       _tracks.push_back( KeyPointTrack( roi, new DecayingVelocityMotionModel( kp.pt ) ) );
     }
+
+    cout << "From " << kps.size() << "/" << kpsInitially << " remain.  Added " << count << " dropped " << kpsTooClose << " as too close, " << kpsTooNearEdge << " too near edge, and dropped " << dropList.size() << " tracks for a total of " << _tracks.size() << endl;
 
     // Maintain an archival copy
     img.copyTo( _previous );
@@ -163,6 +186,9 @@ namespace AplCam {
   void FeatureTracker::KeyPointTrack::update( const Mat &patch, const Point2f &position )
   {
     patch.convertTo( _patch, CV_32FC1, 1.0/255.0 );
+
+    history.push_front( position );
+    while( history.size() > 10 ) history.pop_back();
 
     _motionModel->update( position );
   }

@@ -3,6 +3,7 @@
 #define __FEATURE_TRACKER_H__
 
 #include <vector>
+#include <deque>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
@@ -73,8 +74,9 @@ namespace AplCam {
 
         std::shared_ptr<MotionModel> _motionModel;
         Mat _patch;
+        std::deque< Point2f > history;
 
-        int missed;
+        int missed, refeatured;
       };
 
       Mat patchROI( Mat &img, const Point2f &center )
@@ -96,6 +98,7 @@ namespace AplCam {
       static const float _dropRadius;
       static const float _patchRadius;
       static const int _maxMisses;
+      static const int _maxTracks;
   };
 
 }
