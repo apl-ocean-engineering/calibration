@@ -69,8 +69,8 @@ namespace AplCam {
       if( doDraw ) circle( drawTo, s*pred.pt, 5, Scalar( 0,255,0), 2 );
 
       // Nice expensive square root..
-      float searchXw = std::max( 5, (int)ceil( 2 * sqrt( pred.cov.x )) ),
-            searchYw = std::max( 5, (int)ceil(2 * sqrt( pred.cov.y )) );
+      float searchXw = std::min( 30, std::max( 5, (int)ceil( 2 * sqrt( pred.cov.x )) )),
+            searchYw = std::min( 30, std::max( 5, (int)ceil(2 * sqrt( pred.cov.y )) ));
       Rect searchArea( pred.pt.x - searchXw, pred.pt.y - searchYw, 2 * searchXw, 2 * searchYw );
       searchArea &= imageRect;
 
