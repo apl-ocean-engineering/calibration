@@ -1,4 +1,6 @@
 
+#include <iostream>
+
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include "feature_tracker.h"
@@ -6,6 +8,7 @@
 namespace AplCam {
 
   using namespace cv;
+  using namespace std;
 
   const float FeatureTracker::_dropRadius = 5;
   const float FeatureTracker::_patchRadius = 5;
@@ -46,11 +49,11 @@ namespace AplCam {
         itr != _tracks.end(); ++itr ) {
       KeyPointTrack &track( *itr );
 
+      Point2f prev = track.pt();
       if( doDraw ) circle( drawTo, s*track.pt(), 5, Scalar( 0, 255, 0), 1 );
 
       Location pred = track.predict( );
-
-      if( doDraw ) circle( drawTo, s * pred.pt, 5, Scalar( 0,0,255), 1 );
+      if( doDraw ) circle( drawTo, s*pred.pt, 5, Scalar( 0,255,0), 2 );
 
       // Nice expensive square root..
       float searchXw = 2 * sqrt( pred.cov.x ),
@@ -64,10 +67,13 @@ namespace AplCam {
       bool matched = track.search( roi, match ); 
 
       match  = match + Point2f(searchArea.x, searchArea.y);
-
+      //cout << pred.pt.x << " " << pred.pt.y << " -- " << match.x << " " << match.y << endl;
 
       if( matched && !tooNearEdge( img, match ) ) {
-        if( doDraw ) circle( drawTo, s * match, 5, Scalar( 255,0,0), 1 );
+        if( doDraw ) {
+          circle( drawTo, s * match, 5, Scalar( 255,0,0), 2 );
+          line( drawTo, s*prev, s*match, Scalar(0,0,255), 1 );
+        }
 
         roi = patchROI( img, match );
         track.update( roi, match );
@@ -146,7 +152,8 @@ namespace AplCam {
 
     // Check result with heuristics here
 
-    match = maxLoc;
+    // Adjust match so it is relative to the upper left corner of roi
+    match = maxLoc + Point( (_patch.size().width-1)/2, (_patch.size().height-1)/2);
     success = true;
 
     return success;
