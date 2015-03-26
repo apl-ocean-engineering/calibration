@@ -44,12 +44,12 @@ namespace AplCam {
     float s = ( (scale == 0.0) ? 1.0 : 1.0/scale);
     Rect imageRect( 0, 0, img.size().width, img.size().height );
 
-    vector< vector<KeyPointTrack>::iterator > dropList;
+    vector< list<KeyPointTrack>::iterator > dropList;
 
     int kpsInitially = kps.size(), kpsTooClose = 0;
 
     // Attempt to update each currently known track
-    for( vector<KeyPointTrack>::iterator itr = _tracks.begin();
+    for( list<KeyPointTrack>::iterator itr = _tracks.begin();
         itr != _tracks.end(); ++itr ) {
       KeyPointTrack &track( *itr );
 
@@ -98,8 +98,13 @@ namespace AplCam {
         if( newEnd != kps.end() ) {
         kps.erase( newEnd, kps.end() );
         kpsTooClose += before - kps.size();
-        ++track.refeatured;
+        track.refeatured = std::min(10, track.refeatured+1 );;
+        } else {
+          --track.refeatured;
         }
+
+        if( track.refeatured < 0 ) dropList.push_back( itr );
+
 
       } else {
         ++track.missed;
@@ -109,7 +114,7 @@ namespace AplCam {
     }
 
     // Delete any dropped tracks
-    for( vector< vector<KeyPointTrack>::iterator >::iterator itr = dropList.begin();
+    for( vector< list<KeyPointTrack>::iterator >::iterator itr = dropList.begin();
         itr != dropList.end(); ++itr ) 
       _tracks.erase( *itr );
 
@@ -137,7 +142,7 @@ namespace AplCam {
   {
     float s = 1.0/scale;
 
-    for( vector<KeyPointTrack>::iterator itr = _tracks.begin();
+    for( list<KeyPointTrack>::iterator itr = _tracks.begin();
         itr != _tracks.end(); ++itr ) {
       KeyPointTrack &track( *itr );
 
@@ -150,7 +155,7 @@ namespace AplCam {
   //===========================================================================
 
   FeatureTracker::KeyPointTrack::KeyPointTrack( const Mat &patch, MotionModel *model )
-    : _patch(), _motionModel(model)
+    : _patch(), _motionModel(model), refeatured(3)
   {
     patch.convertTo( _patch, CV_32FC1, 1.0/255.0 );
   }
@@ -165,6 +170,9 @@ namespace AplCam {
     bool success = false;
     Mat roif;
     roi.convertTo( roif, CV_32FC1, 1.0/255.0 );
+
+    if( roif.size().width < _patch.size().width ||
+        roif.size().height < _patch.size().height ) return false;
 
     Mat result;
     matchTemplate( roif, _patch, result, CV_TM_CCORR_NORMED );

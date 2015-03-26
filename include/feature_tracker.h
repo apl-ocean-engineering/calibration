@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <deque>
+#include <list>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
@@ -93,7 +94,7 @@ namespace AplCam {
       }
 
       Mat  _previous;
-      vector< KeyPointTrack > _tracks;
+      std::list< KeyPointTrack > _tracks;
 
       static const float _dropRadius;
       static const float _patchRadius;
