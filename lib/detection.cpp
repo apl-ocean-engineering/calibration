@@ -63,6 +63,9 @@ void Detection::serializeToFileStorage(  FileStorage &fs ) const
   fs << "image_points" << Mat( points );
   fs << "world_points" << Mat( corners );
   fs << "ids" << Mat( ids );
+
+  fs << "t" << trans;
+  fs << "R" << rot;
 }
 
 
@@ -107,6 +110,16 @@ Detection *Detection::unserializeFromFileStorage( const FileStorage &fs )
   fs["ids"] >> pts;
   for( int i = 0; i < pts.rows; ++i ) {
     detection->ids.push_back( pts.at<int>(i,0) );
+  }
+
+  if( !fs["t"].empty() ) {
+    fs["t"] >> detection->trans; 
+    detection->hasTrans = true; 
+  }
+
+  if( !fs["R"].empty() ) {
+    fs["R"] >> detection->rot;
+    detection->hasRot = true;
   }
 
   return detection;
@@ -181,7 +194,7 @@ DetectionDb::~DetectionDb()
 bool DetectionDb::open( const string &dbDir, const string &videoFile, bool writer )
 {
   string dbfile = dbDir + "/" + fileHashSHA1( videoFile ) + ".kch";
-  return open( dbfile );
+  return open( dbfile, writer );
 }
 
 bool DetectionDb::open( const string &dbFile, bool writer )
@@ -204,12 +217,30 @@ bool DetectionDb::has( const int frame )
   return (_db.check( FrameToKey( frame ) ) != -1 ); 
 }
 
+bool DetectionDb::update( const string &key, const Detection &detection )
+{
+  string str;
+  detection.serialize( str );
+  if( !_db.set( key,  str ) ) return false;
+  return true;
+}
+
 Detection *DetectionDb::load( const int frame )
 {
   if( ! has(frame) ) return NULL;
 
   string value;
   _db.get( FrameToKey( frame ), &value );
+  return Detection::unserialize( value );
+}
+
+Detection *DetectionDb::load( const int frame, string &key )
+{
+  if( ! has(frame) ) return NULL;
+
+  string value;
+  key = FrameToKey( frame );
+  _db.get( key, &value );
   return Detection::unserialize( value );
 }
 
@@ -222,11 +253,20 @@ Detection *DetectionDb::loadAdvanceCursor( void )
   return NULL;
 }
 
+Detection *DetectionDb::loadAdvanceCursor( string &key )
+{
+  string value;
+  if( cursor()->get(  &key, &value, true ) )  
+    return Detection::unserialize( value );
+
+  return NULL;
+}
+
 kyotocabinet::DB::Cursor *DetectionDb::cursor( void )
 {
   if( _cursor == NULL ) {
-  _cursor = _db.cursor();
-  _cursor->jump();
+    _cursor = _db.cursor();
+    _cursor->jump();
   }
 
   return _cursor;

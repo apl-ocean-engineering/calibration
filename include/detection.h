@@ -20,12 +20,15 @@ struct SharedPoints
 struct Detection 
 {
   Detection(  )
-    : found(false), points(), corners(), ids() {;}
+    : found(false), points(), corners(), ids(), trans(0,0,0), rot(0,0,0), hasTrans(false), hasRot(false) {;}
 
   bool found;
   Distortion::ImagePointsVec points;
   Distortion::ObjectPointsVec corners;
   std::vector< int > ids;
+
+  cv::Vec3f trans, rot;
+  bool hasTrans, hasRot;
 
   int size( void ) const { return points.size(); }
 
@@ -71,8 +74,13 @@ class DetectionDb {
 
     bool save( const int frame, const Detection &detection );
     bool has( const int frame );
+
+    bool update( const string &key, const Detection &detection );
+
     Detection *load( const int frame );
+    Detection *load( const int frame, string &key );
     Detection *loadAdvanceCursor( void );
+    Detection *loadAdvanceCursor( string &key );
 
     kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
 

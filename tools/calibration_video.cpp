@@ -104,8 +104,8 @@ class CalibrationOpts {
           //     "     [-V]                     # use a video file, and not an image list, uses\n"
           //     "                              # [input_data] string for the video file name\n"
           //     "     [-su]                    # show undistorted images after calibration\n"
-          "     [input_data]             # list of files to use\n"
-          "\n" );
+        "     [input_data]             # list of files to use\n"
+        "\n" );
       //printf("\n%s",usage);
       //printf( "\n%s", liveCaptureHelp );
     }
@@ -307,11 +307,11 @@ static void saveCameraParams( const string& filename,
   //    out   << "extrinsic_parameters" << bigmat;
   //  }
 
-//  out << "images_used" << "[";
-//  for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
-//    out << img->fileName();
-//  }
-//  out << "]";
+  //  out << "images_used" << "[";
+  //  for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
+  //    out << img->fileName();
+  //  }
+  //  out << "]";
 
   if( !imagePoints.empty() )
   {
@@ -340,18 +340,15 @@ static string mkCameraFileName( const string &cameraName)
 
 void useDetectionPoints( Detection &detection, ObjectPointsVecVec &objPoints, ImagePointsVecVec &imgPoints )
 {
-  if( detection.size() > 3 ) {
-    //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
-    ImagePointsVec imgPts( detection.points.size() );
-    std::copy( detection.points.begin(), detection.points.end(), imgPts.begin() );
+  //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
+  ImagePointsVec imgPts( detection.points.size() );
+  std::copy( detection.points.begin(), detection.points.end(), imgPts.begin() );
 
-    ObjectPointsVec wldPts( detection.corners.size() );
-    std::copy( detection.corners.begin(), detection.corners.end(), wldPts.begin() );
+  ObjectPointsVec wldPts( detection.corners.size() );
+  std::copy( detection.corners.begin(), detection.corners.end(), wldPts.begin() );
 
-    imgPoints.push_back( imgPts );
-    objPoints.push_back( wldPts );
-  }
-
+  imgPoints.push_back( imgPts );
+  objPoints.push_back( wldPts );
 }
 
 
@@ -375,7 +372,7 @@ int main( int argc, char** argv )
   DetectionDb db;
 
   if( ! db.open( opts.cachePath(), opts.videoFile, 
-        ( opts.saveBoardPoses ? true : false ) ) ) {
+        ( opts.saveBoardPoses == true ? true : false ) ) ) {
     cerr << "Open error: " << db.error().name() << endl;
     return -1;
   }
@@ -391,18 +388,25 @@ int main( int argc, char** argv )
   // Get image size
   imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
 
+  vector< pair< string, Detection * > > detections;
 
   if( opts.intervalFrames > 0 ) {
     for( int i = opts.seekTo; i < vidLength; i += opts.intervalFrames ) {
-      Detection *detection = db.load( i );
-      if( detection ) useDetectionPoints( *detection, objectPoints, imagePoints );
+      string key;
+      Detection *detection = db.load( i, key );
+      if( detection && detection->size() > 3 ) {
+        useDetectionPoints( *detection, objectPoints, imagePoints );
+        detections.push_back( make_pair( key, detection ) );
+      }
     }
   } else {
 
+    string key;
     Detection *detection = NULL;
-    while( (detection = db.loadAdvanceCursor()) != NULL ) {
-      if( detection )  {
+    while( (detection = db.loadAdvanceCursor( key )) != NULL ) {
+      if( detection && detection->size() > 3 )  {
         useDetectionPoints( *detection, objectPoints, imagePoints );
+        detections.push_back( make_pair( key, detection ) );
       }
     }
 
@@ -410,120 +414,135 @@ int main( int argc, char** argv )
 
 
 
-    //if(!view.data)
-    //{
-    //  if( imagePoints.size() > 0 )
-    //    runAndSave(outputFilename, imagePoints, imageSize,
-    //        boardSize, pattern, squareSize, aspectRatio,
-    //        flags, cameraMatrix, distCoeffs,
-    //        writeExtrinsics, writePoints);
-    //  break;
-    //}
+  //if(!view.data)
+  //{
+  //  if( imagePoints.size() > 0 )
+  //    runAndSave(outputFilename, imagePoints, imageSize,
+  //        boardSize, pattern, squareSize, aspectRatio,
+  //        flags, cameraMatrix, distCoeffs,
+  //        writeExtrinsics, writePoints);
+  //  break;
+  //}
 
-//    Image img( opts.inFiles[i], view );
-//    Detection *detection = NULL;
-//
-//    // Check for cached data
-//    string detectionCacheFile = opts.imageCache( img );
-//    bool doRegister = true;
-//
-//    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCacheFile )) != NULL ) {
-//      doRegister = false;
-//      if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
-//    }
-//
-//    if( doRegister == false ) {
-//      cout << "  ... loaded data from cache." << endl;
-//    } else {
-//
-//      cout << "  No cached data, searching for calibration pattern." << endl;
-//
-//      //if( flipVertical )
-//      //  flip( view, view, 0 );
-//
-//      vector<Point2f> pointbuf;
-//      cvtColor(view, viewGray, COLOR_BGR2GRAY);
-//
-//      detection = board->detectPattern( viewGray, pointbuf );
-//
-//      if( detection->found )  
-//        cout << "  Found calibration pattern." << endl;
-//
-//      cout << "Writing to " << detectionCacheFile << endl;
-//      detection->writeCache( *board, detectionCacheFile );
-//    }
-//
+  //    Image img( opts.inFiles[i], view );
+  //    Detection *detection = NULL;
+  //
+  //    // Check for cached data
+  //    string detectionCacheFile = opts.imageCache( img );
+  //    bool doRegister = true;
+  //
+  //    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCacheFile )) != NULL ) {
+  //      doRegister = false;
+  //      if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
+  //    }
+  //
+  //    if( doRegister == false ) {
+  //      cout << "  ... loaded data from cache." << endl;
+  //    } else {
+  //
+  //      cout << "  No cached data, searching for calibration pattern." << endl;
+  //
+  //      //if( flipVertical )
+  //      //  flip( view, view, 0 );
+  //
+  //      vector<Point2f> pointbuf;
+  //      cvtColor(view, viewGray, COLOR_BGR2GRAY);
+  //
+  //      detection = board->detectPattern( viewGray, pointbuf );
+  //
+  //      if( detection->found )  
+  //        cout << "  Found calibration pattern." << endl;
+  //
+  //      cout << "Writing to " << detectionCacheFile << endl;
+  //      detection->writeCache( *board, detectionCacheFile );
+  //    }
+  //
 
-//    string outfile( opts.tmpPath( img.basename() ) );
-//    mkdir_p( outfile );
-//    imwrite(  outfile, view );
-//
-//    delete detection;
-//  }
+  //    string outfile( opts.tmpPath( img.basename() ) );
+  //    mkdir_p( outfile );
+  //    imwrite(  outfile, view );
+  //
+  //    delete detection;
+  //  }
 
 
-  cout << "Using points from " << imagePoints.size() << " images" << endl;
+cout << "Using points from " << imagePoints.size() << " images" << endl;
 
-  if( imagePoints.size() < 3 ) {
-    cerr << "Not enough images.  Stopping." << endl;
-    exit(-1);
-  }
+if( imagePoints.size() < 3 ) {
+  cerr << "Not enough images.  Stopping." << endl;
+  exit(-1);
+}
 
+vector< Vec3d > rvecs, tvecs;
+
+int flags =  opts.calibFlags;
+
+DistortionModel *distModel = NULL;
+switch( opts.calibType ) {
+  case CalibrationOpts::ANGULAR_POLYNOMIAL:
+    distModel = new Distortion::AngularPolynomial;
+    break;
+  case CalibrationOpts::RADIAL_POLYNOMIAL:
+    distModel = new Distortion::RadialPolynomial;
+    break;
+}
+
+if( !distModel ) {
+  cerr << "Something went wrong choosing a distortion model." << endl;
+  exit(-1);
+}
+
+double rms = distModel->calibrate( objectPoints, imagePoints, 
+    imageSize, rvecs, tvecs, flags );
+
+//  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+printf("RMS error reported by calibrateCamera: %g\n", rms);
+
+//  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+
+bool ok = true;
+
+vector<float> reprojErrs;
+double totalAvgErr = 0;
+totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
+
+if( ok ) {
   string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
-  vector< Vec3d > rvecs, tvecs;
+cout << "Writing results to " << cameraFile << endl;
 
-  int flags =  opts.calibFlags;
+  vector<Image> imagesUsed;
+  saveCameraParams( cameraFile, imageSize,
+      *board, imagesUsed, aspectRatio,
+      flags, distModel,
+      writeExtrinsics ? rvecs : vector<Vec3d>(),
+      writeExtrinsics ? tvecs : vector<Vec3d>(),
+      writeExtrinsics ? reprojErrs : vector<float>(),
+      writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
+      totalAvgErr );
 
-  DistortionModel *distModel = NULL;
-  switch( opts.calibType ) {
-    case CalibrationOpts::ANGULAR_POLYNOMIAL:
-      distModel = new Distortion::AngularPolynomial;
-      break;
-    case CalibrationOpts::RADIAL_POLYNOMIAL:
-      distModel = new Distortion::RadialPolynomial;
-      break;
-  }
+  if( opts.saveBoardPoses ) {
+    for( int i = 0; i < detections.size(); ++i ) {
+      Detection *det = detections[i].second;
+      det->rot = rvecs[i];
+      det->trans = tvecs[i];
 
-  if( !distModel ) {
-    cerr << "Something went wrong choosing a distortion model." << endl;
-    exit(-1);
-  }
-
-  double rms = distModel->calibrate( objectPoints, imagePoints, 
-      imageSize, rvecs, tvecs, flags );
-
-  //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-  printf("RMS error reported by calibrateCamera: %g\n", rms);
-
-  //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
-
-  bool ok = true;
-
-  vector<float> reprojErrs;
-  double totalAvgErr = 0;
-  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
-
-  if( ok ) {
-    vector<Image> imagesUsed;
-    saveCameraParams( cameraFile, imageSize,
-        *board, imagesUsed, aspectRatio,
-        flags, distModel,
-        writeExtrinsics ? rvecs : vector<Vec3d>(),
-        writeExtrinsics ? tvecs : vector<Vec3d>(),
-        writeExtrinsics ? reprojErrs : vector<float>(),
-        writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        totalAvgErr );
-
-    if( opts.saveBoardPoses ) {
-      cout << "To be implemented..." << endl;
+     if( ! db.update( detections[i].first, *det ) )
+cerr << "Trouble saving updated poses: " << db.error().name() << endl;
     }
   }
+}
 
-  //
-  //
-  //
-  //
-  //  // Redraw each image with rectified points
+for( int i = 0; i < detections.size(); ++i ) {
+  delete detections[i].second;
+}
+
+
+
+//
+//
+//
+//
+//  // Redraw each image with rectified points
 //  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
 //  //                      //                alpha = 1 means all source image pixels are included
 //  //                      //
@@ -598,16 +617,15 @@ int main( int argc, char** argv )
 //
 //  }
 
-  delete distModel;
+delete distModel;
 
-  // Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
-  // error messages
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
-  cout << "Writing results to " << cameraFile << endl;
+// Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
+// error messages
+//printf("%s. avg reprojection error = %.2f\n",
+//    ok ? "Calibration succeeded" : "Calibration failed",
+//    totalAvgErr);
 
-  delete board;
+delete board;
 
-  return 0;
+return 0;
 }

@@ -222,31 +222,30 @@ class CalculateReprojectionMain
 
 
       double reprojError;
-        int count = 0;
+        int totalPoints = 0;
 
       if( opts.intervalFrames > 0 ) {
         for( int i = opts.seekTo; i < vidLength; i += opts.intervalFrames ) {
           Detection *detection = db.load( i );
           if( detection ) {
-            count += computeReprojectionError( *dist, *detection, reprojError );
+            totalPoints += computeReprojectionError( *dist, *detection, reprojError );
           }
         }
       } else {
 
         Detection *detection = NULL;
         while( (detection = db.loadAdvanceCursor()) != NULL ) {
-          cout << count << endl;
-          count += computeReprojectionError( *dist, *detection, reprojError );
+          totalPoints += computeReprojectionError( *dist, *detection, reprojError );
         }
 
       }
 
 
-      if( count > 0 ) {
-        reprojError /= count;
+      if( totalPoints > 0 ) {
+        reprojError /= totalPoints;
       }
 
-      cout << "For " << count << " images, mean reproj error is " << reprojError << endl;
+      cout << "For " << totalPoints << " points, mean reproj error is " << reprojError << endl;
 
       //
       //
@@ -303,9 +302,16 @@ class CalculateReprojectionMain
 
     int computeReprojectionError( const DistortionModel &dist, const Detection det, double &reproj )
     {
-      //ImagePointsVec dist.projectPoints( dist.corners
 
-      return 1;
+      if( !(det.hasRot && det.hasTrans) ) return 0;
+
+      ImagePointsVec reprojPts;
+      dist.projectPoints( det.corners, det.rot, det.trans, reprojPts );
+
+      double err = norm(Mat(det.points), Mat(reprojPts), CV_L2);
+
+      reproj += err*err;
+      return det.size();
     }
 
 
