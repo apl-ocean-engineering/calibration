@@ -28,4 +28,6 @@ add_executable( composite_video composite_video.cpp )
 
 add_executable( calibration calibration.cpp )
 
+add_executable( calibration_video calibration_video.cpp )
+
 add_executable( stereo_calibration stereo_calibration.cpp )
