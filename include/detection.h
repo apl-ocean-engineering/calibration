@@ -32,6 +32,8 @@ struct Detection
   virtual void drawCorners(  const Board &board, cv::Mat &view ) const;
 
   virtual void writeCache( const Board &board, const std::string &cacheFile );
+  virtual void serialize( std::string &str ); 
+  virtual void serializeToFileStorage( cv::FileStorage &fs );
 
   static Detection *loadCache( const std::string &cacheFile );
   static SharedPoints sharedWith( Detection &a, Detection &b );

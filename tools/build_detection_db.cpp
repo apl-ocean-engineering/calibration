@@ -6,21 +6,19 @@
 #include <iostream>
 #include <iomanip>
 
-#include <boost/filesystem.hpp>
-
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <kchashdb.h>
 
+#include "board.h"
+#include "detection.h"
 #include "file_utils.h"
 #include "trendnet_time_code.h"
 
 using namespace std;
 using namespace cv;
 using kyotocabinet::HashDB;
-
-namespace fs = boost::filesystem;
 
 struct BuildDbOpts {
   public:
@@ -29,6 +27,7 @@ struct BuildDbOpts {
       intervalSeconds( -1 ),
       dataDir("data"),
       boardName(), 
+      doRewrite( false ),
       doDisplay( false ), yes( false ),
       verb( NONE )
   {;}
@@ -40,7 +39,7 @@ struct BuildDbOpts {
     float intervalSeconds;
     string dataDir;
     string boardName;
-    bool doDisplay, yes;
+    bool doRewrite, doDisplay, yes;
     Verbs verb;
 
     string inFile;
@@ -59,8 +58,11 @@ struct BuildDbOpts {
     string help( void )
     {
       stringstream strm;
+      const int w = 20;
 
       strm <<  "This is a tool for extracting images from a video file." << endl;
+      strm << setw( w ) <<  "--data-directory, -d" << "Set location of data directory." << endl;
+      strm << setw( w ) << "--do-display, -x" << "Do display video" << endl;
       //    "Usage: calibration\n"
       //    "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
       //    "     --board,-b <board_name>    # Name of calibration pattern\n"
@@ -97,11 +99,12 @@ struct BuildDbOpts {
     bool parseOpts( int argc, char **argv, string &msg )
     {
       static struct option long_options[] = {
-        { "data_directory", true, NULL, 'd' },
+        { "data-directory", true, NULL, 'd' },
         { "board", true, NULL, 'b' },
         { "seek-to", true, NULL, 's' },
         { "interval-frames", true, NULL, 'i' },
         { "interval-seconds", true, NULL, 'I' },
+        { "do-rewrite", no_argument, NULL, 'R' },
         { "do-display", no_argument,  NULL, 'x' },
         { "yes", no_argument, NULL, 'y' },
         { "help", false, NULL, '?' },
@@ -117,7 +120,7 @@ struct BuildDbOpts {
 
       int indexPtr;
       int optVal;
-      while( (optVal = getopt_long( argc, argv, "b:c:d:i:s:x?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "b:c:d:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
@@ -130,6 +133,9 @@ struct BuildDbOpts {
             break;
           case 'I':
             intervalSeconds = atof( optarg );
+            break;
+          case 'R':
+            doRewrite = true;
             break;
           case 's':
             seekTo = atoi( optarg );
@@ -158,10 +164,10 @@ struct BuildDbOpts {
 
       inFile = argv[optind];
 
-        if( intervalFrames > 0 && intervalSeconds > 0 ) {
-          msg = "Can't specify both interval frames and interval seconds at the same time.";
-          return false;
-        }
+      if( intervalFrames > 0 && intervalSeconds > 0 ) {
+        msg = "Can't specify both interval frames and interval seconds at the same time.";
+        return false;
+      }
 
       return validate( msg );
     }
@@ -192,6 +198,12 @@ class BuildDbMain
 
     int doBuildDb( void )
     {
+      board = Board::load( opts.boardPath(), opts.boardName );
+      if( !board ) {
+        cerr << "Couldn't open board from " << opts.boardPath() << endl;
+        return -1;
+      }
+
       string videoSource( opts.inFile );
       VideoCapture vid( videoSource );
       if( !vid.isOpened() ) {
@@ -202,7 +214,6 @@ class BuildDbMain
       string cache = cacheFile();
       cout << "Checking cache file " << cache << endl;
       // Open the db
-      HashDB db;
       if( ! db.open(  cache, HashDB::OWRITER | HashDB::OCREATE ) ) {
         cerr << "Open error: " << db.error().name() << endl;
         return -1;
@@ -216,11 +227,42 @@ class BuildDbMain
       Mat img;
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-      
+        const int strWidth = 20;
+        char frameKey[strWidth];
+        snprintf( frameKey, strWidth-1, "%0*d", strWidth-1,currentFrame );
+
+
+        Detection *detection = NULL;
+        cout << "Extracting from " << currentFrame << ". ";
+        if( (db.check( frameKey ) == -1) || opts.doRewrite ) {
+
+          Mat grey;
+          cvtColor( img, grey, CV_BGR2GRAY );
+          vector<Point2f> pointbuf;
+          detection = board->detectPattern( grey, pointbuf );
+          cout << detection->size() << " features" << endl;
+          string value;
+
+          detection->serialize(  value );
+
+          if( !db.set( frameKey, value ) ) {
+            cerr << "set error: " << db.error().name() << endl;
+          }
+
+          cout << "Saving to key " << frameKey << endl;
+        } else {
+          cout << "Data exists, skipping..." << endl;
+        }
+
+
         if( opts.doDisplay ) {
+          if( detection ) detection->drawCorners( *board, img );
+
           imshow("Extract",img );
           waitKey( opts.waitKey );
         }
+
+        delete detection;
 
         if( opts.intervalFrames > 1 ) {
           int destFrame = currentFrame + opts.intervalFrames - 1;
@@ -250,6 +292,9 @@ class BuildDbMain
 
   private:
     BuildDbOpts opts;
+
+    HashDB db;
+    Board *board;
 
 };
 

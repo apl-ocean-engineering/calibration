@@ -41,14 +41,25 @@ void Detection::drawCorners( const Board &board, Mat &view ) const
 //  Serialization/unserialization methods
 //============================================================================
 
+void Detection::serialize( string &str )
+{
+  FileStorage fs("foo.yml", FileStorage::WRITE | FileStorage::MEMORY );
+  serializeToFileStorage( fs);
+  str = fs.releaseAndGetString();
+}
+
 void Detection::writeCache( const Board &board, const string &cacheFile )
 {
   mkdir_p( cacheFile );
 
   FileStorage fs( cacheFile, FileStorage::WRITE );
-
   fs << "board_type" << board.patternString();
   fs << "board_name" << board.name;
+  serializeToFileStorage( fs );
+}
+
+void Detection::serializeToFileStorage(  FileStorage &fs )
+{
   fs << "image_points" << Mat( points );
   fs << "world_points" << Mat( corners );
   fs << "ids" << Mat( ids );
@@ -128,10 +139,9 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 
   for( int i = 0; i < _det.size(); ++i ) {
 
-
     Point2i loc;
     if( board.find( _det[i].id, loc ) ) {
-    cout << "Found  tag id " << _det[i].id << endl;
+    //cout << "Found  tag id " << _det[i].id << endl;
 
       points.push_back( Point2f( _det[i].cxy.first, _det[i].cxy.second ) );
       corners.push_back( board.worldLocation( loc ) );
