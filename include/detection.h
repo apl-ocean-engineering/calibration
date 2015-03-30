@@ -62,23 +62,30 @@ using kyotocabinet::HashDB;
 class DetectionDb {
   public:
 
-  DetectionDb();
-  ~DetectionDb();
+    DetectionDb();
 
-  bool open( const string &dbFile );
+    ~DetectionDb();
 
-  bool save( const int frame, const Detection &detection );
-  bool has( const int frame );
-  Detection *load( const int frame );
+    bool open( const string &dbFile, bool writer = false );
+    bool open( const string &dbDir, const string &videoFile, bool writer = false );
 
-  kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
+    bool save( const int frame, const Detection &detection );
+    bool has( const int frame );
+    Detection *load( const int frame );
+    Detection *loadAdvanceCursor( void );
 
-  static std::string FrameToKey( const int frame );
+    kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
+
+
+    static std::string FrameToKey( const int frame );
 
   protected:
 
+    kyotocabinet::DB::Cursor *cursor( void );
+
 
     HashDB _db;
+    kyotocabinet::DB::Cursor *_cursor;
 
 };
 

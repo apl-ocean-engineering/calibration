@@ -169,17 +169,25 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 //============================================================================
 
   DetectionDb::DetectionDb( void )
-: _db()
+: _db(), _cursor(NULL)
 {;}
 
 DetectionDb::~DetectionDb()
 {
   _db.close();
+  if( _cursor ) delete _cursor;
 }
 
-bool DetectionDb::open( const string &dbFile )
+bool DetectionDb::open( const string &dbDir, const string &videoFile, bool writer )
 {
-  if( !_db.open( dbFile, HashDB::OWRITER | HashDB::OCREATE ) ) return false;
+  string dbfile = dbDir + "/" + fileHashSHA1( videoFile ) + ".kch";
+  return open( dbfile );
+}
+
+bool DetectionDb::open( const string &dbFile, bool writer )
+{
+  int flags = (writer ? (HashDB::OWRITER | HashDB::OCREATE) : (HashDB::OREADER) );
+  if( !_db.open( dbFile, flags ) ) return false;
   return true;
 }
 
@@ -193,7 +201,6 @@ bool DetectionDb::save( const int frame, const Detection &detection )
 
 bool DetectionDb::has( const int frame )
 {
-  cout << "Checking key " << FrameToKey( frame ) << endl;
   return (_db.check( FrameToKey( frame ) ) != -1 ); 
 }
 
@@ -206,6 +213,24 @@ Detection *DetectionDb::load( const int frame )
   return Detection::unserialize( value );
 }
 
+Detection *DetectionDb::loadAdvanceCursor( void )
+{
+  string value;
+  if( cursor()->get_value( &value, true ) )  
+    return Detection::unserialize( value );
+
+  return NULL;
+}
+
+kyotocabinet::DB::Cursor *DetectionDb::cursor( void )
+{
+  if( _cursor == NULL ) {
+  _cursor = _db.cursor();
+  _cursor->jump();
+  }
+
+  return _cursor;
+}
 
 string DetectionDb::FrameToKey( const int frame )
 {

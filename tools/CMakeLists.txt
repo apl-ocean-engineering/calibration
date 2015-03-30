@@ -20,6 +20,8 @@ add_executable( extract extract.cpp )
 
 add_executable( build_detection_db build_detection_db.cpp )
 
+add_executable( calculate_calibration_errors calculate_calibration_errors.cpp )
+
 add_executable( align_streams align_streams.cpp )
 
 add_executable( composite_video composite_video.cpp )
