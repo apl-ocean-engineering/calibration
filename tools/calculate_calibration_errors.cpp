@@ -245,7 +245,7 @@ class CalculateReprojectionMain
         reprojError /= totalPoints;
       }
 
-      cout << "For " << totalPoints << " points, mean reproj error is " << reprojError << endl;
+      cout << "For " << totalPoints << " points from " << " images, mean reproj error is " << reprojError << endl;
 
       //
       //

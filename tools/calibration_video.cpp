@@ -38,7 +38,7 @@ class CalibrationOpts {
       seekTo( 0 ), intervalFrames( -1 ),
       calibFlags(0),
       videoFile(),
-      ignoreCache( false ), saveBoardPoses( false ),
+      ignoreCache( false ), saveBoardPoses( false ), fixSkew( false ),
       calibType( ANGULAR_POLYNOMIAL )
   {;}
 
@@ -56,7 +56,7 @@ class CalibrationOpts {
     int seekTo, intervalFrames;
     int calibFlags;
     string videoFile;
-    bool ignoreCache, retryUnregistered, saveBoardPoses;
+    bool ignoreCache, retryUnregistered, saveBoardPoses, fixSkew;
     CalibrationType_t calibType;
 
     const string boardPath( void )
@@ -413,219 +413,84 @@ int main( int argc, char** argv )
   }
 
 
+  cout << "Using points from " << imagePoints.size() << " images" << endl;
 
-  //if(!view.data)
-  //{
-  //  if( imagePoints.size() > 0 )
-  //    runAndSave(outputFilename, imagePoints, imageSize,
-  //        boardSize, pattern, squareSize, aspectRatio,
-  //        flags, cameraMatrix, distCoeffs,
-  //        writeExtrinsics, writePoints);
-  //  break;
-  //}
+  if( imagePoints.size() < 3 ) {
+    cerr << "Not enough images.  Stopping." << endl;
+    exit(-1);
+  }
 
-  //    Image img( opts.inFiles[i], view );
-  //    Detection *detection = NULL;
-  //
-  //    // Check for cached data
-  //    string detectionCacheFile = opts.imageCache( img );
-  //    bool doRegister = true;
-  //
-  //    if( !opts.ignoreCache && (detection = Detection::loadCache( detectionCacheFile )) != NULL ) {
-  //      doRegister = false;
-  //      if( opts.retryUnregistered && detection && (detection->points.size() == 0) ) doRegister = true;
-  //    }
-  //
-  //    if( doRegister == false ) {
-  //      cout << "  ... loaded data from cache." << endl;
-  //    } else {
-  //
-  //      cout << "  No cached data, searching for calibration pattern." << endl;
-  //
-  //      //if( flipVertical )
-  //      //  flip( view, view, 0 );
-  //
-  //      vector<Point2f> pointbuf;
-  //      cvtColor(view, viewGray, COLOR_BGR2GRAY);
-  //
-  //      detection = board->detectPattern( viewGray, pointbuf );
-  //
-  //      if( detection->found )  
-  //        cout << "  Found calibration pattern." << endl;
-  //
-  //      cout << "Writing to " << detectionCacheFile << endl;
-  //      detection->writeCache( *board, detectionCacheFile );
-  //    }
-  //
+  vector< Vec3d > rvecs, tvecs;
 
-  //    string outfile( opts.tmpPath( img.basename() ) );
-  //    mkdir_p( outfile );
-  //    imwrite(  outfile, view );
-  //
-  //    delete detection;
-  //  }
+  int flags =  opts.calibFlags;
 
+  DistortionModel *distModel = NULL;
+  switch( opts.calibType ) {
+    case CalibrationOpts::ANGULAR_POLYNOMIAL:
+      distModel = new Distortion::AngularPolynomial;
+      break;
+    case CalibrationOpts::RADIAL_POLYNOMIAL:
+      distModel = new Distortion::RadialPolynomial;
+      break;
+  }
 
-cout << "Using points from " << imagePoints.size() << " images" << endl;
+  if( !distModel ) {
+    cerr << "Something went wrong choosing a distortion model." << endl;
+    exit(-1);
+  }
 
-if( imagePoints.size() < 3 ) {
-  cerr << "Not enough images.  Stopping." << endl;
-  exit(-1);
-}
+  double rms = distModel->calibrate( objectPoints, imagePoints, 
+      imageSize, rvecs, tvecs, flags );
 
-vector< Vec3d > rvecs, tvecs;
+  //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+  printf("RMS error reported by calibrateCamera: %g\n", rms);
 
-int flags =  opts.calibFlags;
+  //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
-DistortionModel *distModel = NULL;
-switch( opts.calibType ) {
-  case CalibrationOpts::ANGULAR_POLYNOMIAL:
-    distModel = new Distortion::AngularPolynomial;
-    break;
-  case CalibrationOpts::RADIAL_POLYNOMIAL:
-    distModel = new Distortion::RadialPolynomial;
-    break;
-}
+  bool ok = true;
 
-if( !distModel ) {
-  cerr << "Something went wrong choosing a distortion model." << endl;
-  exit(-1);
-}
+  vector<float> reprojErrs;
+  double totalAvgErr = 0;
+  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
 
-double rms = distModel->calibrate( objectPoints, imagePoints, 
-    imageSize, rvecs, tvecs, flags );
+  if( ok ) {
+    string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
+    cout << "Writing results to " << cameraFile << endl;
 
-//  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-printf("RMS error reported by calibrateCamera: %g\n", rms);
+    vector<Image> imagesUsed;
+    saveCameraParams( cameraFile, imageSize,
+        *board, imagesUsed, aspectRatio,
+        flags, distModel,
+        writeExtrinsics ? rvecs : vector<Vec3d>(),
+        writeExtrinsics ? tvecs : vector<Vec3d>(),
+        writeExtrinsics ? reprojErrs : vector<float>(),
+        writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
+        totalAvgErr );
 
-//  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+    if( opts.saveBoardPoses ) {
+      for( int i = 0; i < detections.size(); ++i ) {
+        Detection *det = detections[i].second;
+        det->rot = rvecs[i];
+        det->trans = tvecs[i];
 
-bool ok = true;
-
-vector<float> reprojErrs;
-double totalAvgErr = 0;
-totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
-
-if( ok ) {
-  string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
-cout << "Writing results to " << cameraFile << endl;
-
-  vector<Image> imagesUsed;
-  saveCameraParams( cameraFile, imageSize,
-      *board, imagesUsed, aspectRatio,
-      flags, distModel,
-      writeExtrinsics ? rvecs : vector<Vec3d>(),
-      writeExtrinsics ? tvecs : vector<Vec3d>(),
-      writeExtrinsics ? reprojErrs : vector<float>(),
-      writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-      totalAvgErr );
-
-  if( opts.saveBoardPoses ) {
-    for( int i = 0; i < detections.size(); ++i ) {
-      Detection *det = detections[i].second;
-      det->rot = rvecs[i];
-      det->trans = tvecs[i];
-
-     if( ! db.update( detections[i].first, *det ) )
-cerr << "Trouble saving updated poses: " << db.error().name() << endl;
+        if( ! db.update( detections[i].first, *det ) )
+          cerr << "Trouble saving updated poses: " << db.error().name() << endl;
+      }
     }
   }
-}
 
-for( int i = 0; i < detections.size(); ++i ) {
-  delete detections[i].second;
-}
-
+  for( int i = 0; i < detections.size(); ++i ) {
+    delete detections[i].second;
+  }
 
 
-//
-//
-//
-//
-//  // Redraw each image with rectified points
-//  double alpha = 1;   // As a reminder, alpha = 0 means all pixels in undistorted image are correct
-//  //                      //                alpha = 1 means all source image pixels are included
-//  //                      //
-//
-//  Rect validROI;
-//  Mat optimalCameraMatrix = distModel->getOptimalNewCameraMatrix( imageSize, alpha, Size(), validROI );
-//
-//  //Mat optimalCameraMatrix = distModel->mat();
-//
-//  //  cout << "Distortion coefficients: " << endl << distCoeffs << endl;
-//  cout << "Calculated camera matrix: " << endl << distModel->mat() << endl;
-//  cout << "Optimal camera matrix: " << endl << optimalCameraMatrix << endl;
-//
-//
-//  Mat map1, map2;
-//  distModel->initUndistortRectifyMap( Mat::eye(3,3,CV_64F), optimalCameraMatrix, imageSize, CV_16SC2, map1, map2);
-//
-//  //  //fisheye::initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat::eye(3,3,CV_64F), cameraMatrix,
-//  //  //    imageSize, CV_16SC2, map1, map2);
-//
-//  for( int i = 0; i < imagesUsed.size(); ++i ) {
-//
-//    string outfile;
-//    if( objectPoints[i].size() > 0 ) {
-//      Distortion::ImagePointsVec reprojImgPoints;
-//      Mat out;
-//      //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
-//      //   cameraMatrix, distCoeffs);
-//      distModel->projectPoints(objectPoints[i], rvecs[i], tvecs[i], reprojImgPoints );
-//
-//      imagesUsed[i].img().copyTo( out );
-//      for( int j = 0; j < imagePoints[i].size(); ++j ) {
-//        circle( out, Point2f(imagePoints[i][j]), 5, Scalar(0,0,255), 1 );
-//
-//        circle( out, Point2f(reprojImgPoints[j]), 5, Scalar(0,255,0), 1 );
-//      }
-//
-//
-//      outfile  = opts.tmpPath( String("reprojection/") +  imagesUsed[i].basename() );
-//      mkdir_p( outfile );
-//      imwrite(  outfile, out );
-//    }
-//
-//
-//    Mat rview;
-//    remap( imagesUsed[i].img(), rview, map1, map2, INTER_LINEAR);
-//
-//    const int N = 9;
-//    int x, y, k;
-//    ImagePointsVec pts, undPts;
-//
-//    for( y = k = 0; y < N; y++ )
-//      for( x = 0; x < N; x++ )
-//        pts.push_back( ImagePoint((float)x*imageSize.width/(N-1),
-//              (float)y*imageSize.height/(N-1)) );
-//
-//    distModel->undistortPoints(pts, undPts, Mat(), optimalCameraMatrix );
-//
-//    for( y = k = 0; y < N; y++ )
-//      for( x = 0; x < N; x++ ) {
-//        //        cout << pts[k] <<  "  " << undPts[k] << endl;
-//        Point2d thisPt( undPts[k++] );
-//        if( thisPt.x >=0 && thisPt.x <= rview.size().width &&
-//            thisPt.y >=0 && thisPt.y <= rview.size().height )
-//          circle( rview, thisPt, 5, Scalar(0,255,255), 2 );
-//      }
-//
-//
-//    outfile = opts.tmpPath( String("undistorted/") +  imagesUsed[i].basename() );
-//    mkdir_p( outfile );
-//    imwrite(  outfile, rview );
-//
-//  }
 
-delete distModel;
+  printf("%s. avg reprojection error = %.2f\n",
+      ok ? "Calibration succeeded" : "Calibration failed",
+      totalAvgErr);
 
-// Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
-// error messages
-//printf("%s. avg reprojection error = %.2f\n",
-//    ok ? "Calibration succeeded" : "Calibration failed",
-//    totalAvgErr);
+  delete distModel;
+  delete board;
 
-delete board;
-
-return 0;
+  return 0;
 }
