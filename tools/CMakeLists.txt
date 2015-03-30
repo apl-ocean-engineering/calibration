@@ -2,7 +2,8 @@
 include_directories( "${CMAKE_SOURCE_DIR}/include" 
 	${OpenCV_INCLUDE_DIRS} 
         ${PCL_INCLUDE_DIRS}
-        ${CERES_INCLUDE_DIRS} )
+        ${CERES_INCLUDE_DIRS}
+        ${KyotoCabinet_INCLUDE_DIRS}	)
 
 link_libraries(	lib_camera_calibration ${OpenCV_LIBS} 
         ${PCL_LIBRARIES}
@@ -10,11 +11,14 @@ link_libraries(	lib_camera_calibration ${OpenCV_LIBS}
 	${Boost_LIBRARIES}
 	${APRILTAGS_LIBS}
         ${CERES_LIBRARIES}
+	${KyotoCabinet_LIBRARIES}
         cryptopp )
 
 add_definitions(${PCL_DEFINITIONS})
 
 add_executable( extract extract.cpp )
+
+add_executable( build_detection_db build_detection_db.cpp )
 
 add_executable( align_streams align_streams.cpp )
 

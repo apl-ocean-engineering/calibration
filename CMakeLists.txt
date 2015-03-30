@@ -16,6 +16,16 @@ find_package( PCL 1.2 REQUIRED )
 find_package( GSL REQUIRED )
 find_package( Ceres REQUIRED )
 
+find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
+  HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
+
+find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
+  HINTS ${PC_KyotoCabinet_LIBDIR} ${PC_KyotoCabinet_LIBRARY_DIRS})
+
+set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
+set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
+
+
 set( Boost_USE_MULTITHREADED ON )
 find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 

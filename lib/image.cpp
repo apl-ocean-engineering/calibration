@@ -3,6 +3,7 @@
 #include <cryptopp/files.h>
 
 #include "image.h"
+#include "file_utils.h"
 
 using namespace std;
 
@@ -10,10 +11,7 @@ using namespace std;
 const string &Image::hash( void ) const
 {
   if( _hash.empty() ) {
-    CryptoPP::SHA1 hash;
-    CryptoPP::FileSource(_fileName.string().c_str(), true, 
-        new CryptoPP::HashFilter( hash,
-          new CryptoPP::HexEncoder( new CryptoPP::StringSink( _hash ), true ) ) );
+    _hash = fileHashSHA1( _fileName.string() );
   }
 
   return _hash;

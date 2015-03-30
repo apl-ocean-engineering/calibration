@@ -1,4 +1,8 @@
 
+#include <cryptopp/sha.h>
+#include <cryptopp/hex.h>
+#include <cryptopp/files.h>
+
 #include <stdlib.h>
 #include <sys/stat.h>
 
@@ -50,4 +54,16 @@ void mkdir_p( const string &dir )
 //    mkdir(tmp, S_IRWXU);
 //    tmp[len-1] = '/';
 //  }
+}
+
+
+const string fileHashSHA1( const string &filename )
+{
+  string out;
+  CryptoPP::SHA1 hash;
+  CryptoPP::FileSource( filename.c_str(), true, 
+      new CryptoPP::HashFilter( hash,
+        new CryptoPP::HexEncoder( new CryptoPP::StringSink( out ), true ) ) );
+
+  return out;
 }
