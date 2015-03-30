@@ -214,7 +214,7 @@ class BuildDbMain
       string cache = cacheFile();
       cout << "Checking cache file " << cache << endl;
       // Open the db
-      if( ! db.open(  cache, HashDB::OWRITER | HashDB::OCREATE ) ) {
+      if( ! db.open(  cache ) ) {
         cerr << "Open error: " << db.error().name() << endl;
         return -1;
       }
@@ -227,31 +227,24 @@ class BuildDbMain
       Mat img;
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-        const int strWidth = 20;
-        char frameKey[strWidth];
-        snprintf( frameKey, strWidth-1, "%0*d", strWidth-1,currentFrame );
-
 
         Detection *detection = NULL;
         cout << "Extracting from " << currentFrame << ". ";
-        if( (db.check( frameKey ) == -1) || opts.doRewrite ) {
+        if( !db.has( currentFrame ) || opts.doRewrite ) {
 
           Mat grey;
           cvtColor( img, grey, CV_BGR2GRAY );
           vector<Point2f> pointbuf;
           detection = board->detectPattern( grey, pointbuf );
           cout << detection->size() << " features" << endl;
-          string value;
 
-          detection->serialize(  value );
-
-          if( !db.set( frameKey, value ) ) {
+          if( !db.save( currentFrame, *detection) ) {
             cerr << "set error: " << db.error().name() << endl;
           }
-
-          cout << "Saving to key " << frameKey << endl;
         } else {
           cout << "Data exists, skipping..." << endl;
+
+          detection = db.load( currentFrame );
         }
 
 
@@ -275,8 +268,6 @@ class BuildDbMain
         }
       }
 
-      db.close();
-
       return 0;
 
 
@@ -293,7 +284,7 @@ class BuildDbMain
   private:
     BuildDbOpts opts;
 
-    HashDB db;
+    DetectionDb db;
     Board *board;
 
 };

@@ -9,6 +9,7 @@
 #include "board.h"
 #include "distortion_model.h"
 
+#include <kchashdb.h>
 
 struct SharedPoints
 {
@@ -31,11 +32,13 @@ struct Detection
   virtual void calculateCorners( const Board &board );
   virtual void drawCorners(  const Board &board, cv::Mat &view ) const;
 
-  virtual void writeCache( const Board &board, const std::string &cacheFile );
-  virtual void serialize( std::string &str ); 
-  virtual void serializeToFileStorage( cv::FileStorage &fs );
+  virtual void writeCache( const Board &board, const std::string &cacheFile ) const;
+  virtual void serialize( std::string &str ) const; 
+  virtual void serializeToFileStorage( cv::FileStorage &fs ) const;
 
+  static Detection *unserialize( const std::string &str );
   static Detection *loadCache( const std::string &cacheFile );
+  static Detection *unserializeFromFileStorage( const cv::FileStorage &fs );
   static SharedPoints sharedWith( Detection &a, Detection &b );
 };
 
@@ -53,5 +56,30 @@ struct AprilTagsDetection : public Detection
 };
 #endif
 
+
+using kyotocabinet::HashDB;
+
+class DetectionDb {
+  public:
+
+  DetectionDb();
+  ~DetectionDb();
+
+  bool open( const string &dbFile );
+
+  bool save( const int frame, const Detection &detection );
+  bool has( const int frame );
+  Detection *load( const int frame );
+
+  kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
+
+  static std::string FrameToKey( const int frame );
+
+  protected:
+
+
+    HashDB _db;
+
+};
 
 #endif
