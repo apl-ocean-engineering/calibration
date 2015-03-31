@@ -43,7 +43,7 @@ link_directories( ${PCL_LIBRARY_DIRS} )
 option( USE_APRILTAGS "Use AprilTags" ON )
 
 add_definitions( -std=c++11 )
-add_definitions( -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_CPP
+add_definitions( -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_TBB
                  -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_TBB )
 
 if( USE_APRILTAGS )
