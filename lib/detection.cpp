@@ -214,8 +214,15 @@ bool DetectionDb::save( const int frame, const Detection &detection )
 
 bool DetectionDb::has( const int frame )
 {
-  return (_db.check( FrameToKey( frame ) ) != -1 ); 
+  return has( FrameToKey( frame ) );
 }
+
+bool DetectionDb::has( const string &key )
+{
+  return (_db.check( key ) != -1 ); 
+}
+
+
 
 bool DetectionDb::update( const string &key, const Detection &detection )
 {
@@ -227,39 +234,16 @@ bool DetectionDb::update( const string &key, const Detection &detection )
 
 Detection *DetectionDb::load( const int frame )
 {
-  if( ! has(frame) ) return NULL;
-
-  string value;
-  _db.get( FrameToKey( frame ), &value );
-  return Detection::unserialize( value );
+  return load( FrameToKey( frame ) );
 }
 
-Detection *DetectionDb::load( const int frame, string &key )
+Detection *DetectionDb::load( const string &key )
 {
-  if( ! has(frame) ) return NULL;
+  if( ! has(key) ) return NULL;
 
   string value;
-  key = FrameToKey( frame );
   _db.get( key, &value );
   return Detection::unserialize( value );
-}
-
-Detection *DetectionDb::loadAdvanceCursor( void )
-{
-  string value;
-  if( cursor()->get_value( &value, true ) )  
-    return Detection::unserialize( value );
-
-  return NULL;
-}
-
-Detection *DetectionDb::loadAdvanceCursor( string &key )
-{
-  string value;
-  if( cursor()->get(  &key, &value, true ) )  
-    return Detection::unserialize( value );
-
-  return NULL;
 }
 
 kyotocabinet::DB::Cursor *DetectionDb::cursor( void )
@@ -272,7 +256,33 @@ kyotocabinet::DB::Cursor *DetectionDb::cursor( void )
   return _cursor;
 }
 
-string DetectionDb::FrameToKey( const int frame )
+struct MaxFinder : public kyotocabinet::DB::Visitor
+{
+  MaxFinder( void )
+    : _max(0) {;}
+
+  int max( void ) const { return _max; };
+
+  virtual const char *visit_full( const char *kbuf, size_t ksiz, const char *vbuf, size_t vsiz, size_t *sp )
+  {
+    _max = std::max( _max, (int)atoi( kbuf ) );
+    return Visitor::NOP;
+  }
+
+  int _max;
+};
+
+int DetectionDb::maxKey( void )
+{
+  MaxFinder maxFinder;
+
+  // false == readonly
+  _db.iterate( &maxFinder, false );
+
+  return maxFinder.max();
+}
+
+const string DetectionDb::FrameToKey( const int frame )
 {
   const int strWidth = 20;
   char frameKey[strWidth];

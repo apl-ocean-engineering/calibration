@@ -26,6 +26,9 @@ using namespace Distortion;
 using namespace cv;
 using namespace std;
 
+using kyotocabinet::HashDB;
+using kyotocabinet::DB;
+
 class CalibrationOpts {
 
   public:
@@ -36,7 +39,7 @@ class CalibrationOpts {
       : dataDir("data"),
       boardName(), cameraName(),
       seekTo( 0 ), intervalFrames( -1 ),
-      calibFlags(0),
+      calibFlags(0), randomize(-1),
       videoFile(),
       ignoreCache( false ), saveBoardPoses( false ), fixSkew( false ),
       calibType( ANGULAR_POLYNOMIAL )
@@ -125,7 +128,7 @@ class CalibrationOpts {
         { "interval-frames", true, NULL, 'i' },
         { "save-board-poses", no_argument, NULL, 'S' },
         { "random", required_argument, NULL, 'D' },
-        { "results-file", required-argument, NULL, 'Z' },
+        { "results-file", required_argument, NULL, 'Z' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -145,8 +148,8 @@ class CalibrationOpts {
           case 'Z':
             resultsFile = optarg;
             break;
-          case 'Z':
-            random = atoi( optarg );
+          case 'D':
+            randomize = atoi( optarg );
             break;
           case 'd':
             dataDir = optarg;
@@ -214,6 +217,109 @@ class CalibrationOpts {
 
 
 };
+
+
+class ResultsFile {
+  public:
+    ResultsFile( const string &filename )
+      : _db()
+    {
+      _isOpen = _db.open( filename );
+    }
+
+    kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
+    bool isOpened( void ) const { return _isOpen; }
+
+    HashDB _db;
+    bool _isOpen;
+};
+
+class DetectionSet {
+  public:
+
+    typedef map< const int, Detection * > DetectionMap;
+
+    DetectionSet() 
+      : _detections(), _bitmask()
+    {;}
+
+
+    ~DetectionSet( void )
+    {
+      for( DetectionMap::iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) delete itr->second;
+    }
+
+    //== Functions for initializing the DetectionSet ==
+    //
+    void addAll( DetectionDb &db )
+    {
+      DB::Cursor *cur = db.cursor();
+      string key;
+      while( cur->get_key( &key, false ) ) addDetection( db, stoi(key) );
+      delete cur;
+    }
+
+    void addEveryNth( DetectionDb &db, int offset, int interval )
+    {
+      for( int i = offset; i < db.maxKey(); i += interval ) 
+        addDetection( db,  i );
+    }
+
+    void addRandomSubset( DetectionDb &db, long int number )
+    {
+      vector< string > keys;
+
+      DB::Cursor *cur = db.cursor();
+      cur->jump();
+
+      string key;
+      while( cur->get_key( &key, false ) ) keys.push_back(key);
+      delete cur;
+
+      number = std::max( number, (long int)keys.size() );
+
+      std::random_shuffle( keys.begin(), keys.end() );
+      keys.resize( number );
+      _bitmask.clear();
+      _bitmask.resize( number, false );
+
+      for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) addDetection( db, stoi(key) );
+    }
+
+    void addDetection( DetectionDb &db, const int frame )
+    { 
+      Detection *detection = db.load( frame );
+        if( detection ) {
+          _detections.insert( make_pair( frame, detection ) );
+          _bitmask[frame] = true;
+        }
+    }
+
+
+    //==
+
+    int imageObjectPoints( ImagePointsVecVec &imgPts, ObjectPointsVecVec &objPts )
+    {
+      int count = 0;
+      for( DetectionMap::iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) {
+        Detection &det( *(itr->second) );
+        if( det.corners.size() > 3 ) {
+          imgPts.push_back( det.points );
+          objPts.push_back( det.corners );
+          count += det.corners.size();
+        }
+      }
+
+      return count;
+    }
+
+
+    DetectionMap _detections;
+    vector<bool> _bitmask;
+};
+
+
+
 
 
 static double computeReprojectionErrors(
@@ -346,20 +452,6 @@ static string mkCameraFileName( const string &cameraName)
   return  string( buffer );
 }
 
-void useDetectionPoints( Detection &detection, ObjectPointsVecVec &objPoints, ImagePointsVecVec &imgPoints )
-{
-  //Whoops.  Type conversion from vec<Point2f> to vec<Vec2f> that needs to be cleaned up later
-  ImagePointsVec imgPts( detection.points.size() );
-  std::copy( detection.points.begin(), detection.points.end(), imgPts.begin() );
-
-  ObjectPointsVec wldPts( detection.corners.size() );
-  std::copy( detection.corners.begin(), detection.corners.end(), wldPts.begin() );
-
-  imgPoints.push_back( imgPts );
-  objPoints.push_back( wldPts );
-}
-
-
 
 int main( int argc, char** argv )
 {
@@ -378,6 +470,7 @@ int main( int argc, char** argv )
   Distortion::ObjectPointsVecVec objectPoints;
 
   DetectionDb db;
+  DetectionSet detSet;
 
   if( ! db.open( opts.cachePath(), opts.videoFile, 
         ( opts.saveBoardPoses == true ? true : false ) ) ) {
@@ -398,30 +491,19 @@ int main( int argc, char** argv )
 
   vector< pair< string, Detection * > > detections;
 
-  if( opts.intervalFrames > 0 ) {
-    for( int i = opts.seekTo; i < vidLength; i += opts.intervalFrames ) {
-      string key;
-      Detection *detection = db.load( i, key );
-      if( detection && detection->size() > 3 ) {
-        useDetectionPoints( *detection, objectPoints, imagePoints );
-        detections.push_back( make_pair( key, detection ) );
-      }
-    }
+  if( opts.randomize != 0 ) {
+    detSet.addRandomSubset( db, opts.randomize );
+  } else if( opts.intervalFrames > 0 ) {
+    detSet.addEveryNth( db,  opts.seekTo, opts.intervalFrames );
   } else {
-
-    string key;
-    Detection *detection = NULL;
-    while( (detection = db.loadAdvanceCursor( key )) != NULL ) {
-      if( detection && detection->size() > 3 )  {
-        useDetectionPoints( *detection, objectPoints, imagePoints );
-        detections.push_back( make_pair( key, detection ) );
-      }
-    }
-
+    detSet.addAll( db );
   }
 
 
-  cout << "Using points from " << imagePoints.size() << " images" << endl;
+  int count = detSet.imageObjectPoints( imagePoints, objectPoints );
+
+
+  cout << "Using " << count << " points from " << imagePoints.size() << " images" << endl;
 
   if( imagePoints.size() < 3 ) {
     cerr << "Not enough images.  Stopping." << endl;

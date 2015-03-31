@@ -1,9 +1,5 @@
 
-include_directories( "${CMAKE_SOURCE_DIR}/include" 
-	${OpenCV_INCLUDE_DIRS} 
-        ${PCL_INCLUDE_DIRS}
-        ${CERES_INCLUDE_DIRS}
-        ${KyotoCabinet_INCLUDE_DIRS}	)
+include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 
 link_libraries(	lib_camera_calibration ${OpenCV_LIBS} 
         ${PCL_LIBRARIES}

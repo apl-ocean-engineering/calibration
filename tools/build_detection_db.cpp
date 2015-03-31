@@ -27,6 +27,7 @@ struct BuildDbOpts {
       intervalSeconds( -1 ),
       dataDir("data"),
       boardName(), 
+      doBenchmark(),
       doRewrite( false ),
       doDisplay( false ), yes( false ),
       verb( NONE )
@@ -38,7 +39,7 @@ struct BuildDbOpts {
     int seekTo, intervalFrames, waitKey;
     float intervalSeconds;
     string dataDir;
-    string boardName;
+    string boardName, doBenchmark;
     bool doRewrite, doDisplay, yes;
     Verbs verb;
 
@@ -106,6 +107,7 @@ struct BuildDbOpts {
         { "interval-seconds", true, NULL, 'I' },
         { "do-rewrite", no_argument, NULL, 'R' },
         { "do-display", no_argument,  NULL, 'x' },
+        { "do-benchmark", required_argument, NULL, 'K' },
         { "yes", no_argument, NULL, 'y' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
@@ -120,7 +122,7 @@ struct BuildDbOpts {
 
       int indexPtr;
       int optVal;
-      while( (optVal = getopt_long( argc, argv, "b:c:d:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "b:c:d:K:I:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
@@ -133,6 +135,9 @@ struct BuildDbOpts {
             break;
           case 'I':
             intervalSeconds = atof( optarg );
+            break;
+          case 'K':
+            doBenchmark = optarg;
             break;
           case 'R':
             doRewrite = true;
@@ -186,9 +191,13 @@ class BuildDbMain
 {
   public:
     BuildDbMain( BuildDbOpts &options )
-      : opts( options )
+      : opts( options ), _benchmark()
     {;}
 
+    ~BuildDbMain( void )
+    {
+      if( _benchmark.is_open() ) _benchmark.close();
+    }
 
     int run( void ) {
       if( opts.doDisplay ) namedWindow( "BuildDb" );
@@ -232,7 +241,11 @@ class BuildDbMain
           Mat grey;
           cvtColor( img, grey, CV_BGR2GRAY );
           vector<Point2f> pointbuf;
+
+          int64 before = getTickCount();
           detection = board->detectPattern( grey, pointbuf );
+          addBenchmark( detection->size(), getTickCount() - before );
+
           cout << detection->size() << " features" << endl;
 
           if( !db.save( currentFrame, *detection) ) {
@@ -271,6 +284,16 @@ class BuildDbMain
     }
 
 
+    void addBenchmark( int numPoints, int64 ticks )
+    {
+      if( opts.doBenchmark.size() > 0 ) {
+        if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
+        
+        _benchmark << numPoints << ',' << ticks / getTickFrequency() << endl;
+      }
+    }
+
+
 
   private:
     BuildDbOpts opts;
@@ -278,6 +301,8 @@ class BuildDbMain
     DetectionDb db;
     Board *board;
 
+
+    ofstream _benchmark;
 };
 
 

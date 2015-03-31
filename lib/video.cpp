@@ -110,7 +110,7 @@ bool Video::detectTransition( float norm, int dt )
   float p_dt = 1.0;
 
   if( dt > 0 ) {
-    float dtErr = dt - _distDt.mean * std::max(1.0f,round( dt / _distDt.mean ));
+    float dtErr = dt - _distDt.mean * std::max(1.0f,roundf( dt / _distDt.mean ));
     float dtScaled = dtErr / _distDt.stddev;
     p_dt = gsl_cdf_chisq_Q( dtScaled*dtScaled, 1 );
   }

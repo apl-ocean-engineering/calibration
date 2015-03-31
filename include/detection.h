@@ -73,23 +73,25 @@ class DetectionDb {
     bool open( const string &dbDir, const string &videoFile, bool writer = false );
 
     bool save( const int frame, const Detection &detection );
+
     bool has( const int frame );
+    bool has( const string &key );
 
     bool update( const string &key, const Detection &detection );
 
     Detection *load( const int frame );
-    Detection *load( const int frame, string &key );
-    Detection *loadAdvanceCursor( void );
-    Detection *loadAdvanceCursor( string &key );
+    Detection *load( const string &key );
 
     kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
 
+    int maxKey( void );
 
-    static std::string FrameToKey( const int frame );
+    static const std::string FrameToKey( const int frame );
+
+    kyotocabinet::DB::Cursor *cursor( void );
 
   protected:
 
-    kyotocabinet::DB::Cursor *cursor( void );
 
 
     HashDB _db;
