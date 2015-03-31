@@ -54,8 +54,8 @@ class CalibrationOpts {
     string boardName;
     string cameraName;
     int seekTo, intervalFrames;
-    int calibFlags;
-    string videoFile;
+    int calibFlags, randomize;
+    string videoFile, resultsFile;
     bool ignoreCache, retryUnregistered, saveBoardPoses, fixSkew;
     CalibrationType_t calibType;
 
@@ -124,6 +124,8 @@ class CalibrationOpts {
         { "seek-to", true, NULL, 's' },
         { "interval-frames", true, NULL, 'i' },
         { "save-board-poses", no_argument, NULL, 'S' },
+        { "random", required_argument, NULL, 'D' },
+        { "results-file", required-argument, NULL, 'Z' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -138,8 +140,14 @@ class CalibrationOpts {
       int indexPtr;
       int optVal;
       string c;
-      while( (optVal = getopt_long( argc, argv, "RSrs:i:b:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "D:Z:RSrs:i:b:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
+          case 'Z':
+            resultsFile = optarg;
+            break;
+          case 'Z':
+            random = atoi( optarg );
+            break;
           case 'd':
             dataDir = optarg;
             break;
