@@ -1,8 +1,8 @@
 cmake_minimum_required (VERSION 2.8)
 project (camera_calibration)
 
-set(MAKE_C_FLAGS, "-Wall")
-set(MAKE_CXX_FLAGS, "-Wall")
+set(MAKE_C_FLAGS, "-Wall -ggdb")
+set(MAKE_CXX_FLAGS, "-Wall -ggdb")
 
 set(MAKE_C_FLAGS_RELEASE, "-Werror")
 set(MAKE_CXX_FLAGS_RELEASE, "-Werror")
@@ -43,6 +43,8 @@ link_directories( ${PCL_LIBRARY_DIRS} )
 option( USE_APRILTAGS "Use AprilTags" ON )
 
 add_definitions( -std=c++11 )
+add_definitions( -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_CPP
+                 -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_TBB )
 
 if( USE_APRILTAGS )
 	add_definitions( -DUSE_APRILTAGS )

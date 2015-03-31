@@ -6,6 +6,11 @@
 #include <iostream>
 #include <iomanip>
 
+#include <mutex>
+
+#include <thrust/for_each.h>
+#include <thrust/host_vector.h>
+
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -233,42 +238,16 @@ class BuildDbMain
 
       if( opts.intervalSeconds > 0 ) opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
 
+      thrust::host_vector< pair<int, Mat> > frames;
       Mat img;
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-
-        Detection *detection = NULL;
-        cout << "Extracting from " << currentFrame << ". ";
+        cout << currentFrame << endl;
         if( !db.has( currentFrame ) || opts.doRewrite ) {
-
-          Mat grey;
-          cvtColor( img, grey, CV_BGR2GRAY );
-          vector<Point2f> pointbuf;
-
-          int64 before = getTickCount();
-          detection = board->detectPattern( grey, pointbuf );
-          addBenchmark( detection->size(), getTickCount() - before );
-
-          cout << detection->size() << " features" << endl;
-
-          if( !db.save( currentFrame, *detection) ) {
-            cerr << "set error: " << db.error().name() << endl;
-          }
-        } else {
-          cout << "Data exists, skipping..." << endl;
-
-          detection = db.load( currentFrame );
+          Mat foo;
+          img.copyTo(foo);
+          frames.push_back( make_pair( currentFrame, foo ) );
         }
-
-
-        if( opts.doDisplay ) {
-          if( detection ) detection->drawCorners( *board, img );
-
-          imshow("Extract",img );
-          waitKey( opts.waitKey );
-        }
-
-        delete detection;
 
         if( opts.intervalFrames > 1 ) {
           int destFrame = currentFrame + opts.intervalFrames - 1;
@@ -279,21 +258,68 @@ class BuildDbMain
             break;
           }
         }
-      }
+       }
+
+      cout << "Loaded " << frames.size() << " frames" << endl;
+
+      thrust::host_vector< pair< int, int64 > > timingData( frames.size() );
+      thrust::transform( frames.begin(), frames.end(), timingData.begin(), AprilTagDetectorFunctor( db, board ) );
+
+      if( opts.doBenchmark.size() > 0 ) saveBenchmarks( timingData );
 
       return 0;
+    }
+
+    struct AprilTagDetectorFunctor {
+      public:
+        AprilTagDetectorFunctor( DetectionDb &db, Board *board )
+          : _db(db), _board(board)
+        {;}
+
+        DetectionDb &_db;
+        Board *_board;
+
+        pair< int, int64 > operator()( const pair< int, Mat > &p )
+        {
+          const Mat &img( p.second );
+          int currentFrame = p.first;
+
+          Detection *detection = NULL;
+
+          cout << "Extracting from " << currentFrame << ". ";
+
+          Mat grey;
+          cvtColor( img, grey, CV_BGR2GRAY );
+          vector<Point2f> pointbuf;
+
+          int64 before = getTickCount();
+          detection = _board->detectPattern( grey, pointbuf );
+          int64 elapsed = getTickCount() - before;
+
+          cout << currentFrame << ": " << detection->size() << " features" << endl;
+
+          _db.save( currentFrame, *detection);
+
+          delete detection;
+
+          return make_pair( detection->size(), elapsed );
+        }
+    };
 
 
+    void saveBenchmarks( const thrust::host_vector< pair< int, int64 > > &timingData )
+    {
+      if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
+      for( thrust::host_vector< pair< int, int64 > >::const_iterator itr = timingData.begin();  itr != timingData.end(); ++itr )
+        addBenchmark( (*itr).first, (*itr).second );
     }
 
 
     void addBenchmark( int numPoints, int64 ticks )
     {
-      if( opts.doBenchmark.size() > 0 ) {
-        if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
-        
-        _benchmark << numPoints << ',' << ticks / getTickFrequency() << endl;
-      }
+      if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
+
+      _benchmark << numPoints << ',' << ticks / getTickFrequency() << endl;
     }
 
 
@@ -303,7 +329,6 @@ class BuildDbMain
 
     DetectionDb db;
     Board *board;
-
 
     ofstream _benchmark;
 };
