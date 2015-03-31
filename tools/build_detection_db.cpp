@@ -64,6 +64,8 @@ struct BuildDbOpts {
       strm <<  "This is a tool for extracting images from a video file." << endl;
       strm << setw( w ) <<  "--data-directory, -d" << "Set location of data directory." << endl;
       strm << setw( w ) << "--do-display, -x" << "Do display video" << endl;
+      strm << setw( w ) << "--do-benchmark [file]" << "Save benchmarking information to [file]" << endl;
+      strm << setw( w ) << "--do-rewrite" << "Extract features even if it already exists in database" << endl;
       //    "Usage: calibration\n"
       //    "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
       //    "     --board,-b <board_name>    # Name of calibration pattern\n"
@@ -220,8 +222,9 @@ class BuildDbMain
         return -1;
       }
 
+      mkdir_p( opts.cachePath() );
       if( ! db.open( opts.cachePath(), opts.inFile, true ) ) {
-        cerr << "Open error: " << db.error().name() << endl;
+        cerr << "Error opening database file: " << db.error().name() << endl;
         return -1;
       }
 

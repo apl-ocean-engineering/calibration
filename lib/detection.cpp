@@ -199,7 +199,7 @@ bool DetectionDb::open( const string &dbDir, const string &videoFile, bool write
 
 bool DetectionDb::open( const string &dbFile, bool writer )
 {
-  int flags = (writer ? (HashDB::OWRITER | HashDB::OCREATE) : (HashDB::OREADER) );
+  int flags = (writer==true) ? (HashDB::OWRITER | HashDB::OCREATE) : (HashDB::OREADER);
   if( !_db.open( dbFile, flags ) ) return false;
   return true;
 }

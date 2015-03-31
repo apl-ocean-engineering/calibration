@@ -96,7 +96,7 @@ Detection *AprilTagsBoard::detectPattern( const cv::Mat &gray, vector< cv::Point
   AprilTags::TagDetector tagDetector( _tagCode );
 
   vector<AprilTags::TagDetection> detections = tagDetector.extractTags(gray);
-  cout << "found " << detections.size() << " tags:" << endl;
+  //cout << "found " << detections.size() << " tags:" << endl;
 
   AprilTagsDetection *detect = new AprilTagsDetection( detections );
   detect->calculateCorners( *this );
