@@ -21,7 +21,7 @@ namespace AplCam {
       typedef vector< Detection * > DetectionMap;
 
       DetectionSet() 
-        : _detections(), _frames(), _bitmask()
+        : _detections(), _frames()
       {;}
 
 
@@ -38,7 +38,6 @@ namespace AplCam {
         if( detection ) {
           _detections.push_back( detection );
           _frames.push_back( frame );
-          _bitmask[frame] = true;
         }
       }
 
@@ -78,7 +77,6 @@ namespace AplCam {
 
       DetectionMap _detections;
       vector< int > _frames;
-      vector<bool> _bitmask;
   };
 
 }
