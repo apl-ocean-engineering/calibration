@@ -262,8 +262,10 @@ class BuildDbMain
             break;
         }
 
-        if( frames.size() > chunkSize ) processFrames( frames );
-        cout << endl;
+        if( frames.size() >= chunkSize ) {
+          processFrames( frames );
+          cout << endl;
+        }
       }
 
       processFrames( frames );
