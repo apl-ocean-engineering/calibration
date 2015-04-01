@@ -25,9 +25,9 @@ namespace AplCam {
 
     struct IntervalSplitterOpts {
       IntervalSplitterOpts()
-        : offset(0), interval(1) {;}
+        : start(0), end(-1), interval(1) {;}
 
-      int offset, interval;
+      int start, end, interval;
 
       static struct option long_options[];
       bool parseOpts( int argc, char **argv, string &msg );

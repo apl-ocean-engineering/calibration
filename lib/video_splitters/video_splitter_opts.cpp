@@ -36,7 +36,8 @@ namespace AplCam {
 
     //-- IntervalSplitterOpts --
     struct option IntervalSplitterOpts::long_options[] = {
-      { "offset", required_argument, NULL, 'o' },
+      { "start", required_argument, NULL, 's' },
+      { "end", required_argument, NULL, 'e' },
       { "interval", required_argument, NULL, 'i' },
       { 0, 0, 0, 0}
     };
@@ -45,20 +46,23 @@ namespace AplCam {
     {
       char optVal;
       int indexPtr;
-      while( (optVal = getopt_long( argc, argv, "i:o:", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "e:i:s:", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'i':
             interval = atoi( optarg );
             break;
-          case 'o':
-            offset = atoi( optarg );
+          case 's':
+            start = atoi( optarg );
+            break;
+          case 'e':
+            end = atoi( optarg );
             break;
           default:
             return false;
         }
       }
 
-      if( interval < 0 || offset < 0 ) {
+      if( interval <= 0 || start < 0 ) {
         msg = "Invalid interval or offset specified";
         return false;
       }

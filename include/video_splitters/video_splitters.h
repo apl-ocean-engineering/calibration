@@ -71,14 +71,16 @@ namespace AplCam {
     class IntervalVideoSplitter : public VideoSplitter {
       public:
         IntervalVideoSplitter( const IntervalSplitterOpts &opts )
-          : _offset( opts.offset ), _interval( opts.interval )
+          : _start( opts.start ), _end(opts.end), _interval( opts.interval )
         {;}
 
-        int _offset, _interval;
+        int _start, _end, _interval;
 
         virtual void generate( DetectionDb &db, DetectionSet &set )
         {
-          for( int i = _offset; i < db.maxKey(); i += _interval ) 
+          int e = std::min( _end, db.maxKey() );
+
+          for( int i = _start; i < e; i += _interval ) 
             set.addDetection( db,  i );
         }
 
