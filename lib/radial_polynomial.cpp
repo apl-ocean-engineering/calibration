@@ -98,28 +98,27 @@ namespace Distortion {
   {;}
 
 
-  // Static version uses a reasonable estimate based on image size
-  RadialPolynomial RadialPolynomial::Calibrate( 
-      const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints, 
-      const Size& image_size,
-      vector< Vec3d > &rvecs, 
-      vector< Vec3d > &tvecs,
-      int flags, 
-      cv::TermCriteria criteria)
-  {
-    RadialPolynomial fe( InitialDistortionEstimate(), InitialCameraEstimate( image_size ) );
-    fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
-    return fe;
-  }
+  //  // Static version uses a reasonable estimate based on image size
+  //  RadialPolynomial RadialPolynomial::Calibrate( 
+  //      const ObjectPointsVecVec &objectPoints, 
+  //      const ImagePointsVecVec &imagePoints, 
+  //      const Size& image_size,
+  //      vector< Vec3d > &rvecs, 
+  //      vector< Vec3d > &tvecs,
+  //      int flags, 
+  //      cv::TermCriteria criteria)
+  //  {
+  //    RadialPolynomial fe( InitialDistortionEstimate(), InitialCameraEstimate( image_size ) );
+  //    fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
+  //    return fe;
+  //  }
 
 
-  double RadialPolynomial::calibrate(
+  bool RadialPolynomial::doCalibrate(
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
       const Size& imageSize,
-      vector< Vec3d > &rvecs, 
-      vector< Vec3d > &tvecs,
+      CalibrationResult &result,
       int flags, 
       cv::TermCriteria criteria)
   {
@@ -129,11 +128,23 @@ namespace Distortion {
 
     vector<Mat> _rvecs, _tvecs;
 
+    ObjectPointsVecVec _objPts;
+    ImagePointsVecVec _imgPts;
+
+    for( int i = 0; i < objectPoints.size(); ++i ) {
+      if( result.status[i] ) {
+        _objPts.push_back( objectPoints[i] );
+        _imgPts.push_back( imagePoints[i] );
+      }
+    }
 
     //for( int i = 0; i < objectPoints.size(); ++i ) 
     //  cout << i << " " << objectPoints[i].size() << " " << imagePoints[i].size() << endl;
 
-    double rms = calibrateCamera( objectPoints, imagePoints, imageSize, camera, dist, _rvecs, _tvecs, flags, criteria );
+    int before = getTickCount();
+    result.rms = calibrateCamera( _objPts, _imgPts, imageSize, camera, dist, _rvecs, _tvecs, flags, criteria );
+    result.totalTime = (getTickCount() - before)/getTickFrequency();
+
 
     setCamera( camera );
 
@@ -148,21 +159,23 @@ namespace Distortion {
       _distCoeffs[7] = d[7];
     }
 
-    rvecs.resize( _rvecs.size() );
-    std::copy( _rvecs.begin(), _rvecs.end(), rvecs.begin() );
+    for( int i =0, k = 0; i < objectPoints.size(); ++i ) {
+      if( result.status[i] ) {
+        result.rvecs[i] = _rvecs[k];
+        result.tvecs[i] = _tvecs[k];
+        ++k;
+      }
+    }
 
-    tvecs.resize( _tvecs.size() );
-    std::copy( _tvecs.begin(), _tvecs.end(), tvecs.begin() );
-
-
-    return rms;
+    result.success = true;
+    return result.success;
   }
 
   void RadialPolynomial::projectPoints( const ObjectPointsVec &objectPoints, 
       const Vec3d &rvec, const Vec3d &tvec, ImagePointsVec &imagePoints, 
       OutputArray jacobian) const
   {
-    
+
     cv::projectPoints( objectPoints, rvec, tvec, mat(), Mat( _distCoeffs ), imagePoints, jacobian );
   }
 

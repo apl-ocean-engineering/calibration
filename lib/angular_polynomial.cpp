@@ -1,48 +1,6 @@
 //
 // Refactoring the OpenCV distortion model, starting with the AngularPolynomial model.
 // Based on a heavily hacked version of fisheye.cpp from OpenCV.
-//
-/*M///////////////////////////////////////////////////////////////////////////////////////
-//
-//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
-//
-//  By downloading, copying, installing or using the software you agree to this license.
-//  If you do not agree to this license, do not download, install,
-//  copy or use the software.
-//
-//
-//                           License Agreement
-//                For Open Source Computer Vision Library
-//
-// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
-// Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
-// Third party copyrights are property of their respective owners.
-//
-// Redistribution and use in source and binary forms, with or without modification,
-// are permitted provided that the following conditions are met:
-//
-//   * Redistribution's of source code must retain the above copyright notice,
-//     this list of conditions and the following disclaimer.
-//
-//   * Redistribution's in binary form must reproduce the above copyright notice,
-//     this list of conditions and the following disclaimer in the documentation
-//     and/or other materials provided with the distribution.
-//
-//   * The name of the copyright holders may not be used to endorse or promote products
-//     derived from this software without specific prior written permission.
-//
-// This software is provided by the copyright holders and contributors "as is" and
-// any express or implied warranties, including, but not limited to, the implied
-// warranties of merchantability and fitness for a particular purpose are disclaimed.
-// In no event shall the Intel Corporation or contributors be liable for any direct,
-// indirect, incidental, special, exemplary, or consequential damages
-// (including, but not limited to, procurement of substitute goods or services;
-// loss of use, data, or profits; or business interruption) however caused
-// and on any theory of liability, whether in contract, strict liability,
-// or tort (including negligence or otherwise) arising in any way out of
-// the use of this software, even if advised of the possibility of such damage.
-//
-//M*/
 
 #include <math.h>
 
@@ -96,19 +54,19 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
   {;}
 
   // Static version uses a reasonable estimate based on image size
-  AngularPolynomial AngularPolynomial::Calibrate( 
-      const ObjectPointsVecVec &objectPoints, 
-      const ImagePointsVecVec &imagePoints, 
-      const Size& image_size,
-      vector< Vec3d > &rvecs, 
-      vector< Vec3d > &tvecs,
-      int flags, 
-      cv::TermCriteria criteria)
-  {
-    AngularPolynomial fe( ZeroDistortion, Camera::InitialCameraEstimate( image_size ) );
-    fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
-    return fe;
-  }
+  //AngularPolynomial AngularPolynomial::Calibrate( 
+  //    const ObjectPointsVecVec &objectPoints, 
+  //    const ImagePointsVecVec &imagePoints, 
+  //    const Size& image_size,
+  //    vector< Vec3d > &rvecs, 
+  //    vector< Vec3d > &tvecs,
+  //    int flags, 
+  //    cv::TermCriteria criteria)
+  //{
+  //  AngularPolynomial fe( ZeroDistortion, Camera::InitialCameraEstimate( image_size ) );
+  //  fe.calibrate( objectPoints, imagePoints, image_size, rvecs, tvecs, flags, criteria );
+  //  return fe;
+  //}
 
 
 
@@ -189,21 +147,14 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     double worldX, worldY;
   };
 
-  double AngularPolynomial::calibrate(
+  bool AngularPolynomial::doCalibrate(
       const ObjectPointsVecVec &objectPoints, 
       const ImagePointsVecVec &imagePoints, 
       const Size& image_size,
-      vector< Vec3d > &rvecs, 
-      vector< Vec3d > &tvecs,
+      CalibrationResult &result,
       int flags, 
       cv::TermCriteria criteria)
   {
-
-    CV_Assert(!objectPoints.empty() && !imagePoints.empty() && objectPoints.size() == imagePoints.size());
-
-    //    CV_Assert(((flags & CALIB_USE_INTRINSIC_GUESS) && !K.empty() && !D.empty()) || !(flags & CALIB_USE_INTRINSIC_GUESS));
-
-    //-------------------------------Initialization
 
     // Check and see if the camera matrix has been initialized
     if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
@@ -213,24 +164,25 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     const double thresh_cond = 1e6;
 
-    rvecs.resize( objectPoints.size() );
-    tvecs.resize( objectPoints.size() );
-
     int totalPoints = 0;
+    int goodImages = 0;
 
     for( int i = 0; i < objectPoints.size(); ++i )  {
-      ImagePointsVec undistorted =  unwarp( normalize( imagePoints[i] ) );
-      
-      // Found the approach provided by initExtrinsics to be more reliable (!)
-      // will need to investigate why that is.
-      bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(), 
-          rvecs[i], tvecs[i], false, CV_ITERATIVE );
+      if( result.status[i] ) {
+        ImagePointsVec undistorted =  unwarp( normalize( imagePoints[i] ) );
 
-      //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
-      //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
-      //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
+        // Found the approach provided by initExtrinsics to be more reliable (!)
+        // will need to investigate why that is.
+        bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(), 
+            result.rvecs[i], result.tvecs[i], false, CV_ITERATIVE );
 
-      totalPoints += objectPoints[i].size();
+        //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
+        //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
+        //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
+
+        ++goodImages;
+        totalPoints += objectPoints[i].size();
+      }
     }
 
     double camera[9] = { _fx, _fy, _cx, _cy,
@@ -238,26 +190,28 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
       _distCoeffs[2], _distCoeffs[3] };
     double alpha = _alpha;
 
-    double *pose = new double[ objectPoints.size() * 6];
+    double *pose = new double[ goodImages * 6];
+    double *p = pose;
 
     google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
     ceres::Problem problem;
     for( int i = 0; i < objectPoints.size(); ++i ) {
+      if( result.status[i] ) {
 
-      double *p = &(pose[ i*6 ]);
+        // Mildly awkward
+        p[0] = result.rvecs[i][0];
+        p[1] = result.rvecs[i][1];
+        p[2] = result.rvecs[i][2];
+        p[3] = result.tvecs[i][0];
+        p[4] = result.tvecs[i][1];
+        p[5] = result.tvecs[i][2];
+        p += 6;
 
-      // Mildly awkward
-      p[0] = rvecs[i][0];
-      p[1] = rvecs[i][1];
-      p[2] = rvecs[i][2];
-      p[3] = tvecs[i][0];
-      p[4] = tvecs[i][1];
-      p[5] = tvecs[i][2];
-
-      for( int j = 0; j < imagePoints[i].size(); ++j ) {
-        ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j][0], imagePoints[i][j][1],
-            objectPoints[i][j][0], objectPoints[i][j][1] );
-        problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
+        for( int j = 0; j < imagePoints[i].size(); ++j ) {
+          ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j][0], imagePoints[i][j][1],
+              objectPoints[i][j][0], objectPoints[i][j][1] );
+          problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
+        }
       }
     }
 
@@ -273,20 +227,23 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << "\n";
 
-    rvecs.resize( objectPoints.size() );
-    tvecs.resize( objectPoints.size() );
+    p = pose;
     for( int i = 0; i < objectPoints.size(); ++i ) {
-      double *p = &(pose[ i*6 ]);
-
-      rvecs[i] = Vec3d( p );
-      tvecs[i] = Vec3d( &(p[3]) );
+      if( result.status[i] ) {
+        result.rvecs[i] = Vec3d( p );
+        result.tvecs[i] = Vec3d( &(p[3]) );
+        p += 6;
+      }
     }
 
     delete[] pose;
 
+    result.totalTime = summary.total_time_in_seconds;
+    result.success = summary.IsSolutionUsable();
+    result.rms = sqrt( summary.final_cost / (float)totalPoints );
+
     set(camera, alpha);
 
-    double rms = sqrt( summary.final_cost / (float)totalPoints );
 
     ////-------------------------------Validation
     //double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
@@ -298,7 +255,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;
 
-    return rms;
+    return true;
   }
 
 

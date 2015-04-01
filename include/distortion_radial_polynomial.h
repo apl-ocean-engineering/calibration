@@ -38,19 +38,12 @@ namespace Distortion {
 
       Vec8d distCoeffs( void ) const    { return _distCoeffs; }
 
-      static RadialPolynomial Calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
-
-      virtual double calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
+      //static RadialPolynomial Calibrate( const ObjectPointsVecVec &objectPoints, 
+      //    const ImagePointsVecVec &imagePoints, const Size& image_size,
+      //    vector< Vec3d > &rvecs, 
+      //    vector< Vec3d > &tvecs,
+      //    int flags = 0, 
+      //    cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
        virtual void projectPoints( const ObjectPointsVec &objectPoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
@@ -60,6 +53,12 @@ namespace Distortion {
       static RadialPolynomial *Load( cv::FileStorage &in );
 
     protected: 
+
+      virtual bool doCalibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          CalibrationResult &result,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
        virtual ImagePoint undistort( const ImagePoint &pw ) const;
        virtual ImagePoint distort( const Vec3f &w ) const ;

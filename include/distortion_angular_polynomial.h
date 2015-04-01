@@ -38,19 +38,12 @@ namespace Distortion {
 
       Vec4d distCoeffs( void ) const    { return _distCoeffs; }
 
-      static AngularPolynomial Calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
-
-      virtual double calibrate( const ObjectPointsVecVec &objectPoints, 
-          const ImagePointsVecVec &imagePoints, const Size& image_size,
-          vector< Vec3d > &rvecs, 
-          vector< Vec3d > &tvecs,
-          int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
+      //static AngularPolynomial Calibrate( const ObjectPointsVecVec &objectPoints, 
+      //    const ImagePointsVecVec &imagePoints, const Size& image_size,
+      //    vector< Vec3d > &rvecs, 
+      //    vector< Vec3d > &tvecs,
+      //    int flags = 0, 
+      //    cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
       virtual cv::FileStorage &write( cv::FileStorage &out ) const;
       static AngularPolynomial *Load( cv::FileStorage &in );
@@ -63,6 +56,13 @@ namespace Distortion {
 
 
     protected: 
+
+      virtual bool doCalibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          CalibrationResult &result,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
+
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
