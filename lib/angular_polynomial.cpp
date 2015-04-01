@@ -115,7 +115,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
         const T &k4 = camera[7];
 
         T theta2 =  theta*theta;
-        T theta4 =  theta2*theta2;
+        T theta4 = theta2*theta2;
         T theta6 = theta4*theta2;
         T theta8 = theta4*theta4;
 
@@ -160,14 +160,12 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
       setCamera( Camera::InitialCameraEstimate( image_size ) );
 
-    const int check_cond = flags & CALIB_CHECK_COND ? 1 : 0;
-
     const double thresh_cond = 1e6;
 
     int totalPoints = 0;
     int goodImages = 0;
 
-    for( int i = 0; i < objectPoints.size(); ++i )  {
+    for( size_t i = 0; i < objectPoints.size(); ++i )  {
       if( result.status[i] ) {
         ImagePointsVec undistorted =  unwarp( normalize( imagePoints[i] ) );
 
@@ -176,7 +174,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
         bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(), 
             result.rvecs[i], result.tvecs[i], false, CV_ITERATIVE );
 
-        //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << rvecs[i] << endl << tvecs[i] << endl;
+        //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << result.rvecs[i] << endl << result.tvecs[i] << endl;
         //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
         //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
 
@@ -196,7 +194,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
     ceres::Problem problem;
-    for( int i = 0, idx = 0; i < objectPoints.size(); ++i ) {
+    for( size_t i = 0, idx = 0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
 
         double *p = &( pose[idx*6] );
@@ -210,8 +208,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
         ++idx;
 
-        for( int j = 0; j < imagePoints[i].size(); ++j ) {
-          cout << imagePoints[i][j] << " " << objectPoints[i][j] << endl;
+        for( size_t j = 0; j < imagePoints[i].size(); ++j ) {
           ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j][0], imagePoints[i][j][1],
               objectPoints[i][j][0], objectPoints[i][j][1] );
           problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
@@ -231,10 +228,10 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << "\n";
 
-    for( int i = 0, idx=0; i < objectPoints.size(); ++i ) {
+    for( size_t i = 0, idx=0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
-        result.rvecs[i] = Vec3d( pose[idx*6] );
-        result.tvecs[i] = Vec3d( pose[idx*6+3] );
+        result.rvecs[i] = Vec3d( &(pose[idx*6]) );
+        result.tvecs[i] = Vec3d( &(pose[idx*6+3]) );
         ++idx;
       }
     }
@@ -243,17 +240,11 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     result.totalTime = summary.total_time_in_seconds;
     result.success = summary.IsSolutionUsable();
-    result.rms = sqrt( summary.final_cost / (float)totalPoints );
+    result.residual = sqrt( summary.final_cost / (float)totalPoints );
 
     set(camera, alpha);
 
-
-    ////-------------------------------Validation
-    //double rms = finalParam.estimateUncertainties(objectPoints, imagePoints,  omc, Tc, errors, err_std, thresh_cond,
-    //    check_cond );
-
-    ////-------------------------------
-    //set( finalParam );
+    result.rms = reprojectionError( objectPoints, result.rvecs, result.tvecs, imagePoints );
 
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;

@@ -419,7 +419,7 @@ namespace Distortion {
 
     double err = cv::norm( projPts, imgPts, NORM_L2 );
 
-    return (err*err) / objPts.size();
+    return sqrt( (err*err) / objPts.size() );
   }
 
   double PinholeCamera::reprojectionError( const ObjectPointsVecVec &objPts, 
@@ -428,7 +428,7 @@ namespace Distortion {
                                              const ImagePointsVecVec &imgPts )
   { 
     int numPoints = 0;
-    double rms;;
+    double rms = 0.0;
 
     for( size_t j = 0; j < objPts.size(); ++j ) {
 
@@ -442,7 +442,7 @@ namespace Distortion {
 
     }
 
-    return rms/numPoints;
+    return sqrt(rms/numPoints);
   }
 
 

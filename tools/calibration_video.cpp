@@ -468,11 +468,11 @@ int main( int argc, char** argv )
   if( result.success ) {
     //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
     cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
+    cout << "Residual reported by calibrateCamera: " << result.residual << endl;
 
     //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
     vector<float> reprojErrs;
-    double rmsErr = distModel->reprojectionError( objectPoints, result.rvecs, result.tvecs, imagePoints );
 
     string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
     cout << "Writing results to " << cameraFile << endl;
@@ -488,7 +488,7 @@ int main( int argc, char** argv )
         writeExtrinsics ? result.tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
         writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        rmsErr );
+        result.rms );
 
     if( opts.saveBoardPoses ) {
       for( size_t i = 0; i < detSet.size(); ++i ) {
