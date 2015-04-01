@@ -251,6 +251,13 @@ namespace Distortion {
         void getRectangles( const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
             cv::Rect_<float>& inner, cv::Rect_<float>& outer ) const;
 
+
+
+        double reprojectionError( const ObjectPointsVec &objPts, const Vec3d &rvec, const Vec3d &tvec, const ImagePointsVec &imgPts );
+
+        double reprojectionError( const ObjectPointsVecVec &obPtsj, const RotVec &rvecs, const TransVec &tvecs, 
+            const ImagePointsVecVec &imgPts );
+
     protected:
 
         double _fx, _fy, _alpha, _cx, _cy;

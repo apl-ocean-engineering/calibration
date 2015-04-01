@@ -204,34 +204,34 @@ class CalibrationOpts {
 };
 
 
-static double computeReprojectionErrors(
-    const DistortionModel *dist,
-    const Distortion::ObjectPointsVecVec &objectPoints,
-    const Distortion::ImagePointsVecVec &imagePoints,
-    const Distortion::RotVec &rvecs, 
-    const Distortion::TransVec &tvecs,
-    vector<float>& perViewErrors )
-{
-  ImagePointsVec reprojImgPoints;
-  int i, totalPoints = 0;
-  double totalErr = 0, err;
-  perViewErrors.resize(objectPoints.size());
-
-  for( i = 0; i < (int)objectPoints.size(); i++ )
-  {
-    if( objectPoints[i].size() > 0 ) {
-      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
-
-      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
-      int n = (int)objectPoints[i].size();
-      perViewErrors[i] = (float)std::sqrt(err*err/n);
-      totalErr += err*err;
-      totalPoints += n;
-    }
-  }
-
-  return std::sqrt(totalErr/totalPoints);
-}
+//static double computeReprojectionErrors(
+//    const DistortionModel *dist,
+//    const Distortion::ObjectPointsVecVec &objectPoints,
+//    const Distortion::ImagePointsVecVec &imagePoints,
+//    const Distortion::RotVec &rvecs, 
+//    const Distortion::TransVec &tvecs,
+//    vector<float>& perViewErrors )
+//{
+//  ImagePointsVec reprojImgPoints;
+//  int i, totalPoints = 0;
+//  double totalErr = 0, err;
+//  perViewErrors.resize(objectPoints.size());
+//
+//  for( i = 0; i < (int)objectPoints.size(); i++ )
+//  {
+//    if( objectPoints[i].size() > 0 ) {
+//      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
+//
+//      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
+//      int n = (int)objectPoints[i].size();
+//      perViewErrors[i] = (float)std::sqrt(err*err/n);
+//      totalErr += err*err;
+//      totalPoints += n;
+//    }
+//  }
+//
+//  return std::sqrt(totalErr/totalPoints);
+//}
 
 static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
@@ -473,9 +473,7 @@ int main( int argc, char** argv )
 
   bool ok = true;
 
-  vector<float> reprojErrs;
-  double totalAvgErr = 0;
-  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
+  double rmsErr = distModel->reprojectionError( objectPoints, rvecs, tvecs, imagePoints );
 
   if( ok ) {
     saveCameraParams( cameraFile, imageSize,
@@ -485,7 +483,7 @@ int main( int argc, char** argv )
         writeExtrinsics ? tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
         writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        totalAvgErr );
+        rmsErr );
   }
   //
   //
