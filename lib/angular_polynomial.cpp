@@ -220,8 +220,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;
-    options.max_num_iterations = 1000;
-    options.num_threads = 1;
+    options.max_num_iterations = 200;
     options.minimizer_progress_to_stdout = true;
 
     ceres::Solver::Summary summary;
