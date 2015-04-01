@@ -473,6 +473,7 @@ int main( int argc, char** argv )
 
   bool ok = true;
 
+  vector<float> reprojErrs;
   double rmsErr = distModel->reprojectionError( objectPoints, rvecs, tvecs, imagePoints );
 
   if( ok ) {
@@ -612,13 +613,7 @@ int main( int argc, char** argv )
   //    }
   //
 
-  // Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
-  // error messages
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
-  cout << "Writing results to " << cameraFile << endl;
-
+  
   delete board;
 
   return 0;

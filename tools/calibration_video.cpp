@@ -155,7 +155,7 @@ class CalibrationOpts {
       int indexPtr;
       int optVal;
       string c;
-      
+
       // The '+' option ensures it stops on the first non-conforming option. Required for the
       //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
       // pattern I'm using
@@ -227,7 +227,7 @@ class CalibrationOpts {
         success = intervalSplitterOpts.parseOpts( argc, argv, msg );
       } else {
         msgstrm << "Don't understand verb \"" << verb << "\"";
-msg = msgstrm.str();
+        msg = msgstrm.str();
         return false;
       }
 
@@ -271,36 +271,6 @@ class ResultsFile {
     HashDB _db;
     bool _isOpen;
 };
-
-
-//static double computeReprojectionErrors(
-//    const DistortionModel *dist,
-//    const Distortion::ObjectPointsVecVec &objectPoints,
-//    const Distortion::ImagePointsVecVec &imagePoints,
-//    const Distortion::RotVec &rvecs, 
-//    const Distortion::TransVec &tvecs,
-//    vector<float>& perViewErrors )
-//{
-//  ImagePointsVec reprojImgPoints;
-//  int i, totalPoints = 0;
-//  double totalErr = 0, err;
-//  perViewErrors.resize(objectPoints.size());
-//
-//  for( i = 0; i < (int)objectPoints.size(); i++ )
-//  {
-//    if( objectPoints[i].size() > 0 ) {
-//      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
-//
-//      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
-//      int n = (int)objectPoints[i].size();
-//      perViewErrors[i] = (float)std::sqrt(err*err/n);
-//      totalErr += err*err;
-//      totalPoints += n;
-//    }
-//  }
-//
-//  return std::sqrt(totalErr/totalPoints);
-//}
 
 static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
@@ -381,7 +351,7 @@ static void saveCameraParams( const string& filename,
   if( !imagePoints.empty() )
   {
     Mat imagePtMat((int)imagePoints.size(), (int)imagePoints[0].size(), CV_32FC2);
-    for( int i = 0; i < (int)imagePoints.size(); i++ )
+    for( size_t i = 0; i < imagePoints.size(); i++ )
     {
       Mat r = imagePtMat.row(i).reshape(2, imagePtMat.cols);
       Mat imgpti(imagePoints[i]);
@@ -492,20 +462,18 @@ int main( int argc, char** argv )
   }
 
   CalibrationResult result;
-  double rms = distModel->calibrate( objectPoints, imagePoints, 
+  distModel->calibrate( objectPoints, imagePoints, 
       imageSize, result, flags );
 
-  //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-  printf("RMS error reported by calibrateCamera: %g\n", rms);
+  if( result.success ) {
+    //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
+    cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
 
-  //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+    //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
-  bool ok = true;
+    vector<float> reprojErrs;
+    double rmsErr = distModel->reprojectionError( objectPoints, result.rvecs, result.tvecs, imagePoints );
 
-  //vector<float> reprojErrs;
-  double rmsErr = distModel->reprojectionError( objectPoints, result.rvecs, result.tvecs, imagePoints );
-
-  if( ok ) {
     string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
     cout << "Writing results to " << cameraFile << endl;
 
@@ -520,7 +488,7 @@ int main( int argc, char** argv )
         writeExtrinsics ? result.tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
         writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        totalAvgErr );
+        rmsErr );
 
     if( opts.saveBoardPoses ) {
       for( size_t i = 0; i < detSet.size(); ++i ) {
@@ -532,11 +500,14 @@ int main( int argc, char** argv )
           cerr << "Trouble saving updated poses: " << db.error().name() << endl;
       }
     }
+
+  } else {
+    cout << "Calibration failed." << endl;
   }
 
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
+  //printf("%s. avg reprojection error = %.2f\n",
+  //    ok ? "Calibration succeeded" : "Calibration failed",
+  //    totalAvgErr);
 
   delete distModel;
   delete board;
