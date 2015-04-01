@@ -14,7 +14,7 @@ namespace AplCam {
     {
       char optVal;
       int indexPtr;
-      while( (optVal = getopt_long( argc, argv, "c", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "c:", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'c':
             count = atol( optarg );
@@ -22,8 +22,14 @@ namespace AplCam {
           default:
             return false;
         }
-        return true;
       }
+
+      if( count < 0 ) {
+        msg = "Must specify count with -c option";
+        return false;
+      }
+
+      return true;
     }
 
 
@@ -38,7 +44,7 @@ namespace AplCam {
     {
       char optVal;
       int indexPtr;
-      while( (optVal = getopt_long( argc, argv, "io", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "i:o:", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'i':
             interval = atoi( optarg );
@@ -49,8 +55,14 @@ namespace AplCam {
           default:
             return false;
         }
-        return true;
       }
+
+      if( interval < 0 || offset < 0 ) {
+        msg = "Invalid interval or offset specified";
+        return false;
+      }
+
+      return true;
     }
 
   }

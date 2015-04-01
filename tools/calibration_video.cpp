@@ -155,7 +155,11 @@ class CalibrationOpts {
       int indexPtr;
       int optVal;
       string c;
-      while( (optVal = getopt_long( argc, argv, "Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      
+      // The '+' option ensures it stops on the first non-conforming option. Required for the
+      //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
+      // pattern I'm using
+      while( (optVal = getopt_long( argc, argv, "+Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'Z':
             resultsFile = optarg;
@@ -210,14 +214,15 @@ class CalibrationOpts {
       }
 
       // Next, expect a verb
-      char *verb = argv[ optind ];
+      char *verb = argv[ optind++ ];
       bool success = false;
-      if( strcasecmp( verb, "all" ) ) {
+      if( !strcasecmp( verb, "all" ) ) {
         splitter = SPLIT_ALL;
-      } else if( strcasecmp( verb, "random" ) ) {
+        success = true;
+      } else if( !strcasecmp( verb, "random" ) ) {
         splitter = SPLIT_RANDOM;
         success = randomSplitterOpts.parseOpts( argc, argv, msg );
-      } else if( strcasecmp( verb, "interval" ) ) {
+      } else if( !strcasecmp( verb, "interval" ) ) {
         splitter = SPLIT_INTERVAL;
         success = intervalSplitterOpts.parseOpts( argc, argv, msg );
       } else {
@@ -486,8 +491,9 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
+  CalibrationResult result;
   double rms = distModel->calibrate( objectPoints, imagePoints, 
-      imageSize, rvecs, tvecs, flags );
+      imageSize, result, flags );
 
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
   printf("RMS error reported by calibrateCamera: %g\n", rms);
@@ -498,7 +504,7 @@ int main( int argc, char** argv )
 
   vector<float> reprojErrs;
   double totalAvgErr = 0;
-  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
+  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, result.rvecs, result.tvecs, reprojErrs );
 
   if( ok ) {
     string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
@@ -511,8 +517,8 @@ int main( int argc, char** argv )
     saveCameraParams( cameraFile, imageSize,
         *board, imagesUsed, aspectRatio,
         flags, distModel,
-        writeExtrinsics ? rvecs : vector<Vec3d>(),
-        writeExtrinsics ? tvecs : vector<Vec3d>(),
+        writeExtrinsics ? result.rvecs : vector<Vec3d>(),
+        writeExtrinsics ? result.tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
         writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
         totalAvgErr );
@@ -520,8 +526,8 @@ int main( int argc, char** argv )
     if( opts.saveBoardPoses ) {
       for( int i = 0; i < detSet.size(); ++i ) {
         Detection &det( detSet[i] );
-        det.rot = rvecs[i];
-        det.trans = tvecs[i];
+        det.rot = result.rvecs[i];
+        det.trans = result.tvecs[i];
 
         if( ! db.update( detSet[i].frame, det ) )
           cerr << "Trouble saving updated poses: " << db.error().name() << endl;

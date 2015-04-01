@@ -22,6 +22,8 @@ struct Detection
   Detection(  )
     : found(false), points(), corners(), ids(), trans(0,0,0), rot(0,0,0), hasTrans(false), hasRot(false) {;}
 
+  virtual ~Detection() {;}
+
   bool found;
   Distortion::ImagePointsVec points;
   Distortion::ObjectPointsVec corners;

@@ -34,7 +34,7 @@ namespace AplCam {
         {
           DB::Cursor *cur = db.cursor();
           string key;
-          while( cur->get_key( &key, false ) ) set.addDetection( db, stoi(key) );
+          while( cur->get_key( &key, true ) ) set.addDetection( db, stoi(key) );
           delete cur;
 
         }
@@ -56,7 +56,7 @@ namespace AplCam {
           cur->jump();
 
           string key;
-          while( cur->get_key( &key, false ) ) keys.push_back(key);
+          while( cur->get_key( &key, true) ) keys.push_back(key);
           delete cur;
 
           long int c = std::max( _count, (long int)keys.size() );

@@ -89,7 +89,7 @@ Detection *Detection::loadCache( const string &cacheFile )
 Detection *Detection::unserializeFromFileStorage( const FileStorage &fs )
 {
 
-  Detection *detection = detection = new Detection();
+  Detection *detection = new Detection();
 
   // Load and validate data
   Mat pts;
@@ -224,9 +224,8 @@ bool DetectionDb::has( const string &key )
 
 bool DetectionDb::update( const int frame, const Detection &detection )
 {
-  update( FrameToKey( frame ), detection );
+  return update( FrameToKey( frame ), detection );
 }
-
 
 
 bool DetectionDb::update( const string &key, const Detection &detection )
