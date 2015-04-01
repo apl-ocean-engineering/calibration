@@ -155,7 +155,7 @@ namespace AplCam {
   //===========================================================================
 
   FeatureTracker::KeyPointTrack::KeyPointTrack( const Mat &patch, MotionModel *model )
-    : _patch(), _motionModel(model), refeatured(3)
+    : _motionModel(model), _patch(), refeatured(3)
   {
     patch.convertTo( _patch, CV_32FC1, 1.0/255.0 );
   }

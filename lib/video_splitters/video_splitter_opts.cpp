@@ -1,3 +1,4 @@
+#include <stdlib.h>
 
 #include "video_splitters/video_splitter_opts.h"
 
