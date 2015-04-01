@@ -222,6 +222,11 @@ bool DetectionDb::has( const string &key )
   return (_db.check( key ) != -1 ); 
 }
 
+bool DetectionDb::update( const int frame, const Detection &detection )
+{
+  update( FrameToKey( frame ), detection );
+}
+
 
 
 bool DetectionDb::update( const string &key, const Detection &detection )

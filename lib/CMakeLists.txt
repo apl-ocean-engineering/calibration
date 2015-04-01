@@ -17,7 +17,8 @@ add_library( lib_camera_calibration
         camera_factory.cpp
         distortion_stereo.cpp
         stereo_calibration.cpp 
-        feature_tracker.cpp )
+        feature_tracker.cpp
+        video_splitters/video_splitter_opts.cpp )
 
 target_include_directories( lib_camera_calibration 
 	PUBLIC ${CMAKE_SOURCE_DIR}/include )

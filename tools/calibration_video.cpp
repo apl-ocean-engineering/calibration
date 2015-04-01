@@ -6,6 +6,7 @@
 #include <cctype>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <getopt.h>
 
@@ -21,7 +22,15 @@ using namespace Distortion;
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
+#include "detection_set.h"
 #include "image.h"
+using namespace AplCam;
+
+#include "video_splitters/video_splitter_opts.h"
+#include "video_splitters/video_splitters.h"
+using namespace AplCam::VideoSplitters;
+
+
 
 using namespace cv;
 using namespace std;
@@ -35,11 +44,12 @@ class CalibrationOpts {
 
     typedef enum { ANGULAR_POLYNOMIAL, RADIAL_POLYNOMIAL } CalibrationType_t;
 
+    typedef enum { SPLIT_ALL, SPLIT_RANDOM, SPLIT_INTERVAL, SPLIT_NONE = -1 } SplitterType_t;
+
     CalibrationOpts()
       : dataDir("data"),
       boardName(), cameraName(),
-      seekTo( 0 ), intervalFrames( -1 ),
-      calibFlags(0), randomize(-1),
+      calibFlags(0), 
       videoFile(),
       ignoreCache( false ), saveBoardPoses( false ), fixSkew( false ),
       calibType( ANGULAR_POLYNOMIAL )
@@ -47,7 +57,6 @@ class CalibrationOpts {
 
     bool validate( string &msg)
     {
-      //if( boardName.empty() ) { msg = "Board name not set"; return false; }
       if( cameraName.empty() ) { msg = "Camera name not set"; return false; }
 
       return true;
@@ -61,6 +70,10 @@ class CalibrationOpts {
     string videoFile, resultsFile;
     bool ignoreCache, retryUnregistered, saveBoardPoses, fixSkew;
     CalibrationType_t calibType;
+    SplitterType_t splitter;
+
+    IntervalSplitterOpts intervalSplitterOpts;
+    RandomSplitterOpts randomSplitterOpts;
 
     const string boardPath( void )
     { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -114,8 +127,10 @@ class CalibrationOpts {
     }
 
 
-    void parseOpts( int argc, char **argv )
+    bool parseOpts( int argc, char **argv, string &msg )
     {
+      stringstream msgstrm;
+
       static struct option long_options[] = {
         { "data-directory", true, NULL, 'd' },
         { "board", true, NULL, 'b' },
@@ -124,10 +139,7 @@ class CalibrationOpts {
         { "ignore-cache", false, NULL, 'R' },
         { "fix-skew", false, NULL, 'k'},
         { "retry-unregistered", false, NULL, 'r' },
-        { "seek-to", true, NULL, 's' },
-        { "interval-frames", true, NULL, 'i' },
         { "save-board-poses", no_argument, NULL, 'S' },
-        { "random", required_argument, NULL, 'D' },
         { "results-file", required_argument, NULL, 'Z' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
@@ -137,19 +149,16 @@ class CalibrationOpts {
       if( argc < 2 )
       {
         help();
-        exit(1);
+        return false;
       }
 
       int indexPtr;
       int optVal;
       string c;
-      while( (optVal = getopt_long( argc, argv, "D:Z:RSrs:i:b:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'Z':
             resultsFile = optarg;
-            break;
-          case 'D':
-            randomize = atoi( optarg );
             break;
           case 'd':
             dataDir = optarg;
@@ -166,12 +175,6 @@ class CalibrationOpts {
           case 'S':
             saveBoardPoses = true;
             break;
-          case 's':
-            seekTo = atoi( optarg );
-            break;
-          case 'i':
-            intervalFrames = atoi( optarg );
-            break;
           case 'k':
             calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
             break;
@@ -186,7 +189,7 @@ class CalibrationOpts {
               calibFlags |= CV_CALIB_RATIONAL_MODEL;
             } else {
               cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
-              exit(-1);
+              return false;
             }
             break;
           case 'r':
@@ -196,23 +199,53 @@ class CalibrationOpts {
             help();
             break;
           default:
-            exit(-1);
+            return false;
 
         }
+      }
+
+      if( optind >= argc ) {
+        msg = "Must specify splitter type on command line";
+        return false;
+      }
+
+      // Next, expect a verb
+      char *verb = argv[ optind ];
+      bool success = false;
+      if( strcasecmp( verb, "all" ) ) {
+        splitter = SPLIT_ALL;
+      } else if( strcasecmp( verb, "random" ) ) {
+        splitter = SPLIT_RANDOM;
+        success = randomSplitterOpts.parseOpts( argc, argv, msg );
+      } else if( strcasecmp( verb, "interval" ) ) {
+        splitter = SPLIT_INTERVAL;
+        success = intervalSplitterOpts.parseOpts( argc, argv, msg );
+      } else {
+        msgstrm << "Don't understand verb \"" << verb << "\"";
+msg = msgstrm.str();
+        return false;
+      }
+
+      if( success == false ) return success;
+
+
+      if( optind >= argc ) {
+        msg = "Must specify video file on command line";
+        return false;
       }
 
       videoFile = argv[ optind ];
 
       if( !file_exists( videoFile ) ) {
         cerr << "Can't open video file " << videoFile << endl;
-        exit(-1);
+        return false;
       }
 
-      string msg;
       if( !validate( msg ) ) {
-        cout << "Error: " <<  msg << endl;
-        exit(-1);
+        return false;
       }
+
+      return true;
     }
 
 
@@ -233,93 +266,6 @@ class ResultsFile {
     HashDB _db;
     bool _isOpen;
 };
-
-class DetectionSet {
-  public:
-
-    typedef map< const int, Detection * > DetectionMap;
-
-    DetectionSet() 
-      : _detections(), _bitmask()
-    {;}
-
-
-    ~DetectionSet( void )
-    {
-      for( DetectionMap::iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) delete itr->second;
-    }
-
-    //== Functions for initializing the DetectionSet ==
-    //
-    void addAll( DetectionDb &db )
-    {
-      DB::Cursor *cur = db.cursor();
-      string key;
-      while( cur->get_key( &key, false ) ) addDetection( db, stoi(key) );
-      delete cur;
-    }
-
-    void addEveryNth( DetectionDb &db, int offset, int interval )
-    {
-      for( int i = offset; i < db.maxKey(); i += interval ) 
-        addDetection( db,  i );
-    }
-
-    void addRandomSubset( DetectionDb &db, long int number )
-    {
-      vector< string > keys;
-
-      DB::Cursor *cur = db.cursor();
-      cur->jump();
-
-      string key;
-      while( cur->get_key( &key, false ) ) keys.push_back(key);
-      delete cur;
-
-      number = std::max( number, (long int)keys.size() );
-
-      std::random_shuffle( keys.begin(), keys.end() );
-      keys.resize( number );
-      _bitmask.clear();
-      _bitmask.resize( number, false );
-
-      for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) addDetection( db, stoi(key) );
-    }
-
-    void addDetection( DetectionDb &db, const int frame )
-    { 
-      Detection *detection = db.load( frame );
-        if( detection ) {
-          _detections.insert( make_pair( frame, detection ) );
-          _bitmask[frame] = true;
-        }
-    }
-
-
-    //==
-
-    int imageObjectPoints( ImagePointsVecVec &imgPts, ObjectPointsVecVec &objPts )
-    {
-      int count = 0;
-      for( DetectionMap::iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) {
-        Detection &det( *(itr->second) );
-        if( det.corners.size() > 3 ) {
-          imgPts.push_back( det.points );
-          objPts.push_back( det.corners );
-          count += det.corners.size();
-        }
-      }
-
-      return count;
-    }
-
-
-    DetectionMap _detections;
-    vector<bool> _bitmask;
-};
-
-
-
 
 
 static double computeReprojectionErrors(
@@ -458,19 +404,21 @@ int main( int argc, char** argv )
 
   CalibrationOpts opts;
 
-  opts.parseOpts( argc, argv );
+  string optsMsg;
+  if( !opts.parseOpts( argc, argv, optsMsg ) ) {
+    cout << optsMsg << endl;
+    exit(-1);
+  }
 
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
   Size imageSize;
   float aspectRatio = 1.f;
-  bool writeExtrinsics = false, writePoints = false;
 
   Distortion::ImagePointsVecVec imagePoints;
   Distortion::ObjectPointsVecVec objectPoints;
 
   DetectionDb db;
-  DetectionSet detSet;
 
   if( ! db.open( opts.cachePath(), opts.videoFile, 
         ( opts.saveBoardPoses == true ? true : false ) ) ) {
@@ -489,15 +437,24 @@ int main( int argc, char** argv )
   // Get image size
   imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
 
-  vector< pair< string, Detection * > > detections;
-
-  if( opts.randomize != 0 ) {
-    detSet.addRandomSubset( db, opts.randomize );
-  } else if( opts.intervalFrames > 0 ) {
-    detSet.addEveryNth( db,  opts.seekTo, opts.intervalFrames );
-  } else {
-    detSet.addAll( db );
+  DetectionSet detSet;
+  switch( opts.splitter ) {
+    case CalibrationOpts::SPLIT_ALL:
+      AllVideoSplitter().generate( db, detSet );
+      break;
+    case CalibrationOpts::SPLIT_RANDOM:
+      RandomVideoSplitter( opts.randomSplitterOpts ).generate( db, detSet );
+      break;
+    case CalibrationOpts::SPLIT_INTERVAL:
+      IntervalVideoSplitter( opts.intervalSplitterOpts ).generate( db, detSet );
+      break;
+    default:
+      cerr << "Unknown video splitter." << endl;
+      exit(-1);
   }
+
+
+  cout << "Have detection set with " << detSet.size() << " points" << endl;
 
 
   int count = detSet.imageObjectPoints( imagePoints, objectPoints );
@@ -548,6 +505,9 @@ int main( int argc, char** argv )
     cout << "Writing results to " << cameraFile << endl;
 
     vector<Image> imagesUsed;
+    bool writeExtrinsics = false,
+         writePoints = false;
+
     saveCameraParams( cameraFile, imageSize,
         *board, imagesUsed, aspectRatio,
         flags, distModel,
@@ -558,22 +518,16 @@ int main( int argc, char** argv )
         totalAvgErr );
 
     if( opts.saveBoardPoses ) {
-      for( int i = 0; i < detections.size(); ++i ) {
-        Detection *det = detections[i].second;
-        det->rot = rvecs[i];
-        det->trans = tvecs[i];
+      for( int i = 0; i < detSet.size(); ++i ) {
+        Detection &det( detSet[i] );
+        det.rot = rvecs[i];
+        det.trans = tvecs[i];
 
-        if( ! db.update( detections[i].first, *det ) )
+        if( ! db.update( detSet[i].frame, det ) )
           cerr << "Trouble saving updated poses: " << db.error().name() << endl;
       }
     }
   }
-
-  for( int i = 0; i < detections.size(); ++i ) {
-    delete detections[i].second;
-  }
-
-
 
   printf("%s. avg reprojection error = %.2f\n",
       ok ? "Calibration succeeded" : "Calibration failed",
