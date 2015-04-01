@@ -93,14 +93,14 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
         //    2 camera center
         //    4 distortion params
         //
+        // pose[0,1,2] are an angle-axis rotation.
         //
-        // camera[0,1,2] are the angle-axis rotation.
-        T point[3] = { T( worldX ), 
-          T( worldY ), 
-          T( 0.0 ) };
+        T point[3] = { T( worldX ), T( worldY ), T( 0.0 ) };
         T p[3];
         ceres::AngleAxisRotatePoint(pose, point, p);
-        p[0] += pose[3]; p[1] += pose[4]; p[2] += pose[5];
+        p[0] += pose[3]; 
+        p[1] += pose[4]; 
+        p[2] += pose[5];
 
         T theta = atan2( sqrt( p[0]*p[0] + p[1]*p[1] ), p[2]  );
         T psi   = atan2( p[1], p[0] );
@@ -185,19 +185,21 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
       }
     }
 
+    cout << "From " << objectPoints.size() << " images, using " << totalPoints << " from " << goodImages << " images" << endl;
+
     double camera[9] = { _fx, _fy, _cx, _cy,
       _distCoeffs[0], _distCoeffs[1],
       _distCoeffs[2], _distCoeffs[3] };
     double alpha = _alpha;
 
     double *pose = new double[ goodImages * 6];
-    double *p = pose;
 
     google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
     ceres::Problem problem;
-    for( int i = 0; i < objectPoints.size(); ++i ) {
+    for( int i = 0, idx = 0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
 
+        double *p = &( pose[idx*6] );
         // Mildly awkward
         p[0] = result.rvecs[i][0];
         p[1] = result.rvecs[i][1];
@@ -205,9 +207,11 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
         p[3] = result.tvecs[i][0];
         p[4] = result.tvecs[i][1];
         p[5] = result.tvecs[i][2];
-        p += 6;
+
+        ++idx;
 
         for( int j = 0; j < imagePoints[i].size(); ++j ) {
+          cout << imagePoints[i][j] << " " << objectPoints[i][j] << endl;
           ceres::CostFunction *costFunction = CalibReprojectionError::Create( imagePoints[i][j][0], imagePoints[i][j][1],
               objectPoints[i][j][0], objectPoints[i][j][1] );
           problem.AddResidualBlock( costFunction, NULL, camera, &alpha, p );
@@ -219,20 +223,19 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_SCHUR;
-    options.max_num_iterations = 200;
-    options.num_threads = 2;
+    options.max_num_iterations = 1000;
+    options.num_threads = 1;
     options.minimizer_progress_to_stdout = true;
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << "\n";
 
-    p = pose;
-    for( int i = 0; i < objectPoints.size(); ++i ) {
+    for( int i = 0, idx=0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
-        result.rvecs[i] = Vec3d( p );
-        result.tvecs[i] = Vec3d( &(p[3]) );
-        p += 6;
+        result.rvecs[i] = Vec3d( pose[idx*6] );
+        result.tvecs[i] = Vec3d( pose[idx*6+3] );
+        ++idx;
       }
     }
 
