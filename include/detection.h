@@ -22,6 +22,8 @@ struct Detection
   Detection(  )
     : found(false), points(), corners(), ids(), trans(0,0,0), rot(0,0,0), hasTrans(false), hasRot(false) {;}
 
+  virtual ~Detection() {;}
+
   bool found;
   Distortion::ImagePointsVec points;
   Distortion::ObjectPointsVec corners;
@@ -77,6 +79,7 @@ class DetectionDb {
     bool has( const int frame );
     bool has( const string &key );
 
+    bool update( const int frame, const Detection &detection );
     bool update( const string &key, const Detection &detection );
 
     Detection *load( const int frame );

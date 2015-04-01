@@ -35,6 +35,35 @@ namespace Distortion {
 
   typedef vector< Vec3d > RotVec, TransVec;
 
+
+ struct CalibrationResult {
+   CalibrationResult()
+     : success(false),
+       totalTime(-1.0), rms(-1.0), residual(-1.0),
+       rvecs(),
+       tvecs(),
+       status()
+   {;}
+
+   void resize( size_t sz )
+   {
+     success = false;
+     totalTime = -1.0;
+     residual = rms = -1.0;
+     rvecs.resize( sz, Vec3d(0,0,0) );
+     tvecs.resize( sz, Vec3d(0,0,0) );
+     status.resize( sz, false );
+   }
+
+
+   bool success;
+   double totalTime, rms, residual;
+
+   RotVec rvecs;
+   TransVec tvecs;
+   vector< bool > status;
+ };
+
   class Camera {
     public:
 
@@ -42,12 +71,18 @@ namespace Distortion {
 
       virtual const std::string name( void ) const = 0;
 
-      virtual double calibrate( const ObjectPointsVecVec &objectPoints, 
+      double calibrate( const ObjectPointsVecVec &objectPoints, 
           const ImagePointsVecVec &imagePoints, const Size& image_size,
           vector< Vec3d > &rvecs, 
           vector< Vec3d > &tvecs,
           int flags = 0, 
-          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  ) { return -1; }
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );  
+
+      bool calibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          CalibrationResult &result,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
           const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
@@ -62,6 +97,12 @@ namespace Distortion {
       }
 
     protected:
+
+      virtual bool doCalibrate( const ObjectPointsVecVec &objectPoints, 
+          const ImagePointsVecVec &imagePoints, const Size& image_size,
+          CalibrationResult &result,
+          int flags = 0, 
+          cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  ) {return false; };
 
 
       Camera() {;}
@@ -209,6 +250,13 @@ namespace Distortion {
 
         void getRectangles( const Mat &R, const Mat &newCameraMatrix, const Size &imgSize,
             cv::Rect_<float>& inner, cv::Rect_<float>& outer ) const;
+
+
+
+        double reprojectionError( const ObjectPointsVec &objPts, const Vec3d &rvec, const Vec3d &tvec, const ImagePointsVec &imgPts );
+
+        double reprojectionError( const ObjectPointsVecVec &obPtsj, const RotVec &rvecs, const TransVec &tvecs, 
+            const ImagePointsVecVec &imgPts );
 
     protected:
 

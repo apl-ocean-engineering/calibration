@@ -204,34 +204,34 @@ class CalibrationOpts {
 };
 
 
-static double computeReprojectionErrors(
-    const DistortionModel *dist,
-    const Distortion::ObjectPointsVecVec &objectPoints,
-    const Distortion::ImagePointsVecVec &imagePoints,
-    const Distortion::RotVec &rvecs, 
-    const Distortion::TransVec &tvecs,
-    vector<float>& perViewErrors )
-{
-  ImagePointsVec reprojImgPoints;
-  int i, totalPoints = 0;
-  double totalErr = 0, err;
-  perViewErrors.resize(objectPoints.size());
-
-  for( i = 0; i < (int)objectPoints.size(); i++ )
-  {
-    if( objectPoints[i].size() > 0 ) {
-      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
-
-      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
-      int n = (int)objectPoints[i].size();
-      perViewErrors[i] = (float)std::sqrt(err*err/n);
-      totalErr += err*err;
-      totalPoints += n;
-    }
-  }
-
-  return std::sqrt(totalErr/totalPoints);
-}
+//static double computeReprojectionErrors(
+//    const DistortionModel *dist,
+//    const Distortion::ObjectPointsVecVec &objectPoints,
+//    const Distortion::ImagePointsVecVec &imagePoints,
+//    const Distortion::RotVec &rvecs, 
+//    const Distortion::TransVec &tvecs,
+//    vector<float>& perViewErrors )
+//{
+//  ImagePointsVec reprojImgPoints;
+//  int i, totalPoints = 0;
+//  double totalErr = 0, err;
+//  perViewErrors.resize(objectPoints.size());
+//
+//  for( i = 0; i < (int)objectPoints.size(); i++ )
+//  {
+//    if( objectPoints[i].size() > 0 ) {
+//      dist->projectPoints( Mat( objectPoints[i] ), rvecs[i], tvecs[i], reprojImgPoints );
+//
+//      err = norm(Mat(imagePoints[i]), Mat(reprojImgPoints), CV_L2);
+//      int n = (int)objectPoints[i].size();
+//      perViewErrors[i] = (float)std::sqrt(err*err/n);
+//      totalErr += err*err;
+//      totalPoints += n;
+//    }
+//  }
+//
+//  return std::sqrt(totalErr/totalPoints);
+//}
 
 static void saveCameraParams( const string& filename,
     Size imageSize, const Board &board,
@@ -444,7 +444,6 @@ int main( int argc, char** argv )
   }
 
   string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
-  vector< Vec3d > rvecs, tvecs;
 
   int flags =  opts.calibFlags;
 
@@ -463,32 +462,31 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
-  double rms = distModel->calibrate( objectPoints, imagePoints, 
-      imageSize, rvecs, tvecs, flags );
+  CalibrationResult result;
+  distModel->calibrate( objectPoints, imagePoints, 
+      imageSize, result, flags );
 
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-  printf("RMS error reported by calibrateCamera: %g\n", rms);
+  printf("RMS error reported by calibrateCamera: %g\n", result.rms);
+    //cout << "Residual reported by calibrateCamera: " << result.residual << endl;
 
   //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
   bool ok = true;
 
   vector<float> reprojErrs;
-  double totalAvgErr = 0;
-  totalAvgErr = computeReprojectionErrors(distModel, objectPoints, imagePoints, rvecs, tvecs, reprojErrs );
 
   if( ok ) {
     saveCameraParams( cameraFile, imageSize,
         *board, imagesUsed, aspectRatio,
         flags, distModel,
-        writeExtrinsics ? rvecs : vector<Vec3d>(),
-        writeExtrinsics ? tvecs : vector<Vec3d>(),
+        writeExtrinsics ? result.rvecs : vector<Vec3d>(),
+        writeExtrinsics ? result.tvecs : vector<Vec3d>(),
         writeExtrinsics ? reprojErrs : vector<float>(),
         writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        totalAvgErr );
+        result.rms );
   }
-  //
-  //
+
   //
   //
   //  // Redraw each image with rectified points
@@ -520,7 +518,7 @@ int main( int argc, char** argv )
       Mat out;
       //fisheye::projectPoints(Mat(objectPoints[i]), imagePoints2, rvecs[i], tvecs[i],
       //   cameraMatrix, distCoeffs);
-      distModel->projectPoints(objectPoints[i], rvecs[i], tvecs[i], reprojImgPoints );
+      distModel->projectPoints(objectPoints[i], result.rvecs[i], result.tvecs[i], reprojImgPoints );
 
       imagesUsed[i].img().copyTo( out );
       for( int j = 0; j < imagePoints[i].size(); ++j ) {
@@ -614,13 +612,7 @@ int main( int argc, char** argv )
   //    }
   //
 
-  // Put this after outputting the undistorted images.  Why?  Do get it after all the zlib
-  // error messages
-  printf("%s. avg reprojection error = %.2f\n",
-      ok ? "Calibration succeeded" : "Calibration failed",
-      totalAvgErr);
-  cout << "Writing results to " << cameraFile << endl;
-
+  
   delete board;
 
   return 0;

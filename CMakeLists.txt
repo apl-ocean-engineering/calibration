@@ -1,11 +1,15 @@
 cmake_minimum_required (VERSION 2.8)
 project (camera_calibration)
 
-set(MAKE_C_FLAGS, "-Wall -ggdb")
-set(MAKE_CXX_FLAGS, "-Wall -ggdb")
+set(CMAKE_C_FLAGS "-ggdb -Wall")
+set(CMAKE_CXX_FLAGS "-ggdb -Wall")
 
-set(MAKE_C_FLAGS_RELEASE, "-Werror")
-set(MAKE_CXX_FLAGS_RELEASE, "-Werror")
+#set(CMAKE_BUILD_TYPE Debug )
+#set(CMAKE_C_FLAGS_DEBUG, "-Wall -ggdb")
+#set(CMAKE_CXX_FLAGS_DEBUG, "-Wall -ggdb")
+#
+#set(CMAKE_C_FLAGS_RELEASE, "-Werror")
+#set(CMAKE_CXX_FLAGS_RELEASE, "-Werror")
 
 find_package( OpenCV REQUIRED )
 find_package( PCL 1.2 REQUIRED )

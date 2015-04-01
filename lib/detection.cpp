@@ -89,7 +89,7 @@ Detection *Detection::loadCache( const string &cacheFile )
 Detection *Detection::unserializeFromFileStorage( const FileStorage &fs )
 {
 
-  Detection *detection = detection = new Detection();
+  Detection *detection = new Detection();
 
   // Load and validate data
   Mat pts;
@@ -188,7 +188,7 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 DetectionDb::~DetectionDb()
 {
   _db.close();
-  if( _cursor ) delete _cursor;
+ // if( _cursor ) delete _cursor;
 }
 
 bool DetectionDb::open( const string &dbDir, const string &videoFile, bool writer )
@@ -222,6 +222,10 @@ bool DetectionDb::has( const string &key )
   return (_db.check( key ) != -1 ); 
 }
 
+bool DetectionDb::update( const int frame, const Detection &detection )
+{
+  return update( FrameToKey( frame ), detection );
+}
 
 
 bool DetectionDb::update( const string &key, const Detection &detection )

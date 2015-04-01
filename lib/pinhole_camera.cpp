@@ -412,6 +412,38 @@ namespace Distortion {
     return out; 
   }
 
+  double PinholeCamera::reprojectionError( const ObjectPointsVec &objPts, const Vec3d &rvec, const Vec3d &tvec, const ImagePointsVec &imgPts )
+  {
+    ImagePointsVec projPts;
+    projectPoints( objPts, rvec, tvec, projPts );
+
+    double err = cv::norm( projPts, imgPts, NORM_L2 );
+
+    return sqrt( (err*err) / objPts.size() );
+  }
+
+  double PinholeCamera::reprojectionError( const ObjectPointsVecVec &objPts, 
+                                             const RotVec &rvecs, 
+                                             const TransVec &tvecs, 
+                                             const ImagePointsVecVec &imgPts )
+  { 
+    int numPoints = 0;
+    double rms = 0.0;
+
+    for( size_t j = 0; j < objPts.size(); ++j ) {
+
+      numPoints += objPts[j].size();
+
+      ImagePointsVec projPts;
+      projectPoints( objPts[j], rvecs[j], tvecs[j], projPts );
+
+      double err = cv::norm( projPts, imgPts[j], NORM_L2 );
+      rms += err*err;
+
+    }
+
+    return sqrt(rms/numPoints);
+  }
 
 
 
