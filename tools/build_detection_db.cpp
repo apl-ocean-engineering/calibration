@@ -242,12 +242,12 @@ class BuildDbMain
         opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
 
       FrameVec_t frames;
-      const int chunkSize = 5;
+      const int chunkSize = 50;
       Mat img;
 
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-        cout << currentFrame << endl;
+        cout << currentFrame;
 
         if( !db.has( currentFrame ) || opts.doRewrite ) {
           frames.push_back( Frame( currentFrame, img.clone() ) );
@@ -263,6 +263,7 @@ class BuildDbMain
         }
 
         if( frames.size() > chunkSize ) processFrames( frames );
+        cout << endl;
       }
 
       processFrames( frames );
@@ -335,7 +336,7 @@ class BuildDbMain
                 Detection *detection = NULL;
                 Frame &p( _frames[i]);
 
-                cout << "Extracting from " << p.frame << ". ";
+                //cout << "Extracting from " << p.frame << ". ";
 
                 Mat grey;
                 cvtColor( p.img, grey, CV_BGR2GRAY );
@@ -345,8 +346,9 @@ class BuildDbMain
                 detection = _board.detectPattern( grey, pointbuf );
                 int64 elapsed = getTickCount() - before;
 
-                cout << p.frame << ": " << detection->size() << " features" << endl;
+                //cout << p.frame << ": " << detection->size() << " features" << endl;
 
+                // Trust the thread-safety of kyotocabinet
                 _db.save( p.frame, *detection);
 
                 int sz = detection->size();
