@@ -188,7 +188,7 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 DetectionDb::~DetectionDb()
 {
   _db.close();
-  if( _cursor ) delete _cursor;
+ // if( _cursor ) delete _cursor;
 }
 
 bool DetectionDb::open( const string &dbDir, const string &videoFile, bool writer )
