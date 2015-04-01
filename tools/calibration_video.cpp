@@ -427,7 +427,7 @@ int main( int argc, char** argv )
 
   if( ! db.open( opts.cachePath(), opts.videoFile, 
         ( opts.saveBoardPoses == true ? true : false ) ) ) {
-    cerr << "Open error: " << db.error().name() << endl;
+    cerr << "Error opening db error: " << db.error().name() << endl;
     return -1;
   }
 
