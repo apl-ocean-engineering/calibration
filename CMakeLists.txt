@@ -34,7 +34,6 @@ set( Boost_USE_MULTITHREADED ON )
 
 include_directories( ${EIGEN_INCLUDE_DIR} 
 	${OpenCV_INCLUDE_DIRS} 
-        ${PCL_INCLUDE_DIRS}
         ${CERES_INCLUDE_DIRS} 
         ${KyotoCabinet_INCLUDE_DIRS} )
 
@@ -43,9 +42,9 @@ link_directories( ${PCL_LIBRARY_DIRS} )
 
 add_definitions( -std=c++11 )
 
-option( USE_TBB "UseTBB" OFF )
+option( USE_TBB "Use TBB" ON )
 if( USE_TBB )
-  add_definitions( -DUSE_TBB )
+  add_definitions( -DUSE_TBB -DTBB_USE_DEBUG=1 )
 endif()
 
 option( USE_APRILTAGS "Use AprilTags" ON )

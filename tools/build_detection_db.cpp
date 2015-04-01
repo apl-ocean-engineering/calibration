@@ -289,7 +289,7 @@ class BuildDbMain
       AprilTagDetectorFunctor f( frames, db, board );
 
 #ifdef USE_TBB
-      parallel_reduce( blocked_range<size_t>(0, frames.size()), f );
+      tbb::parallel_reduce( tbb::blocked_range<size_t>(0, frames.size()), f );
 #else
       f();
 #endif
@@ -315,12 +315,12 @@ class BuildDbMain
 
 #ifdef USE_TBB
         // Splitting constructor for TBB
-        AprilTagDetectorFunctor( AprilTagDetectorFunctor &other, split )
-          : _frames( split._frames ), _db( split._db ), _board( split._board ), timingData()
+        AprilTagDetectorFunctor( AprilTagDetectorFunctor &other, tbb::split )
+          : _frames( other._frames ), _db( other._db ), _board( other._board ), timingData()
         {;}
 
 
-        void operator()( const blocked_range<size_t> &r ) 
+        void operator()( const tbb::blocked_range<size_t> &r ) 
         {
 
           size_t end = r.end();
