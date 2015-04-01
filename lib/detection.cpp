@@ -284,9 +284,9 @@ int DetectionDb::maxKey( void )
 
 const string DetectionDb::FrameToKey( const int frame )
 {
-  const int strWidth = 20;
+const int strWidth = 20;
   char frameKey[strWidth];
-  snprintf( frameKey, strWidth-1, "%0*d", strWidth-2, frame );
+  snprintf( frameKey, strWidth-1, "%d", frame );
 
   return string( frameKey );
 }
