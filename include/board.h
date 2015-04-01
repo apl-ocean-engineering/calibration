@@ -24,6 +24,8 @@ class Board {
       : name(nam), pattern(pat), width(w), height(h), squareSize( squares )
     {;}
 
+    virtual ~Board() {;}
+
     std::string name;
     Pattern pattern;
     int width, height;
