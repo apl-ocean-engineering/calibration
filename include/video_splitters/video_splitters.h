@@ -64,7 +64,9 @@ namespace AplCam {
           std::random_shuffle( keys.begin(), keys.end() );
           keys.resize( c );
 
-          for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) set.addDetection( db, stoi(key) );
+          for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) {
+            set.addDetection( db, stoi(*itr) );
+          }
         }
     };
 
