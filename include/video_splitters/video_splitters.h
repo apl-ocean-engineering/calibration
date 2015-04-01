@@ -59,7 +59,7 @@ namespace AplCam {
           while( cur->get_key( &key, true) ) keys.push_back(key);
           delete cur;
 
-          long int c = std::max( _count, (long int)keys.size() );
+          long int c = std::min( _count, (long int)keys.size() );
 
           std::random_shuffle( keys.begin(), keys.end() );
           keys.resize( c );
