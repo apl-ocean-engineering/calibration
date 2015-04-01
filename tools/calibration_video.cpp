@@ -524,7 +524,7 @@ int main( int argc, char** argv )
         totalAvgErr );
 
     if( opts.saveBoardPoses ) {
-      for( int i = 0; i < detSet.size(); ++i ) {
+      for( size_t i = 0; i < detSet.size(); ++i ) {
         Detection &det( detSet[i] );
         det.rot = result.rvecs[i];
         det.trans = result.tvecs[i];
