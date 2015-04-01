@@ -7,7 +7,12 @@
 #include <vector>
 #include <algorithm>
 
+#include "types.h"
+#include "calibration_result.h"
+
 namespace Distortion {
+
+  using namespace AplCam;
 
   using std::vector;
   using cv::Size;
@@ -25,44 +30,6 @@ namespace Distortion {
 
   // For later ... it's all done double precision for now.  Not necessary.
 
-  typedef Vec3f ObjectPoint;
-  typedef vector< ObjectPoint > ObjectPointsVec;
-  typedef vector< vector< ObjectPoint > > ObjectPointsVecVec;
-
-  typedef Vec2f ImagePoint;
-  typedef vector< ImagePoint > ImagePointsVec;
-  typedef vector< vector< ImagePoint > > ImagePointsVecVec;
-
-  typedef vector< Vec3d > RotVec, TransVec;
-
-
- struct CalibrationResult {
-   CalibrationResult()
-     : success(false),
-       totalTime(-1.0), rms(-1.0), residual(-1.0),
-       rvecs(),
-       tvecs(),
-       status()
-   {;}
-
-   void resize( size_t sz )
-   {
-     success = false;
-     totalTime = -1.0;
-     residual = rms = -1.0;
-     rvecs.resize( sz, Vec3d(0,0,0) );
-     tvecs.resize( sz, Vec3d(0,0,0) );
-     status.resize( sz, false );
-   }
-
-
-   bool success;
-   double totalTime, rms, residual;
-
-   RotVec rvecs;
-   TransVec tvecs;
-   vector< bool > status;
- };
 
   class Camera {
     public:

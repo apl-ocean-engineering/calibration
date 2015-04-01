@@ -4,13 +4,12 @@
 
 #include <opencv2/core/core.hpp>
 
+#include "types.h"
 #include "distortion_model.h"
 
 namespace Distortion {
 
-  using Distortion::ObjectPointsVecVec;
-  using Distortion::ImagePointsVecVec;
-  using Distortion::PinholeCamera;
+  using namespace AplCam;
 
   using cv::Size;
   using cv::OutputArray;
