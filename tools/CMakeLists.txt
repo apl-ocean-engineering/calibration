@@ -15,6 +15,11 @@ add_definitions(${PCL_DEFINITIONS})
 add_executable( extract extract.cpp )
 
 add_executable( build_detection_db build_detection_db.cpp )
+if( USE_TBB )
+  target_link_libraries( build_detection_db tbb_debug )
+endif()
+
+
 
 add_executable( calculate_calibration_errors calculate_calibration_errors.cpp )
 

@@ -40,12 +40,15 @@ include_directories( ${EIGEN_INCLUDE_DIR}
 
 link_directories( ${PCL_LIBRARY_DIRS} )
 
-option( USE_APRILTAGS "Use AprilTags" ON )
 
 add_definitions( -std=c++11 )
-add_definitions( -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_TBB
-                 -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_TBB )
 
+option( USE_TBB "UseTBB" OFF )
+if( USE_TBB )
+  add_definitions( -DUSE_TBB )
+endif()
+
+option( USE_APRILTAGS "Use AprilTags" ON )
 if( USE_APRILTAGS )
 	add_definitions( -DUSE_APRILTAGS )
         add_subdirectory (third_party/apriltags)

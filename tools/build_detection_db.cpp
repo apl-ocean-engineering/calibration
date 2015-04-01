@@ -8,8 +8,9 @@
 
 #include <mutex>
 
-#include <thrust/for_each.h>
-#include <thrust/host_vector.h>
+#ifdef USE_TBB
+#include "tbb/tbb.h"
+#endif
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -240,26 +241,27 @@ class BuildDbMain
 
       TimingVecType timingData;
       FrameVecType frames;
+      const int chunkSize = 5;
       Mat img;
+
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
         cout << currentFrame << endl;
+
         if( !db.has( currentFrame ) || opts.doRewrite ) {
-          frames.push_back( new Frame( currentFrame, img ) );
+          frames.push_back( Frame( currentFrame, img.clone() ) );
         }
 
         if( opts.intervalFrames > 1 ) {
           int destFrame = currentFrame + opts.intervalFrames - 1;
-          if( destFrame < vidLength ) {
+
+          if( destFrame < vidLength ) 
             vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-          } else {
-            // Done
+          else 
             break;
-          }
         }
 
-        if( frames.size() > 5 ) processFrames( frames, timingData );
-        
+        if( frames.size() > chunkSize ) processFrames( frames, timingData );
       }
 
       processFrames( frames, timingData );
@@ -270,39 +272,24 @@ class BuildDbMain
     }
 
     struct Frame {
-      Frame( void ) 
-        : frame(0), img(0,0,CV_64F) {;}
-
-      Frame( const Frame &other ) 
-        : frame( other.frame ), img() 
-      { other.img.copyTo( img ); }
-
       Frame( int _f, Mat _m )
-        : frame(_f), img() 
-      { _m.copyTo( img ); }
-
-      void operator=( const Frame &other )
-      {
-        frame = other.frame;
-        other.img.copyTo( img );
-      }
+        : frame(_f), img( _m )
+      {;}
 
       int frame;
       Mat img;
     };
 
-
-    typedef thrust::host_vector< Frame * > FrameVecType;
-    typedef thrust::host_vector< pair< int, int64 > > TimingVecType;
-
+    typedef vector< Frame > FrameVecType;
+    typedef pair< int, int64 > TimingType;
+    typedef vector< TimingType > TimingVecType;
 
     void processFrames( FrameVecType &frames, TimingVecType &timingData )
     {
-          timingData.resize( timingData.size() + frames.size() );
-          thrust::transform( frames.begin(), frames.end(), timingData.end(), AprilTagDetectorFunctor( db, board ) );
-          for( int i = 0; i < frames.size(); ++i ) delete frames[i];
-          frames.clear();
+      std::transform( frames.begin(), frames.end(), back_inserter(timingData), AprilTagDetectorFunctor( db, board ) );
+      frames.clear();
     }
+
 
     struct AprilTagDetectorFunctor {
       public:
@@ -313,27 +300,28 @@ class BuildDbMain
         DetectionDb &_db;
         Board *_board;
 
-        pair< int, int64 > operator()( const Frame *p )
+        TimingType operator()( const Frame &p ) const
         {
           Detection *detection = NULL;
 
-          cout << "Extracting from " << p->frame << ". ";
+          cout << "Extracting from " << p.frame << ". ";
 
           Mat grey;
-          cvtColor( p->img, grey, CV_BGR2GRAY );
+          cvtColor( p.img, grey, CV_BGR2GRAY );
           vector<Point2f> pointbuf;
 
           int64 before = getTickCount();
           detection = _board->detectPattern( grey, pointbuf );
           int64 elapsed = getTickCount() - before;
 
-          cout << p->frame << ": " << detection->size() << " features" << endl;
+          cout << p.frame << ": " << detection->size() << " features" << endl;
 
-          _db.save( p->frame, *detection);
+          _db.save( p.frame, *detection);
 
+          int sz = detection->size();
           delete detection;
 
-          return make_pair( detection->size(), elapsed );
+          return make_pair( sz, elapsed );
         }
     };
 
