@@ -33,7 +33,8 @@ struct BuildDbOpts {
       intervalSeconds( -1 ),
       dataDir("data"),
       boardName(), 
-      doBenchmark(),
+      benchmarkFile(),
+      doBenchmark( false ),
       doRewrite( false ),
       doDisplay( false ), yes( false ),
       verb( NONE )
@@ -45,8 +46,8 @@ struct BuildDbOpts {
     int seekTo, intervalFrames, waitKey;
     float intervalSeconds;
     string dataDir;
-    string boardName, doBenchmark;
-    bool doRewrite, doDisplay, yes;
+    string boardName, benchmarkFile;
+    bool doBenchmark, doRewrite, doDisplay, yes;
     Verbs verb;
 
     string inFile;
@@ -145,7 +146,8 @@ struct BuildDbOpts {
             intervalSeconds = atof( optarg );
             break;
           case 'K':
-            doBenchmark = optarg;
+            doBenchmark = true;
+            benchmarkFile = optarg;
             break;
           case 'R':
             doRewrite = true;
@@ -199,7 +201,7 @@ class BuildDbMain
 {
   public:
     BuildDbMain( BuildDbOpts &options )
-      : opts( options ), _benchmark()
+      : opts( options ), _benchmark() 
     {;}
 
     ~BuildDbMain( void )
@@ -239,8 +241,7 @@ class BuildDbMain
       if( opts.intervalSeconds > 0 ) 
         opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
 
-      TimingVecType timingData;
-      FrameVecType frames;
+      FrameVec_t frames;
       const int chunkSize = 5;
       Mat img;
 
@@ -261,12 +262,11 @@ class BuildDbMain
             break;
         }
 
-        if( frames.size() > chunkSize ) processFrames( frames, timingData );
+        if( frames.size() > chunkSize ) processFrames( frames );
       }
 
-      processFrames( frames, timingData );
+      processFrames( frames );
 
-      if( opts.doBenchmark.size() > 0 ) saveBenchmarks( timingData );
 
       return 0;
     }
@@ -280,94 +280,127 @@ class BuildDbMain
       Mat img;
     };
 
-    typedef vector< Frame > FrameVecType;
-    typedef pair< int, int64 > TimingType;
-    typedef vector< TimingType > TimingVecType;
+    typedef vector< Frame > FrameVec_t;
+    typedef pair< int, int64 > TimingData_t;
+    typedef vector< TimingData_t > TimingDataVec_t;
 
-    void processFrames( FrameVecType &frames, TimingVecType &timingData )
+    void processFrames( FrameVec_t &frames )
     {
-      std::transform( frames.begin(), frames.end(), back_inserter(timingData), AprilTagDetectorFunctor( db, board ) );
+      AprilTagDetectorFunctor f( frames, db, board );
+
+#ifdef USE_TBB
+      parallel_reduce( blocked_range<size_t>(0, frames.size()), f );
+#else
+      f();
+#endif
+
+      cout << "Processed " <<  frames.size() << " frames,  produced " << f.timingData.size() <<  " timing data" << endl;
+
+      if( opts.doBenchmark ) saveTimingData( f.timingData );
+
       frames.clear();
     }
 
 
     struct AprilTagDetectorFunctor {
       public:
-        AprilTagDetectorFunctor( DetectionDb &db, Board *board )
-          : _db(db), _board(board)
+        AprilTagDetectorFunctor( FrameVec_t &frames, DetectionDb &db, Board *board )
+          : _frames( frames ), _db(db), _board( *board), timingData()
         {;}
 
+        FrameVec_t &_frames;
         DetectionDb &_db;
-        Board *_board;
+        Board &_board;
+        TimingDataVec_t timingData;
 
-        TimingType operator()( const Frame &p ) const
+#ifdef USE_TBB
+        // Splitting constructor for TBB
+        AprilTagDetectorFunctor( AprilTagDetectorFunctor &other, split )
+          : _frames( split._frames ), _db( split._db ), _board( split._board ), timingData()
+        {;}
+
+
+        void operator()( const blocked_range<size_t> &r ) 
         {
-          Detection *detection = NULL;
 
-          cout << "Extracting from " << p.frame << ". ";
+          size_t end = r.end();
+          for( size_t i = r.begin(); i != end; ++i ) {
+#else
+            void operator()( ) 
+            {
 
-          Mat grey;
-          cvtColor( p.img, grey, CV_BGR2GRAY );
-          vector<Point2f> pointbuf;
+              size_t end = _frames.size();
+              for( size_t i = 0; i < end; ++i ) {
+#endif
+                Detection *detection = NULL;
+                Frame &p( _frames[i]);
 
-          int64 before = getTickCount();
-          detection = _board->detectPattern( grey, pointbuf );
-          int64 elapsed = getTickCount() - before;
+                cout << "Extracting from " << p.frame << ". ";
 
-          cout << p.frame << ": " << detection->size() << " features" << endl;
+                Mat grey;
+                cvtColor( p.img, grey, CV_BGR2GRAY );
+                vector<Point2f> pointbuf;
 
-          _db.save( p.frame, *detection);
+                int64 before = getTickCount();
+                detection = _board.detectPattern( grey, pointbuf );
+                int64 elapsed = getTickCount() - before;
 
-          int sz = detection->size();
-          delete detection;
+                cout << p.frame << ": " << detection->size() << " features" << endl;
 
-          return make_pair( sz, elapsed );
+                _db.save( p.frame, *detection);
+
+                int sz = detection->size();
+                delete detection;
+
+                timingData.push_back( make_pair( sz, elapsed ) );
+              }
+            }
+
+#ifdef USE_TBB
+            void join( const AprilTagDetectorFunctor &other )
+            {
+              std::copy( other.timingData.begin(), other.timingData.end(), back_inserter( timingData ) );
+            }
+#endif
+
+          };
+
+
+          void saveTimingData( const TimingDataVec_t &td )
+          {
+            if( !_benchmark.is_open() ) _benchmark.open( opts.benchmarkFile, ios_base::trunc );
+
+            for( TimingDataVec_t::const_iterator itr = td.begin();  itr != td.end(); ++itr )
+              _benchmark << (*itr).first << ',' << ((*itr).second / getTickFrequency()) << endl;
+          }
+
+
+
+          private:
+          BuildDbOpts opts;
+
+          DetectionDb db;
+          Board *board;
+
+          ofstream _benchmark;
+        };
+
+
+
+        int main( int argc, char **argv ) 
+        {
+
+          BuildDbOpts opts;
+          string msg;
+          if( !opts.parseOpts( argc, argv, msg ) ) {
+            cout << msg << endl;
+            exit(-1);
+          }
+
+          BuildDbMain main( opts );
+
+          exit( main.run() );
+
         }
-    };
-
-
-    void saveBenchmarks( const TimingVecType &timingData )
-    {
-      if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
-      for( TimingVecType::const_iterator itr = timingData.begin();  itr != timingData.end(); ++itr )
-        addBenchmark( (*itr).first, (*itr).second );
-    }
-
-
-    void addBenchmark( int numPoints, int64 ticks )
-    {
-      if( !_benchmark.is_open() ) _benchmark.open( opts.doBenchmark, ios_base::trunc );
-
-      _benchmark << numPoints << ',' << ticks / getTickFrequency() << endl;
-    }
-
-
-
-  private:
-    BuildDbOpts opts;
-
-    DetectionDb db;
-    Board *board;
-
-    ofstream _benchmark;
-};
-
-
-
-int main( int argc, char **argv ) 
-{
-
-  BuildDbOpts opts;
-  string msg;
-  if( !opts.parseOpts( argc, argv, msg ) ) {
-    cout << msg << endl;
-    exit(-1);
-  }
-
-  BuildDbMain main( opts );
-
-  exit( main.run() );
-
-}
 
 
