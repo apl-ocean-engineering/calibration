@@ -19,6 +19,7 @@ add_library( lib_camera_calibration
         distortion_stereo.cpp
         stereo_calibration.cpp 
         feature_tracker.cpp
+        calibration_db.cpp
         video_splitters/video_splitter_opts.cpp )
 
 target_include_directories( lib_camera_calibration 

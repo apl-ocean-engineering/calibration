@@ -51,7 +51,7 @@ Board *Board::load( const string &infile, const string &name )
   string type_s;
   int width, height;
   float squares;
-  Pattern type;
+  //Pattern type;
 
   fs["type"] >> type_s;
   fs["width"] >> width;

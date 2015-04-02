@@ -37,6 +37,7 @@ namespace Distortion {
       virtual ~Camera() {;}
 
       virtual const std::string name( void ) const = 0;
+      virtual cv::FileStorage &write( cv::FileStorage &out ) const = 0;
 
       double calibrate( const ObjectPointsVecVec &objectPoints, 
           const ImagePointsVecVec &imagePoints, const Size& image_size,

@@ -24,6 +24,8 @@ using namespace Distortion;
 #include "detection.h"
 #include "detection_set.h"
 #include "image.h"
+
+#include "calibration_db.h"
 using namespace AplCam;
 
 #include "video_splitters/video_splitter_opts.h"
@@ -49,26 +51,24 @@ class CalibrationOpts {
     CalibrationOpts()
       : dataDir("data"),
       boardName(), cameraName(),
+      calibrationFile(), calibrationDb(),
       calibFlags(0), 
       videoFile(),
       ignoreCache( false ), saveBoardPoses( false ), fixSkew( false ),
       calibType( ANGULAR_POLYNOMIAL )
   {;}
 
-    bool validate( string &msg)
-    {
-      if( cameraName.empty() ) { msg = "Camera name not set"; return false; }
-
-      return true;
-    }
-
     string dataDir;
     string boardName;
     string cameraName;
-    int seekTo, intervalFrames;
-    int calibFlags, randomize;
-    string videoFile, resultsFile;
+    string calibrationFile, calibrationDb;
+
+    int calibFlags;
+
+    string videoFile;
+
     bool ignoreCache, retryUnregistered, saveBoardPoses, fixSkew;
+
     CalibrationType_t calibType;
     SplitterType_t splitter;
 
@@ -140,7 +140,8 @@ class CalibrationOpts {
         { "fix-skew", false, NULL, 'k'},
         { "retry-unregistered", false, NULL, 'r' },
         { "save-board-poses", no_argument, NULL, 'S' },
-        { "results-file", required_argument, NULL, 'Z' },
+        { "calibration-file", required_argument, NULL, 'z' },
+        { "calibration-db", required_argument, NULL, 'Z' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -159,10 +160,13 @@ class CalibrationOpts {
       // The '+' option ensures it stops on the first non-conforming option. Required for the
       //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
       // pattern I'm using
-      while( (optVal = getopt_long( argc, argv, "+Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "+z:Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
+          case 'z':
+            calibrationFile = optarg;
+            break;
           case 'Z':
-            resultsFile = optarg;
+            calibrationDb = optarg;
             break;
           case 'd':
             dataDir = optarg;
@@ -246,132 +250,42 @@ class CalibrationOpts {
         return false;
       }
 
-      if( !validate( msg ) ) {
-        return false;
-      }
+      if( !validate( msg ) ) return false;
 
       return true;
     }
 
 
-};
-
-
-class ResultsFile {
-  public:
-    ResultsFile( const string &filename )
-      : _db()
+    bool validate( string &msg )
     {
-      _isOpen = _db.open( filename );
+      if( cameraName.empty() ) { msg = "Camera name not set"; return false; }
+
+      if( !calibrationDb.empty() ) {
+        if( !calibrationFile.empty() ) {
+          msg = "Can't set both calibration file and calibration db";
+          return false;
+        }
+      } else {
+        if( calibrationFile.empty() )  calibrationFile = cameraPath(mkCameraFileName());
+      }
+
+      return true;
     }
 
-    kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
-    bool isOpened( void ) const { return _isOpen; }
-
-    HashDB _db;
-    bool _isOpen;
-};
-
-static void saveCameraParams( const string& filename,
-    Size imageSize, const Board &board,
-    const vector< Image > &imagesUsed,
-    float aspectRatio, int flags,
-    const DistortionModel *model, 
-    const vector<Vec3d>& rvecs, const vector<Vec3d>& tvecs,
-    const vector<float>& reprojErrs,
-    const Distortion::ImagePointsVecVec &imagePoints,
-    double totalAvgErr )
-{
-
-  FileStorage out( filename, FileStorage::WRITE );
-
-  time_t tt;
-  time( &tt );
-  struct tm *t2 = localtime( &tt );
-  char buf[1024];
-  strftime( buf, sizeof(buf)-1, "%c", t2 );
-
-  out << "calibration_time" << buf;
-
-  if( !rvecs.empty() || !reprojErrs.empty() )
-    out << "nframes" << (int)std::max(rvecs.size(), reprojErrs.size());
-  out << "image_width" << imageSize.width;
-  out << "image_height" << imageSize.height;
-  out << "board_name" << board.name;
-  out << "board_width" << board.size().width;
-  out << "board_height" << board.size().height;
-  out << "square_size" << board.squareSize;
-
-  if( flags & CV_CALIB_FIX_ASPECT_RATIO )
-    out << "aspectRatio" << aspectRatio;
-
-  if( flags != 0 )
-  {
-    sprintf( buf, "flags: %s%s%s%s",
-        flags & CV_CALIB_USE_INTRINSIC_GUESS ? "+use_intrinsic_guess" : "",
-        flags & CV_CALIB_FIX_ASPECT_RATIO ? "+fix_aspectRatio" : "",
-        flags & CV_CALIB_FIX_PRINCIPAL_POINT ? "+fix_principal_point" : "",
-        flags & CV_CALIB_ZERO_TANGENT_DIST ? "+zero_tangent_dist" : "" );
-    cvWriteComment( *out, buf, 0 );
-  }
-
-  out << "flags" << flags;
-
-  model->write( out );
-
-  out << "avg_reprojection_error" << totalAvgErr;
-  if( !reprojErrs.empty() )
-    out << "per_view_reprojection_errors" << Mat(reprojErrs);
-
-  //  if( !rvecs.empty() && !tvecs.empty() )
-  //  {
-  //    CV_Assert(rvecs[0].type() == tvecs[0].type());
-  //    Mat bigmat((int)rvecs.size(), 6, rvecs[0].type());
-  //    for( int i = 0; i < (int)rvecs.size(); i++ )
-  //    {
-  //      Mat r = bigmat(Range(i, i+1), Range(0,3));
-  //      Mat t = bigmat(Range(i, i+1), Range(3,6));
-  //
-  //      CV_Assert(rvecs[i].rows == 3 && rvecs[i].cols == 1);
-  //      CV_Assert(tvecs[i].rows == 3 && tvecs[i].cols == 1);
-  //      //*.t() is MatExpr (not Mat) so we can use assignment operator
-  //      r = rvecs[i].t();
-  //      t = tvecs[i].t();
-  //    }
-  //    cvWriteComment( *out, "a set of 6-tuples (rotation vector + translation vector) for each view", 0 );
-  //    out   << "extrinsic_parameters" << bigmat;
-  //  }
-
-  //  out << "images_used" << "[";
-  //  for( vector<Image>::const_iterator img = imagesUsed.begin(); img < imagesUsed.end(); ++img ) {
-  //    out << img->fileName();
-  //  }
-  //  out << "]";
-
-  if( !imagePoints.empty() )
-  {
-    Mat imagePtMat((int)imagePoints.size(), (int)imagePoints[0].size(), CV_32FC2);
-    for( size_t i = 0; i < imagePoints.size(); i++ )
+    string mkCameraFileName( void )
     {
-      Mat r = imagePtMat.row(i).reshape(2, imagePtMat.cols);
-      Mat imgpti(imagePoints[i]);
-      imgpti.copyTo(r);
+      char strtime[32], buffer[80];
+      time_t tt;
+      time( &tt );
+      struct tm *t2 = localtime( &tt );
+      strftime( strtime, 32, "%y%m%d_%H%M%S", t2 );
+      snprintf( buffer, 79, "%s_%s.yml", cameraName.c_str(), strtime );
+      return  string( buffer );
     }
-    out << "image_points" << imagePtMat;
-  }
-}
 
 
-static string mkCameraFileName( const string &cameraName)
-{
-  char strtime[32], buffer[80];
-  time_t tt;
-  time( &tt );
-  struct tm *t2 = localtime( &tt );
-  strftime( strtime, 32, "%y%m%d_%H%M%S", t2 );
-  snprintf( buffer, 79, "%s_%s.yml", cameraName.c_str(), strtime );
-  return  string( buffer );
-}
+
+};
 
 
 int main( int argc, char** argv )
@@ -388,7 +302,7 @@ int main( int argc, char** argv )
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
   Size imageSize;
-  float aspectRatio = 1.f;
+  //float aspectRatio = 1.f;
 
   Distortion::ImagePointsVecVec imagePoints;
   Distortion::ObjectPointsVecVec objectPoints;
@@ -407,7 +321,7 @@ int main( int argc, char** argv )
     cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
     return -1;
   }
-  int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
+  //int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
 
   // Get image size
   imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
@@ -429,8 +343,7 @@ int main( int argc, char** argv )
   }
 
 
-  cout << "Have detection set with " << detSet.size() << " points" << endl;
-
+  cout << "Have detection set " << detSet.name() << " with " << detSet.size() << " points" << endl;
 
   int count = detSet.imageObjectPoints( imagePoints, objectPoints );
 
@@ -472,25 +385,42 @@ int main( int argc, char** argv )
 
     //  bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
 
-    vector<float> reprojErrs;
+//    vector<float> reprojErrs;
+//
+//    string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
+//    cout << "Writing results to " << cameraFile << endl;
+//
+//    vector<Image> imagesUsed;
+//    bool writeExtrinsics = false,
+//         writePoints = false;
+//
 
-    string cameraFile( opts.cameraPath(mkCameraFileName( opts.cameraName ) ) );
-    cout << "Writing results to " << cameraFile << endl;
+    CalibrationSerializer out;
 
-    vector<Image> imagesUsed;
-    bool writeExtrinsics = false,
-         writePoints = false;
+    out.setCamera( distModel )
+       .setResult( &result )
+       .setBoard( board );
 
-    saveCameraParams( cameraFile, imageSize,
-        *board, imagesUsed, aspectRatio,
-        flags, distModel,
-        writeExtrinsics ? result.rvecs : vector<Vec3d>(),
-        writeExtrinsics ? result.tvecs : vector<Vec3d>(),
-        writeExtrinsics ? reprojErrs : vector<float>(),
-        writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
-        result.rms );
+    if( !opts.calibrationDb.empty() ) {
+      cout << "Writing to calibration db..." << endl;
+    } else if( !opts.calibrationFile.empty() ) {
+      cout << "Writing calibration to " << opts.calibrationFile << endl;
+      if( !out.writeFile( opts.calibrationFile ) ) {
+        cerr << "Error writing to opts.calibrationFile" << endl;;
+      }
+    }
+
+//    saveCameraParams( cameraFile, imageSize,
+//        *board, imagesUsed, aspectRatio,
+//        flags, distModel,
+//        writeExtrinsics ? result.rvecs : vector<Vec3d>(),
+//        writeExtrinsics ? result.tvecs : vector<Vec3d>(),
+//        writeExtrinsics ? reprojErrs : vector<float>(),
+//        writePoints ? imagePoints : Distortion::ImagePointsVecVec(),
+//        result.rms );
 
     if( opts.saveBoardPoses ) {
+      cout << "Writing estimate board poses back to database." << endl;
       for( size_t i = 0; i < detSet.size(); ++i ) {
         Detection &det( detSet[i] );
         det.rot = result.rvecs[i];

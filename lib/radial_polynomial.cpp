@@ -131,7 +131,7 @@ namespace Distortion {
     ObjectPointsVecVec _objPts;
     ImagePointsVecVec _imgPts;
 
-    for( int i = 0; i < objectPoints.size(); ++i ) {
+    for( size_t i = 0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
         _objPts.push_back( objectPoints[i] );
         _imgPts.push_back( imagePoints[i] );
@@ -151,7 +151,7 @@ namespace Distortion {
     // _distCoeffs will be variable length
     double *d = dist.ptr<double>(0);
 
-    for( int i = 0; i < 4; ++i ) _distCoeffs[i] = d[i];
+    for( unsigned int i = 0; i < 4; ++i ) _distCoeffs[i] = d[i];
     if( (dist.rows*dist.cols) == 5 )  _distCoeffs[4] = d[4];
     if( (dist.rows*dist.cols) == 8 ) {
       _distCoeffs[5] = d[5];
@@ -159,7 +159,7 @@ namespace Distortion {
       _distCoeffs[7] = d[7];
     }
 
-    for( int i =0, k = 0; i < objectPoints.size(); ++i ) {
+    for( size_t i =0, k = 0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {
         result.rvecs[i] = _rvecs[k];
         result.tvecs[i] = _tvecs[k];

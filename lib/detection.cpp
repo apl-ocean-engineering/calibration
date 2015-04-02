@@ -161,7 +161,7 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
   corners.clear();
   ids.clear();
 
-  for( int i = 0; i < _det.size(); ++i ) {
+  for( size_t i = 0; i < _det.size(); ++i ) {
 
     Point2i loc;
     if( board.find( _det[i].id, loc ) ) {
