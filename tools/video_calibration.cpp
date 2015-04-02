@@ -26,6 +26,7 @@ using namespace Distortion;
 #include "image.h"
 
 #include "calibration_db.h"
+#include "calibration_opts_common.h"
 using namespace AplCam;
 
 #include "video_splitters/video_splitter_opts.h"
@@ -40,60 +41,30 @@ using namespace std;
 using kyotocabinet::HashDB;
 using kyotocabinet::DB;
 
-class CalibrationOpts {
+class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
   public:
-
-    typedef enum { ANGULAR_POLYNOMIAL, RADIAL_POLYNOMIAL } CalibrationType_t;
 
     typedef enum { SPLIT_ALL, SPLIT_RANDOM, SPLIT_INTERVAL, SPLIT_NONE = -1 } SplitterType_t;
 
     CalibrationOpts()
-      : dataDir("data"),
-      boardName(), cameraName(),
-      calibrationFile(), calibrationDb(),
-      calibFlags(0), 
+      : CalibrationOptsCommon(), 
+      calibrationDb(),
       videoFile(),
-      ignoreCache( false ), saveBoardPoses( false ), fixSkew( false ),
-      calibType( ANGULAR_POLYNOMIAL )
+      saveBoardPoses( false ), fixSkew( false )
   {;}
 
-    string dataDir;
-    string boardName;
-    string cameraName;
-    string calibrationFile, calibrationDb;
-
-    int calibFlags;
+    string calibrationDb;
 
     string videoFile;
 
-    bool ignoreCache, retryUnregistered, saveBoardPoses, fixSkew;
+    bool saveBoardPoses, fixSkew;
 
     CalibrationType_t calibType;
     SplitterType_t splitter;
 
     IntervalSplitterOpts intervalSplitterOpts;
     RandomSplitterOpts randomSplitterOpts;
-
-    const string boardPath( void )
-    { return dataDir + "/boards/" + boardName + ".yml"; }
-
-    const string cachePath( void )
-    { return dataDir + "/cache"; }
-
-    const string imageCache( const Image &image )
-    { return cachePath() + "/" + image.hash() + ".yml"; }
-
-    const string tmpPath( const string &file )
-    { return dataDir + "/tmp/" + file; }
-
-    const string cameraPath( const string &filename )
-    {
-      string camDir(  dataDir + "/cameras/" + cameraName + "/" );
-      if( !directory_exists( camDir ) ) mkdir_p( camDir );
-      return camDir + filename;
-    }
-
 
 
     //== Option parsing and help ==
@@ -136,9 +107,7 @@ class CalibrationOpts {
         { "board", true, NULL, 'b' },
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
-        { "ignore-cache", false, NULL, 'R' },
         { "fix-skew", false, NULL, 'k'},
-        { "retry-unregistered", false, NULL, 'r' },
         { "save-board-poses", no_argument, NULL, 'S' },
         { "calibration-file", required_argument, NULL, 'z' },
         { "calibration-db", required_argument, NULL, 'Z' },
@@ -177,9 +146,6 @@ class CalibrationOpts {
           case 'c':
             cameraName = optarg;
             break;
-          case 'R':
-            ignoreCache = true;
-            break;
           case 'S':
             saveBoardPoses = true;
             break;
@@ -199,9 +165,6 @@ class CalibrationOpts {
               cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
               return false;
             }
-            break;
-          case 'r':
-            retryUnregistered = true;
             break;
           case '?': 
             help();
@@ -256,34 +219,22 @@ class CalibrationOpts {
     }
 
 
-    bool validate( string &msg )
+    virtual bool validate( string &msg )
     {
-      if( cameraName.empty() ) { msg = "Camera name not set"; return false; }
-
       if( !calibrationDb.empty() ) {
         if( !calibrationFile.empty() ) {
           msg = "Can't set both calibration file and calibration db";
           return false;
         }
-      } else {
-        if( calibrationFile.empty() )  calibrationFile = cameraPath(mkCameraFileName());
       }
+
+      if( !CalibrationOptsCommon::validate( msg ) ) return false;
+
+      // The super will auto-fill calibrationFile if not set
+      if( !calibrationDb.empty() ) calibrationFile.clear();
 
       return true;
     }
-
-    string mkCameraFileName( void )
-    {
-      char strtime[32], buffer[80];
-      time_t tt;
-      time( &tt );
-      struct tm *t2 = localtime( &tt );
-      strftime( strtime, 32, "%y%m%d_%H%M%S", t2 );
-      snprintf( buffer, 79, "%s_%s.yml", cameraName.c_str(), strtime );
-      return  string( buffer );
-    }
-
-
 
 };
 
