@@ -14,11 +14,6 @@
 
 #include "my_undistort.h"
 
-#include "distortion_model.h"
-#include "distortion_angular_polynomial.h"
-#include "distortion_radial_polynomial.h"
-using namespace Distortion;
-
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -27,6 +22,7 @@ using namespace Distortion;
 
 #include "calibration_db.h"
 #include "calibration_opts_common.h"
+#include "calibrator.h"
 using namespace AplCam;
 
 #include "video_splitters/video_splitter_opts.h"
@@ -243,134 +239,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 };
 
 
-class Calibrator {
-  public:
-
-    Calibrator( const CalibrationOpts &opts, const DetectionSet &detSet, const Size &imageSize )
-      : _board(NULL), _distModel(NULL), _opts(opts), _detSet( detSet ), _imageSize(imageSize)
-    {;}
-
-    ~Calibrator( void )
-    {
-      if( _board ) delete _board;
-      if( _distModel ) delete _distModel;
-    }
-
-
-    void run( void )
-    {
-
-      Distortion::ImagePointsVecVec imagePoints;
-      Distortion::ObjectPointsVecVec objectPoints;
-
-
-      cout << "Have detection set " << _detSet.name() << " with " << _detSet.size() << " points" << endl;
-
-      int count = _detSet.imageObjectPoints( imagePoints, objectPoints );
-
-
-      cout << "Using " << count << " points from " << imagePoints.size() << " images" << endl;
-
-      if( imagePoints.size() < 3 ) {
-        cerr << "Not enough images.  Stopping." << endl;
-        exit(-1);
-      }
-
-
-      _board = Board::load( _opts.boardPath(), _opts.boardName );
-      _distModel = NULL;
-
-      switch( _opts.calibType ) {
-        case CalibrationOpts::ANGULAR_POLYNOMIAL:
-          _distModel = new Distortion::AngularPolynomial;
-          break;
-        case CalibrationOpts::RADIAL_POLYNOMIAL:
-          _distModel = new Distortion::RadialPolynomial;
-          break;
-      }
-
-      if( !_distModel ) {
-        cerr << "Something went wrong choosing a distortion model." << endl;
-        exit(-1);
-      }
-
-      int flags =  _opts.calibFlags;
-      _distModel->calibrate( objectPoints, imagePoints, 
-          _imageSize, result, flags );
-
-      //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
-      cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
-      cout << "Residual reported by calibrateCamera: " << result.residual << endl;
-    }
-
-
-    void saveDb( const string &dbFile ) {
-
-      CalibrationSerializer ser;
-
-      ser.setCamera( _distModel )
-        .setResult( &result )
-        .setBoard( _board );
-
-      cout << "Writing to calibration db " << dbFile << endl;
-
-      CalibrationDb db( dbFile );
-      if( db.has( _detSet.name() ) && !_opts.overwriteDb ) {
-        cerr << "Already have result in db " << dbFile << " with key " << _detSet.name() << endl;
-      } else {
-        db.save( _detSet.name(), ser );
-      }
-    }
-
-    void saveFile( const string &file ) {
-
-      CalibrationSerializer ser;
-
-      ser.setCamera( _distModel )
-        .setResult( &result )
-        .setBoard( _board );
-
-      cout << "Writing calibration to " << file << endl;
-      if( !ser.writeFile( file ) ) {
-        cerr << "Error writing to opts.calibrationFile" << endl;;
-      }
-    }
-
-
-    // For this special case, get a non-const DetectionSet
-    void updateDetectionPoses( DetectionSet &dets, DetectionDb &db )
-    {
-      // Try to assure they're the same DetectionSets...
-      assert( dets.size() == _detSet.size() );
-
-      cout << "Writing estimate board poses back to database." << endl;
-      for( size_t i = 0; i < dets.size(); ++i ) {
-        Detection &det( dets[i] );
-        det.rot = result.rvecs[i];
-        det.trans = result.tvecs[i];
-
-        if( ! db.update( dets[i].frame, det ) )
-          cerr << "Trouble saving updated poses: " << db.error().name() << endl;
-      }
-    }
-
-
-
-    CalibrationResult result;
-
-
-  protected:
-
-    Board *_board;
-    DistortionModel *_distModel;
-
-    const CalibrationOpts &_opts;
-    const DetectionSet &_detSet;
-    const Size &_imageSize;
-
-};
-
-
 
 
 int main( int argc, char** argv )
@@ -425,7 +293,7 @@ int main( int argc, char** argv )
   if( cal.result.success ) {
 
     if( !opts.calibrationDb.empty() ) 
-      cal.saveDb( opts.calibrationDb );
+      cal.saveDb( opts.calibrationDb, opts.overwriteDb );
     else if( !opts.calibrationFile.empty() ) 
       cal.saveFile( opts.calibrationFile );
 

@@ -3,6 +3,9 @@
 
 #include <string>
 
+#include "image.h"
+#include "file_utils.h"
+
 namespace AplCam {
 
   using std::string;
