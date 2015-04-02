@@ -27,26 +27,24 @@ namespace AplCam {
     int calibFlags;
     CalibrationType_t calibType;
 
-    const string boardPath( void )
+    const string boardPath( void ) const
     { return dataDir + "/boards/" + boardName + ".yml"; }
 
-    const string cachePath( void )
+    const string cachePath( void ) const
     { return dataDir + "/cache"; }
 
-    const string imageCache( const Image &image )
+    const string imageCache( const Image &image ) const
     { return cachePath() + "/" + image.hash() + ".yml"; }
 
-    const string tmpPath( const string &file )
+    const string tmpPath( const string &file ) const
     { return dataDir + "/tmp/" + file; }
 
-    const string cameraPath( const string &filename )
+    const string cameraPath( const string &filename ) const
     {
       string camDir(  dataDir + "/cameras/" + cameraName + "/" );
       if( !directory_exists( camDir ) ) mkdir_p( camDir );
       return camDir + filename;
     }
-
-
 
     virtual bool validate( string &msg)
     {
@@ -58,7 +56,7 @@ namespace AplCam {
       return true;
     }
 
-    string mkCameraFileName( void )
+    string mkCameraFileName( void ) const
     {
       char strtime[32], buffer[80];
       time_t tt;

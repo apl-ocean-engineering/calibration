@@ -42,11 +42,11 @@ namespace AplCam {
 
 
       //==
-      int imageObjectPoints( ImagePointsVecVec &imgPts, ObjectPointsVecVec &objPts )
+      int imageObjectPoints( ImagePointsVecVec &imgPts, ObjectPointsVecVec &objPts ) const
       {
         int count = 0;
-        for( DetectionMap::iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) {
-          Detection &det( **itr );
+        for( DetectionMap::const_iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) {
+          const Detection &det( **itr );
           imgPts.push_back( det.points );
           objPts.push_back( det.corners );
           count += det.corners.size();

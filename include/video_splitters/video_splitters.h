@@ -6,6 +6,7 @@
 #include <kchashdb.h>
 
 #include "bits_to_hex.h"
+#include "random.h"
 #include "detection_set.h"
 
 #include "video_splitter_opts.h"
@@ -45,7 +46,7 @@ namespace AplCam {
     class RandomVideoSplitter : public VideoSplitter {
       public:
         RandomVideoSplitter( const RandomSplitterOpts &opts ) 
-          : _count( opts.count ) 
+          : _count( opts.count )
         {;}
 
         long int _count;
@@ -63,7 +64,7 @@ namespace AplCam {
 
           long int c = std::min( _count, (long int)keys.size() );
 
-          std::random_shuffle( keys.begin(), keys.end() );
+          std::random_shuffle( keys.begin(), keys.end(), unaryRandom );
           keys.resize( c );
 
           for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) {
