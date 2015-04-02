@@ -14,6 +14,7 @@ namespace AplCam {
     CalibrationResult()
       : success(false),
       totalTime(-1.0), rms(-1.0), residual(-1.0),
+      numPoints(-1), numImages(-1),
       rvecs(),
       tvecs(),
       status()
@@ -33,12 +34,15 @@ namespace AplCam {
     {
       fs << "success" << success;
       fs << "totalTime" << totalTime;
+      fs << "numPoints" << numPoints;
+      fs << "numImage" << numImages;
       fs << "rms" << rms;
       fs << "residual" << residual;
     }
 
     bool success;
     double totalTime, rms, residual;
+    int numPoints, numImages;
 
     RotVec rvecs;
     TransVec tvecs;

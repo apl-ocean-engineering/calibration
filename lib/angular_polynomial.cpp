@@ -240,6 +240,8 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     result.totalTime = summary.total_time_in_seconds;
     result.success = summary.IsSolutionUsable();
     result.residual = sqrt( summary.final_cost / (float)totalPoints );
+    result.numPoints = totalPoints;
+    result.numImages = goodImages;
 
     set(camera, alpha);
 
