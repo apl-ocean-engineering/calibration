@@ -12,13 +12,14 @@
 
 #include <iostream>
 
-#include "my_undistort.h"
-
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
 #include "detection_set.h"
 #include "image.h"
+
+#include "distortion_model.h"
+using namespace Distortion;
 
 #include "calibration_db.h"
 #include "calibration_opts_common.h"
