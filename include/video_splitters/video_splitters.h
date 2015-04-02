@@ -5,6 +5,7 @@
 
 #include <kchashdb.h>
 
+#include "bits_to_hex.h"
 #include "detection_set.h"
 
 #include "video_splitter_opts.h"
@@ -21,7 +22,6 @@ namespace AplCam {
         VideoSplitter()
         {;}
 
-
         virtual void generate( DetectionDb &db, DetectionSet &set ) = 0;
     };
 
@@ -35,6 +35,8 @@ namespace AplCam {
           DB::Cursor *cur = db.cursor();
           string key;
           while( cur->get_key( &key, true ) ) set.addDetection( db, stoi(key) );
+          set.setName( "all" );
+
           delete cur;
 
         }
@@ -67,6 +69,10 @@ namespace AplCam {
           for( vector< string >::iterator itr = keys.begin(); itr != keys.end(); ++itr ) {
             set.addDetection( db, stoi(*itr) );
           }
+
+          stringstream strm;
+          strm << "random(" << _count << ")_" << intsToHex( set.frames() );
+          set.setName( strm.str() );
         }
     };
 
@@ -84,6 +90,10 @@ namespace AplCam {
 
           for( int i = _start; i < e; i += _interval ) 
             set.addDetection( db,  i );
+
+          stringstream strm;
+          strm << "interval(" << _start << "," << _interval << ',' << _end << ")_" << intsToHex( set.frames() );
+          set.setName( strm.str() );
         }
 
     };

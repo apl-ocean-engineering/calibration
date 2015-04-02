@@ -1,4 +1,5 @@
 add_library( lib_camera_calibration 
+        bits_to_hex.cpp
 	board.cpp 
         image.cpp
 	video.cpp 

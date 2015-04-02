@@ -21,9 +21,8 @@ namespace AplCam {
       typedef vector< Detection * > DetectionMap;
 
       DetectionSet() 
-        : _detections(), _frames()
+        : _name(""), _detections(), _frames()
       {;}
-
 
       ~DetectionSet( void )
       {
@@ -40,7 +39,6 @@ namespace AplCam {
           _frames.push_back( frame );
         }
       }
-
 
 
       //==
@@ -74,6 +72,19 @@ namespace AplCam {
         return SetElement( _frames[i], _detections[i] );
       }
 
+
+      const string &setName( const string &n )
+      { _name = n; return _name; }
+
+      const string &name( void ) const
+      { return _name; }
+
+      const vector<int> &frames( void ) const 
+      { return _frames; }
+
+
+    protected:
+      string _name;
 
       DetectionMap _detections;
       vector< int > _frames;
