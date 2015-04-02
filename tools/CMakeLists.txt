@@ -13,7 +13,6 @@ if( USE_APRILTAGS )
 endif()
 
 
-
 add_executable( extract extract.cpp )
 
 add_executable( build_detection_db build_detection_db.cpp )
@@ -32,6 +31,8 @@ add_executable( composite_video composite_video.cpp )
 add_executable( calibration calibration.cpp )
 
 add_executable( video_calibration video_calibration.cpp )
+
+add_executable( video_calibration_permutations video_calibration_permutations.cpp )
 
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})

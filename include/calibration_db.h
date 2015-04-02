@@ -25,6 +25,8 @@ namespace AplCam {
       bool save( const string &key, const CalibrationSerializer &ser );
 
       bool has( const string &key );
+
+      void findKeysStartingWith( const string &val, vector< string > &keys );
       
 
     protected:
