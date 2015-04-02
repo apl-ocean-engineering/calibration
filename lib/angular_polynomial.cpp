@@ -244,7 +244,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     set(camera, alpha);
 
-    result.rms = reprojectionError( objectPoints, result.rvecs, result.tvecs, imagePoints );
+    result.rms = reprojectionError( objectPoints, imagePoints, result );
 
     cout << "Final camera: " << endl << matx() << endl;
     cout << "Final distortions: " << endl << _distCoeffs << endl;

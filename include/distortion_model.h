@@ -226,6 +226,10 @@ namespace Distortion {
         double reprojectionError( const ObjectPointsVecVec &obPtsj, const RotVec &rvecs, const TransVec &tvecs, 
             const ImagePointsVecVec &imgPts );
 
+        double reprojectionError( const ObjectPointsVecVec &objPts, 
+            const ImagePointsVecVec &imgPts,
+            const CalibrationResult &result );
+
     protected:
 
         double _fx, _fy, _alpha, _cx, _cy;

@@ -1,4 +1,6 @@
 
+#include <iostream>
+
 #include "distortion_model.h"
 
 namespace Distortion {
@@ -291,7 +293,9 @@ namespace Distortion {
       Vec3d Xworld( objectPoints[i] );
       Vec3d Xcam( aff*Xworld );
 
-      imagePoints[i] = image( warp( Xcam ) );
+      Vec2d warped = warp( Xcam );
+      Vec2d imaged = image( warped );
+      imagePoints[i] = imaged;
 
       //      if (jacobian.needed())
       //      {
@@ -431,6 +435,7 @@ namespace Distortion {
     double rms = 0.0;
 
     for( size_t j = 0; j < objPts.size(); ++j ) {
+      if( objPts[j].size() == 0 ) continue;
 
       numPoints += objPts[j].size();
 
@@ -439,11 +444,33 @@ namespace Distortion {
 
       double err = cv::norm( projPts, imgPts[j], NORM_L2 );
       rms += err*err;
+    }
+
+    return sqrt(rms/numPoints);
+  }
+
+  double PinholeCamera::reprojectionError( const ObjectPointsVecVec &objPts, 
+                                             const ImagePointsVecVec &imgPts,
+                                             const CalibrationResult &result )
+  { 
+    int numPoints = 0;
+    double rms = 0.0;
+
+    for( size_t j = 0; j < objPts.size(); ++j ) {
+      if( result.status[j] == false ) continue;
+
+      numPoints += objPts[j].size();
+
+      ImagePointsVec projPts;
+      projectPoints( objPts[j], result.rvecs[j], result.tvecs[j], projPts );
+      double err = cv::norm( projPts, imgPts[j], NORM_L2 );
+      rms += err*err;
 
     }
 
     return sqrt(rms/numPoints);
   }
+
 
 
 
