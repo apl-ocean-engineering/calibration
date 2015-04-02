@@ -192,7 +192,6 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
 
     double *pose = new double[ goodImages * 6];
 
-    google::InitGoogleLogging("AngularPolynomial::calibrateCamera");
     ceres::Problem problem;
     for( size_t i = 0, idx = 0; i < objectPoints.size(); ++i ) {
       if( result.status[i] ) {

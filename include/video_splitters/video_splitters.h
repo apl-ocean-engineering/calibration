@@ -45,11 +45,15 @@ namespace AplCam {
 
     class RandomVideoSplitter : public VideoSplitter {
       public:
+        RandomVideoSplitter( int c )
+          : _count( c )
+        {;}
+
+
         RandomVideoSplitter( const RandomSplitterOpts &opts ) 
           : _count( opts.count )
         {;}
 
-        long int _count;
 
         virtual void generate( DetectionDb &db, DetectionSet &set )
         {
@@ -60,7 +64,7 @@ namespace AplCam {
 
           string key;
           while( cur->get_key( &key, true) ) keys.push_back(key);
-          delete cur;
+//          delete cur;
 
           long int c = std::min( _count, (long int)keys.size() );
 
@@ -75,15 +79,21 @@ namespace AplCam {
           strm << "random(" << _count << ")_" << intsToHex( set.frames() );
           set.setName( strm.str() );
         }
+
+      protected:
+
+        long int _count;
     };
 
     class IntervalVideoSplitter : public VideoSplitter {
       public:
+        IntervalVideoSplitter( int s, int i, int e = INT_MAX )
+          : _start( s ), _end( e ), _interval( i )
+        {;}
+
         IntervalVideoSplitter( const IntervalSplitterOpts &opts )
           : _start( opts.start ), _end(opts.end), _interval( opts.interval )
         {;}
-
-        int _start, _end, _interval;
 
         virtual void generate( DetectionDb &db, DetectionSet &set )
         {
@@ -96,6 +106,10 @@ namespace AplCam {
           strm << "interval(" << _start << "," << _interval << ',' << _end << ")_" << intsToHex( set.frames() );
           set.setName( strm.str() );
         }
+
+      protected:
+
+        int _start, _end, _interval;
 
     };
 

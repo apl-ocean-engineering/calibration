@@ -6,6 +6,7 @@
 #include "calibration_opts_common.h"
 #include "detection_set.h"
 #include "distortion_model.h"
+#include "calibration_db.h"
 #include "calibration_result.h"
 #include "board.h"
 
@@ -30,6 +31,8 @@ namespace AplCam {
       void run( void );
       
       void saveDb( const string &dbFile, bool overwriteDb = false );
+      void saveDb( CalibrationDb &dbFile, bool overwriteDb = false );
+
       void saveFile( const string &file ); 
      
       // For this special case, get a non-const DetectionSet

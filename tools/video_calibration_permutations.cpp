@@ -1,7 +1,7 @@
-#include "opencv2/core/core.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/calib3d/calib3d.hpp"
-#include "opencv2/highgui/highgui.hpp"
+//#include "opencv2/core/core.hpp"
+//#include "opencv2/imgproc/imgproc.hpp"
+//#include "opencv2/calib3d/calib3d.hpp"
+//#include "opencv2/highgui/highgui.hpp"
 
 #include <cctype>
 #include <stdio.h>
@@ -11,6 +11,13 @@
 #include <getopt.h>
 
 #include <iostream>
+
+#ifdef USE_TBB
+#include "tbb/tbb.h"
+using namespace tbb;
+#endif
+
+#include "glog/logging.h"
 
 #include "file_utils.h"
 #include "board.h"
@@ -221,9 +228,46 @@ struct RandomKeyCounter {
 };
 
 
+struct CalibrateFunctor {
+  public:
+    CalibrateFunctor( const CalibrationOpts &opts, Size &imageSize, CalibrationDb &db, vector< DetectionSet * > &detSets )
+      : _opts( opts ), _imageSize( imageSize ), _db( db ), _detSets( detSets )
+    {;}
+
+    const CalibrationOpts &_opts;
+    const Size &_imageSize;
+    CalibrationDb &_db;
+    vector< DetectionSet *> _detSets;
+
+#ifdef USE_TBB
+    void operator()( const blocked_range<size_t> &r ) const {
+      size_t end = r.end();
+      for( size_t i = r.begin(); i != end; ++i ) {
+#else
+        void operator()(void ) const {
+          size_t end = _detSets.size();
+          for( size_t i = 0; i != end; ++i ) {
+#endif
+
+            Calibrator cal( _opts, *_detSets[i], _imageSize );
+            cal.run();
+
+            if( cal.result.success ) {
+              cal.saveDb( _db );
+            }
+
+
+
+          }
+        }
+      };
+
+
 
 int main( int argc, char** argv )
 {
+
+   google::InitGoogleLogging("video_calibration_permutation");
 
   CalibrationOpts opts;
 
@@ -250,9 +294,10 @@ int main( int argc, char** argv )
   // Get image size
   Size imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
 
-  const int spacing = 10;
+  const int spacing = 100;
   const int minImages = 10;
-  const int maxReps = 10;
+  const int maxReps = 5;
+  const int maxImages = vidLength;
 
   CalibrationDb calDb( opts.calibrationDb );
   if( !calDb.isOpened() ) {
@@ -264,46 +309,43 @@ int main( int argc, char** argv )
   calDb.findKeysStartingWith( "random", keys );
 
   // For simplicity, just configure in code.
-  for( int i = minImages; i < vidLength; i+= spacing ) {
+  for( int i = minImages; i < maxImages; i+= spacing ) {
     int maxSets = std::min( maxReps, (vidLength-i) );
 
 
     // Parse out the keys with the correct length
     int existing = std::count_if( keys.begin(), keys.end(), RandomKeyCounter( i ) );
 
-    int todo = maxSets - existing;
+    size_t todo = maxSets - existing;
 
 
     cout << "For random set of " << i << " images, found " << existing << " sets, must do " << todo << endl;
 
     if( todo == 0 ) continue;
 
-//    vector< detSet > detSets;
-//    for( int j = 0; detSets.size() < todo; ++j ) {
-//      DetectionSet detSet;
-//      RandomVideoSplitter( i ).generate( db, detSet );
-//
-//      if( calDb.has( detSet.name() ) ) continue;
-//      detSets.push_back( detSet );
-//    }
+    vector< DetectionSet * > detSets;
+    for( size_t j = 0; detSets.size() < todo; ++j ) {
+      DetectionSet *detSet = new DetectionSet;
+      RandomVideoSplitter( i ).generate( db, *detSet );
+
+      if( calDb.has( detSet->name() ) ) continue;
+
+      detSets.push_back( detSet );
+    }
+
+
+    // Now run each one
+    CalibrateFunctor func( opts, imageSize, calDb, detSets );
+#ifdef USE_TBB
+    parallel_for( blocked_range<size_t>(0,detSets.size()), func );
+#else
+    func();
+#endif
+
+    // Delete all detection sets
+    for( size_t j = 0; j < detSets.size(); ++j ) delete detSets[j];
 
   }
 
-//  Calibrator cal( opts, detSet, imageSize );
-//  cal.run();
-//
-//  if( cal.result.success ) {
-//
-//    if( !opts.calibrationDb.empty() ) 
-//      cal.saveDb( opts.calibrationDb, opts.overwriteDb );
-//    else if( !opts.calibrationFile.empty() ) 
-//      cal.saveFile( opts.calibrationFile );
-//
-//
-//    if( opts.saveBoardPoses ) cal.updateDetectionPoses( detSet, db );
-//  } else {
-//    cout << "Calibration failed." << endl;
-//  }
-//
   return 0;
 }

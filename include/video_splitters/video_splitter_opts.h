@@ -2,6 +2,7 @@
 #ifndef __VIDEO_SPLITTER_OPTS_H__
 #define __VIDEO_SPLITTER_OPTS_H__
 
+#include <limits.h>
 #include <unistd.h>
 #include <getopt.h>
 
@@ -25,7 +26,7 @@ namespace AplCam {
 
     struct IntervalSplitterOpts {
       IntervalSplitterOpts()
-        : start(0), end(-1), interval(1) {;}
+        : start(0), end(INT_MAX), interval(1) {;}
 
       int start, end, interval;
 
