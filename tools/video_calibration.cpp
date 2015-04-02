@@ -51,14 +51,14 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       : CalibrationOptsCommon(), 
       calibrationDb(),
       videoFile(),
-      saveBoardPoses( false ), fixSkew( false )
+      saveBoardPoses( false ), fixSkew( false ), overwriteDb( false )
   {;}
 
     string calibrationDb;
 
     string videoFile;
 
-    bool saveBoardPoses, fixSkew;
+    bool saveBoardPoses, fixSkew, overwriteDb;
 
     CalibrationType_t calibType;
     SplitterType_t splitter;
@@ -111,6 +111,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         { "save-board-poses", no_argument, NULL, 'S' },
         { "calibration-file", required_argument, NULL, 'z' },
         { "calibration-db", required_argument, NULL, 'Z' },
+        { "overwrite-db", no_argument, NULL, 'y' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -129,7 +130,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       // The '+' option ensures it stops on the first non-conforming option. Required for the
       //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
       // pattern I'm using
-      while( (optVal = getopt_long( argc, argv, "+z:Z:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "+z:yZ:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
           case 'z':
             calibrationFile = optarg;
@@ -151,6 +152,9 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             break;
           case 'k':
             calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            break;
+          case 'y':
+            overwriteDb = true;
             break;
           case 'm':
             c = optarg;
@@ -346,17 +350,25 @@ int main( int argc, char** argv )
 //         writePoints = false;
 //
 
-    CalibrationSerializer out;
+    CalibrationSerializer ser;
 
-    out.setCamera( distModel )
+    ser.setCamera( distModel )
        .setResult( &result )
        .setBoard( board );
 
     if( !opts.calibrationDb.empty() ) {
-      cout << "Writing to calibration db..." << endl;
+      cout << "Writing to calibration db " << opts.calibrationDb << endl;
+
+      CalibrationDb db( opts.calibrationDb );
+      if( db.has( detSet.name() ) && !opts.overwriteDb ) {
+        cerr << "Already have result in db " << opts.calibrationDb << " with key " << detSet.name() << endl;
+      } else {
+        db.save( detSet.name(), ser );
+      }
+
     } else if( !opts.calibrationFile.empty() ) {
       cout << "Writing calibration to " << opts.calibrationFile << endl;
-      if( !out.writeFile( opts.calibrationFile ) ) {
+      if( !ser.writeFile( opts.calibrationFile ) ) {
         cerr << "Error writing to opts.calibrationFile" << endl;;
       }
     }

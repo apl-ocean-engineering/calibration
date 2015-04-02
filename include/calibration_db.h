@@ -23,6 +23,8 @@ namespace AplCam {
       bool isOpened( void ) const { return _isOpen; }
 
       bool save( const string &key, const CalibrationSerializer &ser );
+
+      bool has( const string &key );
       
 
     protected:
