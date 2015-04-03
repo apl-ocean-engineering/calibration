@@ -131,6 +131,11 @@ class Datum {
     {
       // Quick and dirty
       FileStorage fs( rec, FileStorage::READ | FileStorage::MEMORY );
+      add( fs );
+    }
+
+    void add( FileStorage &fs )
+    {
       if( !fs["rms"].empty() ) _rms.push_back( fs["rms"] );
     }
 
@@ -192,7 +197,10 @@ class AllCalibration : public Calibration {
       if( key.compare("all") != 0 ) return false;
       if( _set ) return false;
 
-      _datum.add( value );
+      FileStorage fs( value, FileStorage::READ | FileStorage::MEMORY );
+      fs["numImages"] >> _numImages;
+
+      _datum.add( fs );
       _set = true;
 
       return true;
@@ -200,12 +208,14 @@ class AllCalibration : public Calibration {
 
     virtual void dump( ostream &strm ) 
     {
-      strm << "all " << _datum.toString() << endl;
+      strm << "0 " << _datum.toString() << endl;
+      strm << _numImages << " " << _datum.toString() << endl;
     }
 
   protected: 
     Datum _datum;
     bool _set;
+    int _numImages;
 };
 
 class RandomCalibration : public Calibration {
@@ -230,7 +240,7 @@ class RandomCalibration : public Calibration {
     virtual void dump( ostream &strm ) 
     {
       for( map< unsigned int, Datum >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-      strm << itr->first << itr->second.toString() << endl;
+      strm << itr->first <<  " " << itr->second.toString() << endl;
       }
     }
 

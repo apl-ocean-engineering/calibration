@@ -296,7 +296,7 @@ int main( int argc, char** argv )
 
   const int spacing = 100;
   const int minImages = 10;
-  const int maxReps = 5;
+  const int maxReps = 20;
   const int maxImages = vidLength;
 
   CalibrationDb calDb( opts.calibrationDb );
@@ -309,24 +309,26 @@ int main( int argc, char** argv )
   calDb.findKeysStartingWith( "random", keys );
 
   // For simplicity, just configure in code.
-  for( int i = minImages; i < maxImages; i+= spacing ) {
-    int maxSets = std::min( maxReps, (vidLength-i) );
+  for( int i = 0; i < maxImages; i+= spacing ) {
+
+    int count = std::max( minImages, i );
+    int maxSets = std::min( maxReps, (vidLength-count) );
 
 
     // Parse out the keys with the correct length
-    int existing = std::count_if( keys.begin(), keys.end(), RandomKeyCounter( i ) );
+    int existing = std::count_if( keys.begin(), keys.end(), RandomKeyCounter( count ) );
 
     size_t todo = maxSets - existing;
 
 
-    cout << "For random set of " << i << " images, found " << existing << " sets, must do " << todo << endl;
+    cout << "For random set of " << count << " images, found " << existing << " sets, must do " << todo << endl;
 
     if( todo == 0 ) continue;
 
     vector< DetectionSet * > detSets;
     for( size_t j = 0; detSets.size() < todo; ++j ) {
       DetectionSet *detSet = new DetectionSet;
-      RandomVideoSplitter( i ).generate( db, *detSet );
+      RandomVideoSplitter( count ).generate( db, *detSet );
 
       if( calDb.has( detSet->name() ) ) continue;
 

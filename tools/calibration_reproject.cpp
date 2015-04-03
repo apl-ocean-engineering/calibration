@@ -201,6 +201,13 @@ void setKeys( const vector< string > &k )
           _rvecs, _tvecs, _imagePoints, 
           result.reprojErrors );
 
+      // Hm, cant get this from anyhere
+      result.numPoints = 0;
+      for( size_t i = 0; i < _objectPoints.size(); ++i ) 
+        result.numPoints += _objectPoints[i].size();
+
+      result.numImages = _objectPoints.size();
+
       cout << "Saving " << key << endl;
       if( !_results.set( key, result.toString() ) ) {
         cerr << "Error saving results for key " << key << endl;
