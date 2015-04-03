@@ -69,7 +69,7 @@ namespace AplCam {
     }
 
     bool success;
-    double totalTime, rms, residual;
+    double totalTime, residual;
     int numPoints, numImages;
 
     RotVec rvecs;

@@ -374,7 +374,7 @@ namespace Distortion {
 
       ReprojErrorsVec &rep( reproj[j] );
       projectPoints( objPts[j], rvecs[j], tvecs[j], rep.projPoints );
-      subtract( rep.projPoints, imgPts, rep.errors );
+      subtract( rep.projPoints, imgPts[j], rep.errors );
 
       double err = cv::norm( rep.errors, NORM_L2 );
       rms += err*err;
