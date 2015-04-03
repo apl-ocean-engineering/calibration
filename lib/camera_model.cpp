@@ -44,7 +44,7 @@ namespace Distortion {
 
     doCalibrate( objectPoints, imagePoints, image_size, result, flags, criteria );
 
-    return result.success;
+    return result.good;
   }
 
 

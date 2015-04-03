@@ -167,8 +167,8 @@ namespace Distortion {
       }
     }
 
-    result.success = true;
-    return result.success;
+    result.good = true;
+    return result.good;
   }
 
   void RadialPolynomial::projectPoints( const ObjectPointsVec &objectPoints, 

@@ -291,7 +291,7 @@ int main( int argc, char** argv )
   Calibrator cal( opts, detSet, imageSize );
   cal.run();
 
-  if( cal.result.success ) {
+  if( cal.result.good ) {
 
     if( !opts.calibrationDb.empty() ) 
       cal.saveDb( opts.calibrationDb, opts.overwriteDb );

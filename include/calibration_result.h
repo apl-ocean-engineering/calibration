@@ -16,7 +16,7 @@ namespace AplCam {
 
   struct Result {
     Result( size_t sz = 0 )
-      : rms(-1), reprojErrors( sz ),
+      : rms(-1), reprojErrors( sz ), good( true ),
       numPoints(-1), numImages(-1)
     {;}
 
@@ -30,6 +30,8 @@ namespace AplCam {
 
     virtual void serialize( FileStorage &fs )
     {
+
+      fs << "success" << good;
       fs << "numPoints" << numPoints;
       fs << "numImages" << numImages;
       fs << "rms" << rms;
@@ -45,6 +47,7 @@ namespace AplCam {
 
     double rms;
     ReprojErrorsVecVec reprojErrors;
+    bool good;
     int numPoints, numImages;
 
 
@@ -53,16 +56,16 @@ namespace AplCam {
 
   struct CalibrationResult : public Result {
     CalibrationResult( size_t sz = 0)
-      : Result( sz ), success(false),
+      : Result( sz ),
       totalTime(-1.0), residual(-1.0),
       rvecs( sz, Vec3d(0,0,0) ),
       tvecs( sz, Vec3d(0,0,0) ),
       status( sz, false )
-    {;}
+    { good = false; }
 
     virtual void resize( size_t sz )
     {
-      success = false;
+      good = false;
       totalTime = -1.0;
       residual = -1.0;
       rvecs.resize( sz, Vec3d(0,0,0) );
@@ -74,12 +77,10 @@ namespace AplCam {
     {
       Result::serialize(fs);
 
-      fs << "success" << success;
       fs << "totalTime" << totalTime;
       fs << "residual" << residual;
     }
 
-    bool success;
     double totalTime, residual;
 
     RotVec rvecs;

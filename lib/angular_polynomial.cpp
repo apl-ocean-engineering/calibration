@@ -239,7 +239,7 @@ const Vec4d AngularPolynomial::ZeroDistortion = Vec4d( 0.334961658, 0.118066350,
     delete[] pose;
 
     result.totalTime = summary.total_time_in_seconds;
-    result.success = summary.IsSolutionUsable();
+    result.good = summary.IsSolutionUsable();
     
     // N.b. the Ceres cost is 1/2 || f(x) ||^2
     //

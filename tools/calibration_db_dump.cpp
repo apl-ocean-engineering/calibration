@@ -124,7 +124,7 @@ class Options {
 class Datum {
   public:
     Datum( void )
-      : _rms()
+      : _rms(), _totalTime(), _bad(0), _count(0)
     {;}
 
     void add( const string &rec )
@@ -136,15 +136,21 @@ class Datum {
 
     void add( FileStorage &fs )
     {
-      if( !fs["rms"].empty() ) _rms.push_back( fs["rms"] );
-      if( !fs["totalTime"].empty() ) _totalTime.push_back( fs["totalTime"] );
+      _count++;
+
+      if( !fs["success"].empty() && ((int)fs["success"] == 1) ) {
+        if( !fs["rms"].empty() ) _rms.push_back( fs["rms"] );
+        if( !fs["totalTime"].empty() ) _totalTime.push_back( fs["totalTime"] );
+      } else {
+        ++_bad;
+      }
     }
 
     string toString( void )
     {
       stringstream strm;
 
-      strm << _rms.size() <<  " " << mean( _rms ) << " " << stdDev( _rms );
+      strm << _count <<  " "  << (_count-_bad) << " " << mean( _rms ) << " " << stdDev( _rms );
       if( _totalTime.size() > 0 )
         strm << " " << mean( _totalTime ) << " " << stdDev( _totalTime );
       return strm.str();
@@ -177,6 +183,8 @@ class Datum {
   protected:
     vector< double > _rms;
     vector< double > _totalTime;
+
+    int _bad, _count;
 
 };
 

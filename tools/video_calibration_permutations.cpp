@@ -252,7 +252,7 @@ struct CalibrateFunctor {
             Calibrator cal( _opts, *_detSets[i], _imageSize );
             cal.run();
 
-            if( cal.result.success ) {
+            if( cal.result.good ) {
               cal.saveDb( _db );
             }
 
@@ -268,6 +268,9 @@ int main( int argc, char** argv )
 {
 
    google::InitGoogleLogging("video_calibration_permutation");
+
+   // Force only four TBB threads
+   task_scheduler_init( 4 );
 
   CalibrationOpts opts;
 

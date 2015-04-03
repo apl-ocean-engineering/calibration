@@ -190,12 +190,15 @@ void setKeys( const vector< string > &k )
 
       Result result( _objectPoints.size() );
 
-      DistortionModel *distModel = CameraFactory::FromString( value );
+
+      FileStorage fs( value, FileStorage::READ | FileStorage::MEMORY );
+      DistortionModel *distModel = CameraFactory::Unserialize( fs );
 
       if( !distModel ) {
         cout << "Couldn't create camera from key " << key << endl;
         continue;
       }
+
 
       result.rms = distModel->reprojectionError( _objectPoints, 
           _rvecs, _tvecs, _imagePoints, 
@@ -207,8 +210,11 @@ void setKeys( const vector< string > &k )
         result.numPoints += _objectPoints[i].size();
 
       result.numImages = _objectPoints.size();
+      result.good = ((int)fs["success"] == 1);
 
       cout << "Saving " << key << endl;
+
+
       if( !_results.set( key, result.toString() ) ) {
         cerr << "Error saving results for key " << key << endl;
       }
