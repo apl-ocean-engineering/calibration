@@ -1,2 +1,14 @@
 - Why is Ceres residual different from reprojection error?
 
+- Work out the video versus post-processed dichotomoy
+
+- Create a Hierarchy of DetectionSource -> DetectionDb
+  so a detection source is basically a source of "frames" of Detections which wraps around a
+  VideoCapture.   add a "isFixedSize()" flag
+  Then various splitters can use different strategies depending on whether it's fixed size
+  (e.g. random) or not (e.g. interval?)
+  DetectionDb can then be generate-on-demand (or be preseeded)
+
+- Store meta-information about the video source in the db
+
+- Pass OpenCV termination criteria to Ceres in AngularPolynomial
