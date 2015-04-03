@@ -1,0 +1,2 @@
+- Why is Ceres residual different from reprojection error?
+
