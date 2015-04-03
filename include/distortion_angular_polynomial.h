@@ -66,34 +66,6 @@ namespace Distortion {
 
       static Matx33d InitialCameraEstimate( const Size &image_size );
 
-      //      void calibrateExtrinsics( const ObjectPointsVecVec &objectPoints,
-      //          const ImagePointsVecVec &imagePoints,
-      //          const int check_cond,
-      //          const double thresh_cond,
-      //          vector< Vec3d > &omc, 
-      //          vector< Vec3d > &Tc );
-
-      //      void initExtrinsics(const ImagePointsVec& _imagePoints, const ObjectPointsVec& _objectPoints, 
-      //          Vec3d& omckk, Vec3d& Tckk);
-      //
-      //      Mat computeHomography(Mat m, Mat M);
-      //
-      //void normalizePixels(const ImagePointsVec& imagePoints, Mat &normalized);
-
-      //void computeExtrinsicRefine(const ImagePointsVec& imagePoints, const ObjectPointsVec& objectPoints, 
-      //    Mat &rvec, Mat &tvec, 
-      //    Mat &J, const int MaxIter,
-      //    const double thresh_cond);
-
-      // Internal functions for projection points given an IntrinsicParams
-      //void projectPoints(const ObjectPointsVec &objectPoints, ImagePointsVec &imagePoints,
-      //    const Vec3d &_rvec, const Vec3d &_tvec,
-      //    cv::OutputArray jacobian);
-
-      // This was formerly in its own anonymous namespace.
-      // Maybe it should still be there...
-      //void subMatrix(const Mat& src, Mat& dst, const vector<int>& cols, const vector<int>& rows);
-
       cv::Vec4d _distCoeffs;
 
   };

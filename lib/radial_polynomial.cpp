@@ -172,11 +172,10 @@ namespace Distortion {
   }
 
   void RadialPolynomial::projectPoints( const ObjectPointsVec &objectPoints, 
-      const Vec3d &rvec, const Vec3d &tvec, ImagePointsVec &imagePoints, 
-      OutputArray jacobian) const
+      const Vec3d &rvec, const Vec3d &tvec, ImagePointsVec &imagePoints ) const
   {
 
-    cv::projectPoints( objectPoints, rvec, tvec, mat(), Mat( _distCoeffs ), imagePoints, jacobian );
+    cv::projectPoints( objectPoints, rvec, tvec, mat(), Mat( _distCoeffs ), imagePoints );
   }
 
 

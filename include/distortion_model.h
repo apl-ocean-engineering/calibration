@@ -53,8 +53,7 @@ namespace Distortion {
           cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 100, DBL_EPSILON)  );
 
       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
-          cv::OutputArray jacobian = cv::noArray()) const = 0;
+          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints ) const = 0;
 
       static Matx33d InitialCameraEstimate( const Size &image_size )
       {
@@ -134,9 +133,11 @@ namespace Distortion {
             const Mat &R = cv::Mat::eye(3,3,CV_64F), 
             const Mat &P = cv::Mat()) const;
 
+
+  virtual void projectPoint( const ObjectPoint &objPt, const Vec3d &rvec, const Vec3d &tvec, ImagePoint &imgPt ) const;
+
       virtual void projectPoints( const ObjectPointsVec &objectPoints, 
-          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints, 
-          cv::OutputArray jacobian = cv::noArray() ) const;
+          const Vec3d &_rvec, const Vec3d &_tvec, ImagePointsVec &imagePoints  ) const;
 
 
         virtual ImagePoint undistort( const ImagePoint &pt, bool reimage = true ) const
