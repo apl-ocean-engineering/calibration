@@ -4,6 +4,8 @@
 
 #include <opencv2/core/core.hpp>
 
+#include <vector>
+
 #include "types.h"
 
 namespace AplCam {
@@ -13,15 +15,25 @@ namespace AplCam {
 
   struct Result {
     Result()
-      : rms(-1) 
+      : rms(-1), reprojErrors() 
     {;}
+
+    virtual void resize( size_t sz )
+    {
+      rms = -1.0;
+      reprojErrors.resize( sz );
+    }
 
     virtual void serialize( FileStorage &fs )
     {
       fs << "rms" << rms;
+      fs << "reprojErrors" << reprojErrors;
     }
 
     double rms;
+    ReprojErrorsVecVec reprojErrors;
+
+
   };
 
 
@@ -35,11 +47,11 @@ namespace AplCam {
       status()
     {;}
 
-    void resize( size_t sz )
+    virtual void resize( size_t sz )
     {
       success = false;
       totalTime = -1.0;
-      residual = rms = -1.0;
+      residual = -1.0;
       rvecs.resize( sz, Vec3d(0,0,0) );
       tvecs.resize( sz, Vec3d(0,0,0) );
       status.resize( sz, false );

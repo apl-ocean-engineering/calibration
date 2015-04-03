@@ -302,26 +302,47 @@ namespace Distortion {
     return out; 
   }
 
-  double PinholeCamera::reprojectionError( const ObjectPointsVec &objPts, const Vec3d &rvec, const Vec3d &tvec, const ImagePointsVec &imgPts )
+
+  // Many, slightly different permutations on the same thing depending on the desired outcome.
+  // Could be cleaned up to reduce DRY?
+  //
+  // Based on the assumption that the ReprojErrors* version use more storage 
+  // space that doesn't need to be used if the norm is being calculated just once
+
+  double PinholeCamera::reprojectionError( const ObjectPointsVec &objPts, 
+      const Vec3d &rvec, const Vec3d &tvec, 
+      const ImagePointsVec &imgPts )
   {
     ImagePointsVec projPts;
     projectPoints( objPts, rvec, tvec, projPts );
-
     double err = cv::norm( projPts, imgPts, NORM_L2 );
-
     return sqrt( (err*err) / objPts.size() );
   }
+
+  double PinholeCamera::reprojectionError( const ObjectPointsVec &objPts, 
+      const Vec3d &rvec, const Vec3d &tvec, 
+      const ImagePointsVec &imgPts,
+      ReprojErrorsVec &reproj )
+  {
+    projectPoints( objPts, rvec, tvec, reproj.projPoints);
+    subtract( reproj.projPoints, imgPts, reproj.errors );
+    double err = cv::norm( reproj.errors, NORM_L2 );
+    return sqrt( (err*err) / objPts.size() );
+  }
+
+
 
   double PinholeCamera::reprojectionError( const ObjectPointsVecVec &objPts, 
                                              const RotVec &rvecs, 
                                              const TransVec &tvecs, 
-                                             const ImagePointsVecVec &imgPts )
-  { 
+                                             const ImagePointsVecVec &imgPts,
+                                             const vector<bool> mask )
+  {
     int numPoints = 0;
     double rms = 0.0;
 
     for( size_t j = 0; j < objPts.size(); ++j ) {
-      if( objPts[j].size() == 0 ) continue;
+      if( !mask.empty() && mask[j] == false ) continue;
 
       numPoints += objPts[j].size();
 
@@ -336,28 +357,31 @@ namespace Distortion {
   }
 
   double PinholeCamera::reprojectionError( const ObjectPointsVecVec &objPts, 
+                                             const RotVec &rvecs, 
+                                             const TransVec &tvecs, 
                                              const ImagePointsVecVec &imgPts,
-                                             const CalibrationResult &result )
+                                             ReprojErrorsVecVec &reproj,
+                                             const vector<bool> mask )
   { 
     int numPoints = 0;
     double rms = 0.0;
 
+    reproj.resize( objPts.size() );
     for( size_t j = 0; j < objPts.size(); ++j ) {
-      if( result.status[j] == false ) continue;
+      if( !mask.empty() && mask[j] == false ) continue;
 
       numPoints += objPts[j].size();
 
-      ImagePointsVec projPts;
-      projectPoints( objPts[j], result.rvecs[j], result.tvecs[j], projPts );
-      double err = cv::norm( projPts, imgPts[j], NORM_L2 );
-      rms += err*err;
+      ReprojErrorsVec &rep( reproj[j] );
+      projectPoints( objPts[j], rvecs[j], tvecs[j], rep.projPoints );
+      subtract( rep.projPoints, imgPts, rep.errors );
 
+      double err = cv::norm( rep.errors, NORM_L2 );
+      rms += err*err;
     }
 
     return sqrt(rms/numPoints);
   }
-
-
 
 
 };

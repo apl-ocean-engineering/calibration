@@ -222,14 +222,25 @@ namespace Distortion {
 
 
 
-        double reprojectionError( const ObjectPointsVec &objPts, const Vec3d &rvec, const Vec3d &tvec, const ImagePointsVec &imgPts );
+        double reprojectionError( const ObjectPointsVec &objPts, 
+            const Vec3d &rvec, const Vec3d &tvec, 
+            const ImagePointsVec &imgPts );
 
-        double reprojectionError( const ObjectPointsVecVec &obPtsj, const RotVec &rvecs, const TransVec &tvecs, 
-            const ImagePointsVecVec &imgPts );
+        double reprojectionError( const ObjectPointsVec &objPts, 
+            const Vec3d &rvec, const Vec3d &tvec, 
+            const ImagePointsVec &imgPts,
+            ReprojErrorsVec &reprojErrors );
 
-        double reprojectionError( const ObjectPointsVecVec &objPts, 
+        double reprojectionError( const ObjectPointsVecVec &obPtsj, 
+            const RotVec &rvecs, const TransVec &tvecs, 
             const ImagePointsVecVec &imgPts,
-            const CalibrationResult &result );
+            const vector<bool> mask = vector<bool>() );
+
+        double reprojectionError( const ObjectPointsVecVec &obPtsj, 
+            const RotVec &rvecs, const TransVec &tvecs, 
+            const ImagePointsVecVec &imgPts,
+            ReprojErrorsVecVec &reprojErrors,
+            const vector<bool> mask = vector<bool>() );
 
     protected:
 
