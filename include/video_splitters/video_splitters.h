@@ -43,6 +43,34 @@ namespace AplCam {
         }
     };
 
+    class AllGoodVideoSplitter : public VideoSplitter {
+      public:
+        AllGoodVideoSplitter( void ) {;}
+
+        virtual void generate( DetectionDb &db, DetectionSet &set )
+        {
+          DB::Cursor *cur = db.cursor();
+          string key, value;
+          while( cur->get_key( &key, true ) ){
+            int frame = stoi( key );
+            Detection *detection = db.load( frame );
+            if( detection ) {
+              if( detection->rot[0] == 0.0 && detection->rot[1] == 0.0 && detection->rot[2] == 0.0 ) continue;
+
+            set.addDetection( detection, frame );
+            }
+
+          }
+
+          set.setName( "all" );
+
+          delete cur;
+
+        }
+    };
+
+
+
     class RandomVideoSplitter : public VideoSplitter {
       public:
         RandomVideoSplitter( int c )

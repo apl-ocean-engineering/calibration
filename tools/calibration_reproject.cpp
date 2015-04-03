@@ -229,7 +229,7 @@ int main( int argc, char** argv )
   }
 
   DetectionSet refDetections;
-  AllVideoSplitter vs;
+  AllGoodVideoSplitter vs;
   vs.generate( refDets, refDetections );
 
   cout << "Loaded reference detection set with " << refDetections.size() << " frames." << endl;

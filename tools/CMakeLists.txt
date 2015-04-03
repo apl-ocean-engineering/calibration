@@ -37,6 +37,8 @@ endif()
 
 add_executable( calibration_reproject calibration_reproject.cpp )
 
+add_executable( calibration_db_dump calibration_db_dump.cpp )
+
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )

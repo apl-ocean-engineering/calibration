@@ -33,12 +33,18 @@ namespace AplCam {
 
       void addDetection( DetectionDb &db, const int frame )
       { 
-        Detection *detection = db.load( frame );
+        addDetection( db.load( frame ), frame );
+      }
+
+      void addDetection( Detection *detection, const int frame )
+      { 
         if( detection ) {
           _detections.push_back( detection );
           _frames.push_back( frame );
         }
       }
+
+
 
 
       //==
