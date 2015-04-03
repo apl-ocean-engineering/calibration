@@ -10,10 +10,25 @@ namespace AplCam {
 
   using cv::FileStorage;
 
-  struct CalibrationResult {
+
+  struct Result {
+    Result()
+      : rms(-1) 
+    {;}
+
+    virtual void serialize( FileStorage &fs )
+    {
+      fs << "rms" << rms;
+    }
+
+    double rms;
+  };
+
+
+  struct CalibrationResult : public Result {
     CalibrationResult()
-      : success(false),
-      totalTime(-1.0), rms(-1.0), residual(-1.0),
+      : Result(), success(false),
+      totalTime(-1.0), residual(-1.0),
       numPoints(-1), numImages(-1),
       rvecs(),
       tvecs(),
@@ -30,13 +45,14 @@ namespace AplCam {
       status.resize( sz, false );
     }
 
-    void serialize( FileStorage &fs )
+    virtual void serialize( FileStorage &fs )
     {
+      Result::serialize(fs);
+
       fs << "success" << success;
       fs << "totalTime" << totalTime;
       fs << "numPoints" << numPoints;
       fs << "numImage" << numImages;
-      fs << "rms" << rms;
       fs << "residual" << residual;
     }
 
