@@ -68,6 +68,7 @@ class DetectionDb {
   public:
 
     DetectionDb();
+    DetectionDb( const string &dbFile, bool writer = false );
 
     ~DetectionDb();
 

@@ -181,9 +181,17 @@ void AprilTagsDetection::calculateCorners( const AprilTagsBoard &board )
 //  DetectionDb
 //============================================================================
 
-  DetectionDb::DetectionDb( void )
+DetectionDb::DetectionDb( void )
 : _db(), _cursor(NULL)
 {;}
+
+DetectionDb::DetectionDb( const string &dbFile, bool writer )
+: _db(), _cursor(NULL)
+{
+  open( dbFile, writer );
+}
+
+
 
 DetectionDb::~DetectionDb()
 {

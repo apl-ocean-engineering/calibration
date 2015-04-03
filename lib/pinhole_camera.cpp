@@ -369,6 +369,7 @@ namespace Distortion {
     reproj.resize( objPts.size() );
     for( size_t j = 0; j < objPts.size(); ++j ) {
       if( !mask.empty() && mask[j] == false ) continue;
+      if( objPts[j].size() == 0 ) continue;
 
       numPoints += objPts[j].size();
 

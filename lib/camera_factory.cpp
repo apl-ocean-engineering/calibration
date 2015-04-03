@@ -13,6 +13,17 @@ namespace Distortion {
   DistortionModel *CameraFactory::LoadDistortionModel( const string &file )
   {
     FileStorage fs( file, FileStorage::READ );
+    return Unserialize( fs );
+  }
+
+  DistortionModel *CameraFactory::FromString( const string &str )
+  {
+    FileStorage fs( str, FileStorage::READ | FileStorage::MEMORY );
+    return Unserialize( fs );
+  }
+
+  DistortionModel *CameraFactory::Unserialize( FileStorage &fs )
+  {
     DistortionModel *out = NULL;
 
     string type;
@@ -26,42 +37,6 @@ namespace Distortion {
 
     return out;
   }
-
-  //  public:
-  //    Camera( const string &name )
-  //      : _name(name), _cam(), _dist()
-  //    {; }
-  //
-  //    const Mat &cameraMatrix( void ) const { return _cam; }
-  //    const Mat &cam( void ) const { return _cam; }
-  //
-  //    const Mat &distCoeffs( void ) const { return _dist; }
-  //
-  //    bool loadCache( const string &cacheFile )
-  //    {
-  //      cout << "Loading camera file " << cacheFile << endl;
-  //
-  //      if( !file_exists( cacheFile ) ) {
-  //        cerr << "Cache  file \"" << cacheFile << "\" doesn't exist." << endl;
-  //        return false;
-  //      }
-  //
-  //      FileStorage cache( cacheFile, FileStorage::READ );
-  //
-  //      cache["camera_matrix"] >> _cam;
-  //      cache["distortion_coefficients"] >> _dist;
-  //
-  //      // Insert validation here
-  //      //
-  //
-  //      return true;
-  //    }
-  //
-  //  private:
-  //
-  //    string _name, _cache;
-  //    Mat _cam, _dist;
-  //};
 
 }
 

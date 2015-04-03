@@ -55,6 +55,39 @@ namespace AplCam {
         return count;
       }
 
+
+      // Inefficient, for now
+      ObjectPointsVecVec objectPoints( void ) const {
+        ObjectPointsVecVec v;
+        for( DetectionMap::const_iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) 
+          v.push_back( (*itr)->corners );
+        return v;
+      }
+
+      ImagePointsVecVec imagePoints( void ) const {
+        ImagePointsVecVec v;
+        for( DetectionMap::const_iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) 
+          v.push_back( (*itr)->points );
+        return v;
+      }
+
+      RotVec rvecs( void ) const {
+        RotVec v;
+        for( DetectionMap::const_iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) 
+          v.push_back( (*itr)->rot );
+        return v;
+      }
+
+      TransVec tvecs( void ) const {
+        TransVec v;
+        for( DetectionMap::const_iterator itr = _detections.begin(); itr != _detections.end(); ++itr ) 
+          v.push_back( (*itr)->trans );
+        return v;
+      }
+
+
+
+
       struct SetElement {
         SetElement( int f, Detection *det )
           : frame( f ), _det(det) {;}

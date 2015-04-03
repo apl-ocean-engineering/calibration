@@ -5,6 +5,7 @@
 #include <opencv2/core/core.hpp>
 
 #include <vector>
+#include <string>
 
 #include "types.h"
 
@@ -14,8 +15,8 @@ namespace AplCam {
 
 
   struct Result {
-    Result()
-      : rms(-1), reprojErrors() 
+    Result( size_t sz = 0 )
+      : rms(-1), reprojErrors( sz ) 
     {;}
 
     virtual void resize( size_t sz )
@@ -30,6 +31,13 @@ namespace AplCam {
       fs << "reprojErrors" << reprojErrors;
     }
 
+    std::string toString(  void )
+    {
+      FileStorage fs("foo.yml", FileStorage::WRITE | FileStorage::MEMORY );
+      serialize( fs );
+      return fs.releaseAndGetString();
+    }
+
     double rms;
     ReprojErrorsVecVec reprojErrors;
 
@@ -38,13 +46,13 @@ namespace AplCam {
 
 
   struct CalibrationResult : public Result {
-    CalibrationResult()
-      : Result(), success(false),
+    CalibrationResult( size_t sz = 0)
+      : Result( sz ), success(false),
       totalTime(-1.0), residual(-1.0),
       numPoints(-1), numImages(-1),
-      rvecs(),
-      tvecs(),
-      status()
+      rvecs( sz, Vec3d(0,0,0) ),
+      tvecs( sz, Vec3d(0,0,0) ),
+      status( sz, false )
     {;}
 
     virtual void resize( size_t sz )

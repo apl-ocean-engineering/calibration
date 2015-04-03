@@ -20,9 +20,13 @@ namespace AplCam {
       }
 
       kyotocabinet::BasicDB::Error error( void ) { return _db.error(); }
+      kyotocabinet::DB::Cursor *cursor( void ) { return _db.cursor(); }
+
       bool isOpened( void ) const { return _isOpen; }
 
       bool save( const string &key, const CalibrationSerializer &ser );
+      bool get( const string &key, string * value )
+      { return _db.get( key, value ); }
 
       bool has( const string &key );
 
