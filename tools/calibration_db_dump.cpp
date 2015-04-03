@@ -137,6 +137,7 @@ class Datum {
     void add( FileStorage &fs )
     {
       if( !fs["rms"].empty() ) _rms.push_back( fs["rms"] );
+      if( !fs["totalTime"].empty() ) _totalTime.push_back( fs["totalTime"] );
     }
 
     string toString( void )
@@ -144,7 +145,8 @@ class Datum {
       stringstream strm;
 
       strm << _rms.size() <<  " " << mean( _rms ) << " " << stdDev( _rms );
-
+      if( _totalTime.size() > 0 )
+        strm << " " << mean( _totalTime ) << " " << stdDev( _totalTime );
       return strm.str();
     }
 
@@ -174,6 +176,7 @@ class Datum {
 
   protected:
     vector< double > _rms;
+    vector< double > _totalTime;
 
 };
 
@@ -299,6 +302,7 @@ int main( int argc, char** argv )
     cout.rdbuf( foo.rdbuf() );
   }
 
+  cout << "# num_points num_reps rms_mean rms_stddev time_mean time_stddev" << endl;
   cout << endl;
   cout << "# all" << endl;
   allCal.dump( cout );
