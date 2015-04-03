@@ -20,8 +20,6 @@ if( USE_TBB )
   target_link_libraries( build_detection_db tbb )
 endif()
 
-
-
 add_executable( calculate_calibration_errors calculate_calibration_errors.cpp )
 
 add_executable( align_streams align_streams.cpp )
@@ -33,6 +31,9 @@ add_executable( calibration calibration.cpp )
 add_executable( video_calibration video_calibration.cpp )
 
 add_executable( video_calibration_permutations video_calibration_permutations.cpp )
+if( USE_TBB )
+  target_link_libraries( video_calibration_permutations tbb )
+endif()
 
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
