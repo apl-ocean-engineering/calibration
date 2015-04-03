@@ -308,7 +308,20 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
+
+  // Do All
+    vector< DetectionSet * > detSets;
+
+
   vector<string> keys;
+  calDb.findKeysStartingWith( "all", keys );
+  if( keys.size() == 0 ) {
+    DetectionSet *all = new DetectionSet;
+    AllVideoSplitter().generate( db, *all );
+    detSets.push_back( all );
+  }
+
+  keys.clear();
   calDb.findKeysStartingWith( "random", keys );
 
   // For simplicity, just configure in code.
@@ -328,7 +341,6 @@ int main( int argc, char** argv )
 
     if( todo == 0 ) continue;
 
-    vector< DetectionSet * > detSets;
     for( size_t j = 0; detSets.size() < todo; ++j ) {
       DetectionSet *detSet = new DetectionSet;
       RandomVideoSplitter( count ).generate( db, *detSet );
@@ -349,8 +361,18 @@ int main( int argc, char** argv )
 
     // Delete all detection sets
     for( size_t j = 0; j < detSets.size(); ++j ) delete detSets[j];
+    detSets.clear();
 
   }
+
+  // Now run each one
+  CalibrateFunctor func( opts, imageSize, calDb, detSets );
+#ifdef USE_TBB
+  parallel_for( blocked_range<size_t>(0,detSets.size()), func );
+#else
+  func();
+#endif
+
 
   return 0;
 }

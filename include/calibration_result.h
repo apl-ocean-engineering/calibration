@@ -30,7 +30,6 @@ namespace AplCam {
 
     virtual void serialize( FileStorage &fs )
     {
-
       fs << "success" << good;
       fs << "numPoints" << numPoints;
       fs << "numImages" << numImages;

@@ -34,11 +34,12 @@ namespace AplCam {
         virtual void generate( DetectionDb &db, DetectionSet &set )
         {
           DB::Cursor *cur = db.cursor();
+          cur->jump();
           string key;
           while( cur->get_key( &key, true ) ) set.addDetection( db, stoi(key) );
           set.setName( "all" );
 
-          delete cur;
+          //delete cur;
 
         }
     };
@@ -50,6 +51,7 @@ namespace AplCam {
         virtual void generate( DetectionDb &db, DetectionSet &set )
         {
           DB::Cursor *cur = db.cursor();
+          cur->jump();
           string key, value;
           while( cur->get_key( &key, true ) ){
             int frame = stoi( key );
@@ -64,7 +66,7 @@ namespace AplCam {
 
           set.setName( "all" );
 
-          delete cur;
+          //delete cur;
 
         }
     };

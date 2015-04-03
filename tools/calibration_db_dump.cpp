@@ -310,7 +310,7 @@ int main( int argc, char** argv )
     cout.rdbuf( foo.rdbuf() );
   }
 
-  cout << "# num_points num_reps rms_mean rms_stddev time_mean time_stddev" << endl;
+  cout << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
   cout << endl;
   cout << "# all" << endl;
   allCal.dump( cout );
