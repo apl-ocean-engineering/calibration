@@ -98,7 +98,7 @@ struct BuildDbOpts {
       return strm.str();
     }
 
-    string unknownOption( int opt )
+    string unknownOption( const char opt )
     {
       stringstream strm;
       strm << "Unknown option \"" << opt << "\"";
@@ -166,7 +166,7 @@ struct BuildDbOpts {
             return false;
             break;
           default:
-            msg = unknownOption( optopt );
+            msg = unknownOption( optVal );
             return false;
         }
       }
@@ -247,7 +247,7 @@ class BuildDbMain
 
       while( vid.read( img ) ) {
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-        cout << currentFrame;
+        cout << currentFrame << " ";
 
         if( !db.has( currentFrame ) || opts.doRewrite ) {
           frames.push_back( Frame( currentFrame, img.clone() ) );
@@ -263,11 +263,12 @@ class BuildDbMain
         }
 
         if( frames.size() >= chunkSize ) {
-          processFrames( frames );
           cout << endl;
+          processFrames( frames );
         }
       }
 
+      cout << endl;
       processFrames( frames );
 
 
