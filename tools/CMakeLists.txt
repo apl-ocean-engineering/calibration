@@ -36,6 +36,9 @@ if( USE_TBB )
 endif()
 
 add_executable( calibration_reproject calibration_reproject.cpp )
+if( USE_TBB )
+  target_link_libraries( calibration_reproject tbb )
+endif()
 
 add_executable( calibration_db_dump calibration_db_dump.cpp )
 
