@@ -18,6 +18,16 @@ namespace AplCam {
   {
     CompositeCanvas( void ) {;}
 
+    CompositeCanvas( const Size &sz, int type )
+      : canvas( sz, type )
+    {
+rect[0] = Rect( 0,0, sz.width/2, sz.height );
+rect[1] = Rect( rect[0].width, 0, rect[0].width, rect[0].height );
+
+      roi[0] = Mat( canvas, rect[0] );
+      roi[1] = Mat( canvas, rect[1] );
+    }
+
     CompositeCanvas( const Mat &mat, const Rect &roi1 = Rect(), const Rect &roi2 = Rect() )
       : canvas( mat )
     {
