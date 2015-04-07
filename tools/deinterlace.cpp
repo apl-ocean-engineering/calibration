@@ -26,12 +26,15 @@ struct DeinterlaceOpts {
     DeinterlaceOpts()
       : inFile(""), 
       doDisplay( false ),
-      waitKey( 1 )
+      waitKey( 1 ), 
+      seekFrame( -1 ), 
+      seekSeconds( -1.0 )
   {;}
 
     string inFile;
     bool doDisplay;
-    int waitKey;
+    int waitKey, seekFrame;
+    float seekSeconds;
 
     bool parseOpts( int argc, char **argv, string &msg )
     {
@@ -46,7 +49,8 @@ struct DeinterlaceOpts {
 
         TCLAP::ValueArg< int > waitKeyArg( "W", "wait-key", "Minimum interval between images if displaying", false, 1, "interval in ms", cmd );
 
-
+        TCLAP::ValueArg< int > seekFrameArg( "s", "seek", "Frame to seek to", false, -1, "frame", cmd );
+        TCLAP::ValueArg< float > seekSecondsArg( "S", "seek-seconds", "Seconds to seek to", false, -1.0, "seconds", cmd );
 
         cmd.parse( argc, argv );
 
@@ -55,6 +59,8 @@ struct DeinterlaceOpts {
         doDisplay = doDisplayArg.getValue();
         waitKey = waitKeyArg.getValue();
 
+        seekFrame = seekFrameArg.getValue();
+        seekSeconds = seekSecondsArg.getValue();
 
       } catch( TCLAP::ArgException &e ) {
         strm << "error: " << e.error() << " for arg " << e.argId();
@@ -67,7 +73,25 @@ struct DeinterlaceOpts {
 
     bool validate( string &msg )
     {
+      if( seekFrame > 0 && seekSeconds > 0 ) {
+        msg = "Cannot set both seek seconds and seek frame.";
+        return false;
+      }
+
       return true;
+    }
+
+    int seekTo( float fps )
+    {
+      cout << fps << " " << seekFrame << " " << seekSeconds << endl;
+      // exclusive nature of these two flags is handled in validate()
+      if( seekFrame > 0 )
+        return seekFrame;
+      else if( seekSeconds > 0 ) {
+        cout << seekSeconds * fps <<  " " << round(seekSeconds * fps) << endl;
+        return round(seekSeconds * fps);
+      } else
+        return -1;
     }
 
 };
@@ -95,13 +119,22 @@ class DeinterlaceMain
 
       int vidWidth = vid.get( CV_CAP_PROP_FRAME_WIDTH ),
           vidHeight = vid.get( CV_CAP_PROP_FRAME_HEIGHT );
-      Size compositeSize( vidWidth*2, vidHeight/2 );
-      CompositeCanvas canvas( compositeSize, CV_8UC3 );
+      Size compositeSize( vidWidth, vidHeight/2 );
+      VerticalCompositeCanvas canvas( compositeSize, CV_8UC3 );
 
       if( opts.doDisplay ) namedWindow( "deinterlace" );
+      int wait = opts.waitKey;
+
+      int frame = opts.seekTo( vid.get( CV_CAP_PROP_FPS ) );
+      if( frame > 0 ) {
+        cout << "Jumping to frame " << frame << endl;
+        vid.set( CV_CAP_PROP_POS_FRAMES, frame );
+      }
+
 
       Mat img;
-      while( vid.read( img ) ) {
+      bool doStop = false;
+      while( vid.read( img ) and doStop == false) {
         // Try doing this by direct manipulation
 
         Mat lines[2] = { Mat( img ), Mat( img ) };
@@ -109,8 +142,10 @@ class DeinterlaceMain
         lines[1].data += lines[1].step;
 
         for( int i = 0; i < 2; ++i ) {
+          cout << lines[i].step[0] << " " << lines[i].step[1] << endl;
           lines[i].step[0] *= 2;
-          lines[i].rows /= 2;
+          lines[i].size[0] /= 2;
+          lines[i].flags &= ~Mat::CONTINUOUS_FLAG;
         }
 
         assert( (lines[0].rows + lines[1].rows) == img.rows );
@@ -121,9 +156,13 @@ class DeinterlaceMain
 
           imshow( "deinterlace", canvas );
 
-          unsigned char ch = waitKey( opts.waitKey );
+          unsigned char ch = waitKey( wait );
           switch( ch ) {
-            case 'q': break;
+            case 'q': doStop = true; break;
+            case ' ': 
+                      if( wait == 0 ) wait = opts.waitKey;
+                      else wait = 0;
+                      break;
           }
         }
 
