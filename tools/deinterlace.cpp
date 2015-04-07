@@ -25,6 +25,7 @@ struct DeinterlaceOpts {
   public:
     DeinterlaceOpts()
       : inFile(""), 
+      displayMode( NONE ),
       doDisplay( false ),
       waitKey( 1 ), 
       seekFrame( -1 ), 
@@ -32,7 +33,10 @@ struct DeinterlaceOpts {
   {;}
 
     string inFile;
+
+    enum DisplayMode { COMPOSITE, INTERLEAVE, NONE } displayMode;
     bool doDisplay;
+
     int waitKey, seekFrame;
     float seekSeconds;
 
@@ -45,7 +49,7 @@ struct DeinterlaceOpts {
 
         TCLAP::UnlabeledValueArg< std::string > inFileArg( "input-file", "File to deinterlace", true, "", "a filename", cmd );
 
-        TCLAP::SwitchArg doDisplayArg( "D", "do-display", "Display video while processing", cmd );
+        TCLAP::ValueArg< string > doDisplayArg( "D", "display", "Display video while processing", false, "composite", "composite|interleave", cmd );
 
         TCLAP::ValueArg< int > waitKeyArg( "W", "wait-key", "Minimum interval between images if displaying", false, 1, "interval in ms", cmd );
 
@@ -56,8 +60,19 @@ struct DeinterlaceOpts {
 
         // Extract arguments from TCLAP;
         inFile = inFileArg.getValue(); 
-        doDisplay = doDisplayArg.getValue();
         waitKey = waitKeyArg.getValue();
+
+        doDisplay = doDisplayArg.isSet();
+        string disp( doDisplayArg.getValue() );
+        if( disp.compare( "composite" ) == 0 ) {
+          displayMode = COMPOSITE;
+        } else if( disp.compare( "interleave" ) == 0 ) {
+          displayMode = INTERLEAVE;
+        } else {
+          msg = "Don't understand display mode " + disp;
+          return false;
+        }
+
 
         seekFrame = seekFrameArg.getValue();
         seekSeconds = seekSecondsArg.getValue();
@@ -78,6 +93,11 @@ struct DeinterlaceOpts {
         return false;
       }
 
+      if( doDisplay && displayMode == NONE ) {
+        msg = "Display mode not set properly";
+        return false;
+      }
+
       return true;
     }
 
@@ -88,7 +108,6 @@ struct DeinterlaceOpts {
       if( seekFrame > 0 )
         return seekFrame;
       else if( seekSeconds > 0 ) {
-        cout << seekSeconds * fps <<  " " << round(seekSeconds * fps) << endl;
         return round(seekSeconds * fps);
       } else
         return -1;
@@ -109,8 +128,6 @@ class DeinterlaceMain
 
     int run( void ) {
 
-      cout << "Deinterlacing " << opts.inFile << endl;
-
       VideoCapture vid( opts.inFile );
       if( !vid.isOpened() ) {
         cout << "Error opening video" << endl;
@@ -123,14 +140,16 @@ class DeinterlaceMain
       VerticalCompositeCanvas canvas( compositeSize, CV_8UC3 );
 
       if( opts.doDisplay ) namedWindow( "deinterlace" );
-      int wait = opts.waitKey;
 
-      int frame = opts.seekTo( vid.get( CV_CAP_PROP_FPS ) );
+      float fps = vid.get( CV_CAP_PROP_FPS );
+      int mspf = 1000 * (1.0/fps);
+      int wait = mspf;
+
+      int frame = opts.seekTo( fps );
       if( frame > 0 ) {
         cout << "Jumping to frame " << frame << endl;
         vid.set( CV_CAP_PROP_POS_FRAMES, frame );
       }
-
 
       Mat img;
       bool doStop = false;
@@ -142,7 +161,6 @@ class DeinterlaceMain
         lines[1].data += lines[1].step;
 
         for( int i = 0; i < 2; ++i ) {
-          cout << lines[i].step[0] << " " << lines[i].step[1] << endl;
           lines[i].step[0] *= 2;
           lines[i].size[0] /= 2;
           lines[i].flags &= ~Mat::CONTINUOUS_FLAG;
@@ -152,15 +170,27 @@ class DeinterlaceMain
 
         if( opts.doDisplay ) {
 
-          for( int i = 0; i < 2; ++i ) lines[i].copyTo( canvas[i] );
+          unsigned char ch = 0;
 
-          imshow( "deinterlace", canvas );
+          // A little shonky for now
+          if( opts.displayMode == DeinterlaceOpts::COMPOSITE ) {
+            for( int i = 0; i < 2; ++i ) lines[i].copyTo( canvas[i] );
+            imshow( "deinterlace", canvas );
+            ch = waitKey( wait );
+          } else if( opts.displayMode == DeinterlaceOpts::INTERLEAVE ) {
 
-          unsigned char ch = waitKey( wait );
+           imshow( "deinterlace", lines[0] );
+           waitKey( wait/2 );
+
+           imshow( "deinterlace", lines[1] );
+           ch = waitKey( wait/2 );
+
+          }
+        
           switch( ch ) {
             case 'q': doStop = true; break;
             case ' ': 
-                      if( wait == 0 ) wait = opts.waitKey;
+                      if( wait == 0 ) wait = mspf;
                       else wait = 0;
                       break;
           }
