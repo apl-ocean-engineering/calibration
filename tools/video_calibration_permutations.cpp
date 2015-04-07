@@ -252,12 +252,8 @@ struct CalibrateFunctor {
             Calibrator cal( _opts, *_detSets[i], _imageSize );
             cal.run();
 
-            if( cal.result.good ) {
-              cal.saveDb( _db );
-            }
-
-
-
+            //  Want to measure failure rate, Save it regardless of whether it's good.
+            cal.saveDb( _db );
           }
         }
       };
@@ -268,9 +264,6 @@ int main( int argc, char** argv )
 {
 
    google::InitGoogleLogging("video_calibration_permutation");
-
-   // Force only four TBB threads
-   task_scheduler_init( 4 );
 
   CalibrationOpts opts;
 
@@ -299,7 +292,7 @@ int main( int argc, char** argv )
 
   const int spacing = 100;
   const int minImages = 10;
-  const int maxReps = 20;
+  const int maxReps = 10;
   const int maxImages = vidLength;
 
   CalibrationDb calDb( opts.calibrationDb );
@@ -334,7 +327,7 @@ int main( int argc, char** argv )
     // Parse out the keys with the correct length
     int existing = std::count_if( keys.begin(), keys.end(), RandomKeyCounter( count ) );
 
-    size_t todo = maxSets - existing;
+    size_t todo = (maxSets > existing) ? (maxSets - existing) : 0;
 
 
     cout << "For random set of " << count << " images, found " << existing << " sets, must do " << todo << endl;

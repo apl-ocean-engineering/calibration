@@ -52,7 +52,8 @@ namespace AplCam {
 
       int flags =  _opts.calibFlags;
       _distModel->calibrate( objectPoints, imagePoints, 
-          _imageSize, result, flags );
+          _imageSize, result, flags,
+           cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 500, DBL_EPSILON)  );  
 
       //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
       cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
