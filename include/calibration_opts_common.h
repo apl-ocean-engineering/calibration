@@ -17,7 +17,7 @@ namespace AplCam {
     typedef enum { ANGULAR_POLYNOMIAL, RADIAL_POLYNOMIAL } CalibrationType_t;
 
     CalibrationOptsCommon()
-      : dataDir("data"),
+      : dataDir("../data"),
       boardName(), cameraName(), calibrationFile(),
       calibFlags(0),
       calibType( ANGULAR_POLYNOMIAL )

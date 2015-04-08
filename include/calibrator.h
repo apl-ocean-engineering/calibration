@@ -36,7 +36,7 @@ namespace AplCam {
       void saveFile( const string &file ); 
      
       // For this special case, get a non-const DetectionSet
-      void updateDetectionPoses( DetectionSet &dets, DetectionDb &db );
+      void updateDetectionPoses( DetectionSet &dets );
  
       CalibrationResult result;
 

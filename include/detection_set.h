@@ -8,6 +8,7 @@
 #include <string>
 
 #include "detection.h"
+#include "detection_db.h"
 
 namespace AplCam {
 
@@ -92,6 +93,22 @@ namespace AplCam {
       }
 
 
+      struct ConstSetElement {
+        ConstSetElement( int f, Detection *det )
+          : frame( f ), _det(det) {;}
+
+        int frame;
+        const Detection *_det;
+
+        operator const Detection &( void ) { return *_det; }
+        operator const Detection *( void ) { return _det; }
+      };
+
+
+      ConstSetElement operator[]( unsigned int i)  const
+      {
+        return ConstSetElement( _frames[i], _detections[i] );
+      }
 
 
       struct SetElement {
@@ -106,7 +123,7 @@ namespace AplCam {
       };
 
 
-      SetElement operator[]( unsigned int i)
+      SetElement operator[]( unsigned int i) 
       {
         return SetElement( _frames[i], _detections[i] );
       }

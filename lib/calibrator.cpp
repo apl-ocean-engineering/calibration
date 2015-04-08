@@ -100,7 +100,7 @@ namespace AplCam {
 
 
     // For this special case, get a non-const DetectionSet
-    void Calibrator::updateDetectionPoses( DetectionSet &dets, DetectionDb &db )
+    void Calibrator::updateDetectionPoses( DetectionSet &dets )
     {
       // Try to assure they're the same DetectionSets...
       assert( dets.size() == _detSet.size() );
@@ -111,8 +111,6 @@ namespace AplCam {
         det.rot = result.rvecs[i];
         det.trans = result.tvecs[i];
 
-        if( ! db.update( dets[i].frame, det ) )
-          cerr << "Trouble saving updated poses: " << db.error().name() << endl;
       }
     }
 

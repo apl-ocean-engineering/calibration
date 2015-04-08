@@ -15,6 +15,7 @@
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
+#include "detection_db.h"
 #include "detection_set.h"
 #include "image.h"
 
@@ -48,14 +49,17 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       : CalibrationOptsCommon(), 
       calibrationDb(),
       videoFile(),
-      saveBoardPoses( false ), fixSkew( false ), overwriteDb( false )
+      saveBoardPoses(), 
+      fixSkew( true ), overwriteDb( false )
   {;}
 
     string calibrationDb;
 
     string videoFile;
 
-    bool saveBoardPoses, fixSkew, overwriteDb;
+    string saveBoardPoses;
+
+    bool fixSkew, overwriteDb;
 
     CalibrationType_t calibType;
     SplitterType_t splitter;
@@ -105,7 +109,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
         { "fix-skew", false, NULL, 'k'},
-        { "save-board-poses", no_argument, NULL, 'S' },
+        { "save-board-poses", required_argument, NULL, 'S' },
         { "calibration-file", required_argument, NULL, 'z' },
         { "calibration-db", required_argument, NULL, 'Z' },
         { "overwrite-db", no_argument, NULL, 'y' },
@@ -145,7 +149,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             cameraName = optarg;
             break;
           case 'S':
-            saveBoardPoses = true;
+            saveBoardPoses = optarg;
             break;
           case 'k':
             calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
@@ -255,8 +259,7 @@ int main( int argc, char** argv )
 
 
   DetectionDb db;
-  if( ! db.open( opts.cachePath(), opts.videoFile, 
-        ( opts.saveBoardPoses == true ? true : false ) ) ) {
+  if( ! db.open( opts.cachePath(), opts.videoFile ) ) {
     cerr << "Error opening db error: " << db.error().name() << endl;
     return -1;
   }
@@ -299,7 +302,11 @@ int main( int argc, char** argv )
       cal.saveFile( opts.calibrationFile );
 
 
-    if( opts.saveBoardPoses ) cal.updateDetectionPoses( detSet, db );
+    if( opts.saveBoardPoses.length() > 0 ) {
+     DetectionDb savedPoses( opts.saveBoardPoses, true ); 
+     cal.updateDetectionPoses( detSet );
+     savedPoses.save( detSet );
+    }
   } else {
     cout << "Calibration failed." << endl;
   }
