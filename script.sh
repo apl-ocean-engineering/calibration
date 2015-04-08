@@ -11,6 +11,11 @@ tools/video_calibration_permutations -d ../data -c haptic4 -b april_poster_2in -
 
 tools/calibration_reproject --reference-db ../data/cache/E9C9740A25558DEB11E29044813121269F328324.kch --calibration-db calibration_reference_haptic4.kch --results-db calibration_reference_haptic4_results.kch 
 
-tools/calibration_db_dump --results-db calibration_reference_haptic4_results.kch  > calibration_reference_against_reference.txt
-tools/calibration_db_dump --results-db calibration_reference_haptic4.kch  > calibration_reference_against_self.txt
 
+tools/calibration_reproject --reference-db haptic4_one_reference.kch --calibration-db haptic4_one.kch --results-db haptic4_one_versus_reference.kch
+tools/calibration_reproject --reference-db haptic4_one_reference.kch --calibration-db haptic4_two.kch --results-db haptic4_two_versus_reference.kch
+
+tools/calibration_db_dump --results-db haptic4_two.kch > haptic4_two_versus_self.txt
+tools/calibration_db_dump --results-db haptic4_two_versus_reference.kch > haptic4_two_versus_reference.txt
+tools/calibration_db_dump --results-db haptic4_one.kch > haptic4_one_versus_self.txt
+tools/calibration_db_dump --results-db haptic4_one_versus_reference.kch > haptic4_one_versus_reference.txt

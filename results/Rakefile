@@ -1,0 +1,26 @@
+require 'pathname'
+
+def bindir(f)
+  (Pathname.new("../build/tools/") + f).to_s
+end
+
+
+task :permutations do
+  [ "one", "two" ].each { |set|
+sh bindir("video_calibration_permutations") + " -d ../data -c haptic4 -b april_poster_2in --fix-skew -m angular --calibration-db haptic4_#{set}.kch ../data/datasets/haptic4_calibration/#{set}/haptic4.mp4"
+  }
+end
+
+
+task :reproject do
+  [ "one", "two" ].each { |set|
+  sh bindir("calibration_reproject") + " --reference-db haptic4_one_reference.kch --calibration-db haptic4_#{set}.kch --results-db haptic4_#{set}_versus_reference.kch"
+  }
+end
+
+task :dump do
+  [ "one", "two" ].each { |set|
+    sh bindir("calibration_db_dump") + " --results-db haptic4_#{set}.kch > haptic4_#{set}_versus_self.txt"
+    sh bindir("calibration_db_dump") + " --results-db haptic4_#{set}_versus_reference.kch > haptic4_#{set}_versus_reference.txt"
+  }
+end

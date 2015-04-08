@@ -431,9 +431,13 @@ int main( int argc, char** argv )
     func();
 #endif
 
+    // Delete all detection sets
+    for( size_t j = 0; j < detSets.size(); ++j ) delete detSets[j];
+    detSets.clear();
+
   }
 
-    // Now run each one
+    //  Clean up anything that may be left
     CalibrateFunctor func( opts, imageSize, calDb, detSets );
 #ifdef USE_TBB
     parallel_for( blocked_range<size_t>(0,detSets.size()), func );

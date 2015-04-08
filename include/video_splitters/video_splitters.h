@@ -133,7 +133,7 @@ namespace AplCam {
             set.addDetection( db,  i );
 
           stringstream strm;
-          strm << "interval(" << _start << "," << _interval << ',' << _end << ")_" << intsToHex( set.frames() );
+          strm << "interval(" << _start << "," << _interval << ',' << e << ")_" << intsToHex( set.frames() );
           set.setName( strm.str() );
         }
 
