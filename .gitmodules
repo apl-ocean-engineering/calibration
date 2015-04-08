@@ -1,3 +1,9 @@
 [submodule "third_party/apriltags"]
 	path = third_party/apriltags
 	url = git@github.com:amarburg/apriltags.git
+[submodule "third_party/tclap-code"]
+	path = third_party/tclap-code
+	url = git://git.code.sf.net/p/tclap/code
+[submodule "third_party/tclap"]
+	path = third_party/tclap
+	url = git://git.code.sf.net/p/tclap/code

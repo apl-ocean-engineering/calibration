@@ -36,6 +36,9 @@ if( USE_TBB )
 endif()
 
 add_executable( calibration_reproject calibration_reproject.cpp )
+if( USE_TBB )
+  target_link_libraries( calibration_reproject tbb )
+endif()
 
 add_executable( calibration_db_dump calibration_db_dump.cpp )
 
@@ -43,3 +46,9 @@ add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( stereo_calibration ${PCL_LIBRARIES} )
+
+
+
+add_executable( deinterlace deinterlace.cpp )
+target_include_directories( deinterlace 
+	PUBLIC "${CMAKE_SOURCE_DIR}/third_party/tclap/include" )

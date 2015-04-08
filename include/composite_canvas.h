@@ -18,6 +18,16 @@ namespace AplCam {
   {
     CompositeCanvas( void ) {;}
 
+    CompositeCanvas( const Size &sz, int type )
+      : canvas( sz, type )
+    {
+rect[0] = Rect( 0,0, sz.width/2, sz.height );
+rect[1] = Rect( rect[0].width, 0, rect[0].width, rect[0].height );
+
+      roi[0] = Mat( canvas, rect[0] );
+      roi[1] = Mat( canvas, rect[1] );
+    }
+
     CompositeCanvas( const Mat &mat, const Rect &roi1 = Rect(), const Rect &roi2 = Rect() )
       : canvas( mat )
     {
@@ -92,6 +102,25 @@ namespace AplCam {
 
     Mat canvas, roi[2];
     Rect rect[2];
+  };
+
+
+
+  struct VerticalCompositeCanvas : public CompositeCanvas {
+
+    VerticalCompositeCanvas( const Size &sz, int type )
+      : CompositeCanvas()
+    {
+      // Hm, bad OO juju here.
+      canvas.create( Size( sz.width, sz.height*2 ), type );
+
+      rect[0] = Rect( 0,0, sz.width, sz.height );
+rect[1] = Rect( 0, rect[0].height, rect[0].width, rect[0].height );
+
+      roi[0] = Mat( canvas, rect[0] );
+      roi[1] = Mat( canvas, rect[1] );
+    }
+
   };
 
   struct CompositeVideo
