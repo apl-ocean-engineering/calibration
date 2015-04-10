@@ -1,11 +1,13 @@
 
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
+include_directories( ${aplcam_INCLUDE_DIR} )
 
-link_libraries(	lib_camera_calibration ${OpenCV_LIBS} 
+link_libraries(	${OpenCV_LIBS} 
 	${GSL_LIBRARIES}
 	${Boost_LIBRARIES}
         ${CERES_LIBRARIES}
 	${KyotoCabinet_LIBRARIES}
+	${aplcam_LIBS}
         cryptopp )
 
 if( USE_APRILTAGS )
@@ -48,7 +50,6 @@ target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( stereo_calibration ${PCL_LIBRARIES} )
 
 
-
 add_executable( deinterlace deinterlace.cpp )
 target_include_directories( deinterlace 
-	PUBLIC "${CMAKE_SOURCE_DIR}/third_party/tclap/include" )
+	PUBLIC ${tclap_INCLUDE_DIR} )

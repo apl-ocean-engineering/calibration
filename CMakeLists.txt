@@ -35,7 +35,6 @@ set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
 find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 set( Boost_USE_MULTITHREADED ON )
 
-
 include_directories( ${EIGEN_INCLUDE_DIR} 
 	${OpenCV_INCLUDE_DIRS} 
         ${CERES_INCLUDE_DIRS} 
@@ -43,28 +42,15 @@ include_directories( ${EIGEN_INCLUDE_DIR}
 
 link_directories( ${PCL_LIBRARY_DIRS} )
 
-
 add_definitions( -std=c++11 )
 
-option( USE_TBB "Use TBB" ON )
-if( USE_TBB )
-  add_definitions( -DUSE_TBB -DTBB_USE_DEBUG=1 )
-endif()
+add_subdirectory(../aplcam "${CMAKE_BINARY_DIR}/aplcam")
 
-option( USE_APRILTAGS "Use AprilTags" ON )
 if( USE_APRILTAGS )
 	add_definitions( -DUSE_APRILTAGS )
-        add_subdirectory (third_party/apriltags)
-
-        find_path( APRILTAGS_INCLUDE_DIR AprilTags/TagDetection.h
-          PATHS ${CMAKE_SOURCE_DIR}/third_party/apriltags/  )
-        set( APRILTAGS_LIBS ${CMAKE_BINARY_DIR}/third_party/apriltags/libapriltags.a )
-
-
 	include_directories( "${APRILTAGS_INCLUDE_DIR}" )
-
 endif()
 
+
 add_subdirectory (tools)
-add_subdirectory (lib)
 
