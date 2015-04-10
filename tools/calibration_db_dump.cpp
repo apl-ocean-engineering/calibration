@@ -232,7 +232,7 @@ class AllCalibration : public Calibration {
 class RandomCalibration : public Calibration {
   public:
     RandomCalibration()
-      : _data()
+      : Calibration(),_data()
     {;}
 
     virtual bool add( const string &key, const string &value )
@@ -257,7 +257,30 @@ class RandomCalibration : public Calibration {
 
   protected: 
     map< unsigned int, Datum > _data;
-    bool _set;
+};
+
+
+class IntervalCalibration : public RandomCalibration {
+  public:
+    IntervalCalibration()
+      : RandomCalibration()
+    {;}
+
+    virtual bool add( const string &key, const string &value )
+    {
+      if( key.compare(0,6,"interval") != 0 ) return false;
+
+      unsigned int interval, start, end;
+      // Cheat
+      if( sscanf( key.c_str(), "interval(%u,%u,%u", &start, &interval, &end ) == 2 ) {
+        int count =  floor((end - start)/interval );
+
+        _data[count].add( value );
+
+        return true;
+      }
+      return false;
+    }
 };
 
 
@@ -288,6 +311,7 @@ int main( int argc, char** argv )
 
   AllCalibration allCal;
   RandomCalibration randomCal;
+  IntervalCalibration intervalCal;
 
   string key, value;
   while( cur->get( &key, &value, true ) ) {
@@ -297,6 +321,8 @@ int main( int argc, char** argv )
       result = allCal.add( key, value );
     else if( key.compare( 0, 6, "random" ) == 0 )
       result = randomCal.add( key, value );
+    else if( key.compare( 0, 8, "interval" ) == 0 )
+      result = intervalCal.add( key, value );
 
 
     if( !result ) cerr << "Failed to add the calibration with key " << key << endl;
@@ -319,6 +345,9 @@ int main( int argc, char** argv )
   cout << "# random" << endl;
   randomCal.dump( cout );
 
+  cout << endl;
+  cout << "# interval" << endl;
+  intervalCal.dump( cout );
 
   delete cur;
 

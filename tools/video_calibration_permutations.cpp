@@ -53,11 +53,13 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       : CalibrationOptsCommon(), 
       calibrationDb(),
       videoFile(),
+      saveBoardPoses(),
       fixSkew( true ), overwriteDb( false )
   {;}
 
     string calibrationDb;
     string videoFile;
+    string saveBoardPoses;
 
     bool fixSkew, overwriteDb;
 
@@ -109,6 +111,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
         { "fix-skew", false, NULL, 'k'},
+        { "save-board-poses", required_argument, NULL, 'S' },
         { "calibration-db", required_argument, NULL, 'Z' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
@@ -147,6 +150,9 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             break;
           case 'y':
             overwriteDb = true;
+            break;
+          case 'S':
+            saveBoardPoses = optarg;
             break;
           case 'm':
             c = optarg;
@@ -227,6 +233,23 @@ struct RandomKeyCounter {
   }
 };
 
+struct IntervalKeyFinder {
+  // Ignore end
+  IntervalKeyFinder( int start, int interval ) 
+    : _start( start ), _interval( interval ) {;}
+
+  int _start, _interval;
+
+  bool operator()( const string &key )
+  {
+    int s, i;
+    int found = sscanf( key.c_str(), "interval(%d,%d", &s, &i );
+    if( found != 2 ) return false;
+
+    return (s==_start && i == _interval);
+  }
+};
+
 
 struct CalibrateFunctor {
   public:
@@ -249,11 +272,20 @@ struct CalibrateFunctor {
           for( size_t i = 0; i != end; ++i ) {
 #endif
 
+              DetectionSet &detSet( *_detSets[i] );
+
             Calibrator cal( _opts, *_detSets[i], _imageSize );
             cal.run();
 
             //  Want to measure failure rate, Save it regardless of whether it's good.
             cal.saveDb( _db );
+
+            // If it's the "all" set, consider saving the board posees
+            if( _opts.saveBoardPoses.length() > 0 && detSet.name().compare("all") == 0 ) {
+              DetectionDb savedPoses( _opts.saveBoardPoses, true ); 
+              cal.updateDetectionPoses( detSet );
+              savedPoses.save( detSet );
+            }
           }
         }
       };
@@ -290,11 +322,6 @@ int main( int argc, char** argv )
   // Get image size
   Size imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
 
-  const int spacing = 100;
-  const int minImages = 10;
-  const int maxReps = 10;
-  const int maxImages = vidLength;
-
   CalibrationDb calDb( opts.calibrationDb );
   if( !calDb.isOpened() ) {
     cerr << "Couldn't open database!" << endl;
@@ -302,9 +329,8 @@ int main( int argc, char** argv )
   }
 
 
-  // Do All
-    vector< DetectionSet * > detSets;
-
+  // == Handle all ==
+  vector< DetectionSet * > detSets;
 
   vector<string> keys;
   calDb.findKeysStartingWith( "all", keys );
@@ -313,6 +339,13 @@ int main( int argc, char** argv )
     AllVideoSplitter().generate( db, *all );
     detSets.push_back( all );
   }
+
+  // == Random ==
+  
+  const int spacing = 100;
+  const int minImages = 10;
+  const int maxReps = 10;
+  const int maxImages = vidLength;
 
   keys.clear();
   calDb.findKeysStartingWith( "random", keys );
@@ -357,13 +390,59 @@ int main( int argc, char** argv )
     detSets.clear();
 
   }
+  
+  // == Interval ==
+  keys.clear();
+  calDb.findKeysStartingWith( "interval", keys );
 
-  // Now run each one
-  CalibrateFunctor func( opts, imageSize, calDb, detSets );
+  const int minInterval = 2;
+  const int maxInterval = 150;
+  const int intervalSpacing = 10;
+  const int intervalReps = 10;
+
+  for( int i = 0; i <= maxInterval; i += intervalSpacing ) {
+    int interval = std::max( i, minInterval );
+    int reps = std::min( interval, intervalReps );
+    float deltaOffset = interval / reps;
+
+    for( int j = 0; j < reps; ++j ) {
+      int offset = round( deltaOffset * j );
+      offset = min( offset, interval-1 );
+
+      cout << "Want to try every " << interval << " frames starting with " << offset << endl;
+
+      if( std::find_if( keys.begin(), keys.end(), IntervalKeyFinder( offset, interval ) ) != keys.end() ) {
+        cout  << "Key already exists" << endl;
+      } else {
+        DetectionSet *detSet = new DetectionSet;
+        IntervalVideoSplitter( offset, interval ).generate( db, *detSet );
+
+        if( calDb.has( detSet->name() ) ) continue;
+
+        detSets.push_back( detSet );
+      }
+    }
+
+    // Now run each one
+    CalibrateFunctor func( opts, imageSize, calDb, detSets );
 #ifdef USE_TBB
-  parallel_for( blocked_range<size_t>(0,detSets.size()), func );
+    parallel_for( blocked_range<size_t>(0,detSets.size()), func );
 #else
-  func();
+    func();
+#endif
+
+    // Delete all detection sets
+    for( size_t j = 0; j < detSets.size(); ++j ) delete detSets[j];
+    detSets.clear();
+
+  }
+
+    //  Clean up anything that may be left
+    CalibrateFunctor func( opts, imageSize, calDb, detSets );
+#ifdef USE_TBB
+    parallel_for( blocked_range<size_t>(0,detSets.size()), func );
+#else
+    func();
 #endif
 
 
