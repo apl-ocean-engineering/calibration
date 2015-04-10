@@ -266,7 +266,7 @@ class IntervalCalibration : public RandomCalibration {
       : RandomCalibration()
     {;}
 
-    const int roundTo = 5;
+    const int roundTo = 10;
 
     virtual bool add( const string &key, const string &value )
     {
@@ -281,7 +281,7 @@ class IntervalCalibration : public RandomCalibration {
 
         int c = round( (float)count / roundTo ) * roundTo;
 
-        _data[count].add( value );
+        _data[c].add( value );
 
         return true;
       }
