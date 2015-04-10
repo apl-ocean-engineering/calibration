@@ -2,12 +2,12 @@
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 include_directories( ${aplcam_INCLUDE_DIR} )
 
-link_libraries(	${OpenCV_LIBS} 
-	${GSL_LIBRARIES}
-	${Boost_LIBRARIES}
+link_libraries(	${aplcam_LIBS}
+        ${OpenCV_LIBS} 
         ${CERES_LIBRARIES}
 	${KyotoCabinet_LIBRARIES}
-	${aplcam_LIBS}
+	${GSL_LIBRARIES}
+	${Boost_LIBRARIES}
         cryptopp )
 
 if( USE_APRILTAGS )
