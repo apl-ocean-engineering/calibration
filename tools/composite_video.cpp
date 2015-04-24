@@ -404,61 +404,61 @@ class CompositeVideoMain {
       int numberOfDisparities = ((canvas[0].size().width / 8) + 15) & -16;
       int SADWindowSize = 0;
 
-      StereoBM bm;
-      StereoSGBM sgbm;
+ //     StereoBM bm;
+ //     StereoSGBM sgbm;
 
 
-      // bm.state->roi1 = roi1;
-      // bm.state->roi2 = roi2;
-      // bm.state->preFilterCap = 31;
-      // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
-      bm.state->minDisparity = 0;
-      bm.state->numberOfDisparities = numberOfDisparities;
-      bm.state->textureThreshold = 10;
-      bm.state->uniquenessRatio = 15;
-      bm.state->speckleWindowSize = 100;
-      bm.state->speckleRange = 32;
-      bm.state->disp12MaxDiff = 1;
+ //     // bm.state->roi1 = roi1;
+ //     // bm.state->roi2 = roi2;
+ //     // bm.state->preFilterCap = 31;
+ //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
+ //     bm.state->minDisparity = 0;
+ //     bm.state->numberOfDisparities = numberOfDisparities;
+ //     bm.state->textureThreshold = 10;
+ //     bm.state->uniquenessRatio = 15;
+ //     bm.state->speckleWindowSize = 100;
+ //     bm.state->speckleRange = 32;
+ //     bm.state->disp12MaxDiff = 1;
 
-      sgbm.preFilterCap = 63;
-      sgbm.SADWindowSize = 3;
+ //     sgbm.preFilterCap = 63;
+ //     sgbm.SADWindowSize = 3;
 
-      //int cn = canvas.canvas.channels();
+ //     //int cn = canvas.canvas.channels();
 
-      sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      sgbm.minDisparity = 0;
-      sgbm.numberOfDisparities = numberOfDisparities;
-      sgbm.uniquenessRatio = 10;
-      //sgbm.speckleWindowSize = bm.state->speckleWindowSize;
-      //sgbm.speckleRange = bm.state->speckleRange;
-      sgbm.disp12MaxDiff = 1;
-      sgbm.fullDP = false;
+ //     sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
+ //     sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
+ //     sgbm.minDisparity = 0;
+ //     sgbm.numberOfDisparities = numberOfDisparities;
+ //     sgbm.uniquenessRatio = 10;
+ //     //sgbm.speckleWindowSize = bm.state->speckleWindowSize;
+ //     //sgbm.speckleRange = bm.state->speckleRange;
+ //     sgbm.disp12MaxDiff = 1;
+ //     sgbm.fullDP = false;
 
-      Mat scaled[2];
+ //     Mat scaled[2];
 
-      if( opts.scale > 0 ) {
-        resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-        resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-        cvtColor( scaled[0], scaled[0], CV_BGR2GRAY );
-        cvtColor( scaled[1], scaled[1], CV_BGR2GRAY );
-      } else {
-        cvtColor( canvas[0], scaled[0], CV_BGR2GRAY );
-        cvtColor( canvas[1], scaled[1], CV_BGR2GRAY );
-      }
+ //     if( opts.scale > 0 ) {
+ //       resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+ //       resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+ //       cvtColor( scaled[0], scaled[0], CV_BGR2GRAY );
+ //       cvtColor( scaled[1], scaled[1], CV_BGR2GRAY );
+ //     } else {
+ //       cvtColor( canvas[0], scaled[0], CV_BGR2GRAY );
+ //       cvtColor( canvas[1], scaled[1], CV_BGR2GRAY );
+ //     }
 
 
-      Mat disparity;
-      int64 t = getTickCount();
-      //bm( scaled[0], scaled[1], disparity );
-      sgbm( scaled[0], scaled[1], disparity );
-      t = getTickCount() - t;
-      cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+ //     Mat disparity;
+ //     int64 t = getTickCount();
+ //     //bm( scaled[0], scaled[1], disparity );
+ //     sgbm( scaled[0], scaled[1], disparity );
+ //     t = getTickCount() - t;
+ //     cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
-      Mat disp8;
-      disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+ //     Mat disp8;
+ //     disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
 
-      imshow( "disparity", disp8 );
+ //     imshow( "disparity", disp8 );
 
       return true;
     }

@@ -1,6 +1,7 @@
 
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
-include_directories( ${aplcam_INCLUDE_DIR} )
+include_directories( ${aplcam_INCLUDE_DIR} 
+	             ${tclap_INCLUDE_DIR} )
 
 link_libraries(	${aplcam_LIBS}
         ${OpenCV_LIBS} 
@@ -21,6 +22,9 @@ add_executable( build_detection_db build_detection_db.cpp )
 if( USE_TBB )
   target_link_libraries( build_detection_db tbb )
 endif()
+
+add_executable( simulate_detection_db simulate_detection_db.cpp )
+
 
 add_executable( calculate_calibration_errors calculate_calibration_errors.cpp )
 
