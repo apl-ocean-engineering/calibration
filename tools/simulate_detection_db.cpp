@@ -153,11 +153,19 @@ class SimulateDbMain
         return -1;
       }
 
-      ObjectPointsVec corners = board->corners();
+      ObjectPointsVec corners = board->corners( Board::BOARD_CENTER );
       vector< int > ids = board->ids();
+      vector< bool > visible( ids.size(), true );
 
       for( unsigned int i = 0; i < opts.duration; ++i ) {
         LOG(INFO) << "Frame " << i;
+
+        // Update visibility
+        for( size_t i = 0; i < visible.size(); ++i ) {
+          const int pctVisChange = RAND_MAX * 0.95;
+          if( rand() > pctVisChange )
+            visible[i] = (visible[i] ? false : true);
+        }
 
         Detection det;
 
@@ -174,9 +182,14 @@ class SimulateDbMain
           ImagePoint &pt( imgPts[i] );
           if( pt[0] < 0 || pt[0] > imgSize.width ||
               pt[1] < 0 || pt[1] > imgSize.height ) continue;
-        //  if( rand() > (RAND_MAX/2) )
-            det.add( corners[i], imgPts[i], ids[i] );
+          
+          if( visible[i] ) det.add( corners[i], imgPts[i], ids[i] );
         }
+
+        // Check for edges
+        const int gutter = 30;
+        ImagePoint imgCenter;
+        dist->projectPoint( ObjectPoint(0,0,0), pose.rvec, pose.tvec, imgCenter );
 
         if( opts.doDisplay ) {
           Mat img = Mat::zeros( opts.imageSize, CV_8UC3 );
@@ -184,13 +197,16 @@ class SimulateDbMain
           for( ImagePointsVec::const_iterator itr = det.points.begin(); itr != det.points.end(); ++itr ) 
             circle( img, Point((*itr)[0], (*itr)[1]), 3, Scalar(0,0,255), 1 );
 
+          circle( img, Point( imgCenter[0], imgCenter[1] ), 3, Scalar( 255,255,0 ), 1 );
+
           imshow( WindowName, img );
           waitKey( opts.waitKey );
         }
 
         db.save( i, det );
 
-        pose.update();
+
+        pose.update( i );
       }
 
       //      double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
@@ -235,15 +251,36 @@ class SimulateDbMain
 
     struct BoardPose {
       BoardPose( void )
-        : tvec( 0, 0, 1000 ), rvec( 0, 0, 0 )
-      {;}
-
-      void update( void )
+        : tvec( 0, 0, 1000 ), rvec( 0, 0, 0 ),
+          xPeriod( (100.0 * rand()) / RAND_MAX ),
+          yPeriod( (100.0 * rand()) / RAND_MAX ),
+          zPeriod( (100.0 * rand()) / RAND_MAX ),
+          r1Period( (100.0 * rand()) / RAND_MAX ),
+          r2Period( (100.0 * rand()) / RAND_MAX )
       {
-        ;
+        cout << xPeriod  << " " << yPeriod << " " << zPeriod << endl;
+      }
+
+      void update( int t )
+      {
+        // X and Y amplitudes determined experimentally
+const int xAmplitude = 1000;
+const int yAmplitude = 500;
+const int zAmplitude = 250;
+
+const int zCenter = 1000;
+
+tvec[0] = xAmplitude * sin( t / xPeriod );
+tvec[1] = yAmplitude * sin( t / yPeriod );
+tvec[2] = zCenter + zAmplitude * sin( t / zPeriod );
+
+rvec[0] = 0.25 * sin( t / r1Period );
+rvec[1] = 0.25 * sin( t / r2Period );
       }
 
       Vec3d tvec, rvec;
+
+      float xPeriod, yPeriod, zPeriod, r1Period, r2Period;
     };
 
 
@@ -262,6 +299,8 @@ class SimulateDbMain
 
 int main( int argc, char **argv ) 
 {
+  srand( time( NULL ) );
+
   FLAGS_logtostderr = 1;
   google::InitGoogleLogging( argv[0] );
 
