@@ -266,14 +266,20 @@ class IntervalCalibration : public RandomCalibration {
       : RandomCalibration()
     {;}
 
+    const int roundTo = 5;
+
     virtual bool add( const string &key, const string &value )
     {
-      if( key.compare(0,6,"interval") != 0 ) return false;
+      if( key.compare(0,8,"interval") != 0 ) return false;
 
       unsigned int interval, start, end;
       // Cheat
-      if( sscanf( key.c_str(), "interval(%u,%u,%u", &start, &interval, &end ) == 2 ) {
+      int c  = sscanf( key.c_str(), "interval(%u,%u,%u", &start, &interval, &end );
+      if( c == 3 ) {
         int count =  floor((end - start)/interval );
+
+
+        int c = round( (float)count / roundTo ) * roundTo;
 
         _data[count].add( value );
 
