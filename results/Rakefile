@@ -7,20 +7,38 @@ end
 
 task :permutations do
   [ "one", "two" ].each { |set|
-sh bindir("video_calibration_permutations") + " -d ../data -c haptic4 -b april_poster_2in --fix-skew -m angular --calibration-db haptic4_#{set}.kch ../data/datasets/haptic4_calibration/#{set}/haptic4.mp4"
+sh bindir("video_calibration_permutations") + " -d ../data -c haptic4 -b april_poster_2in --fix-skew -m angular --calibration-db haptic4/calibrations_#{set}.kch haptic4/detections_#{set}.kch"
   }
 end
 
 
 task :reproject do
   [ "one", "two" ].each { |set|
-  sh bindir("calibration_reproject") + " --reference-db haptic4_one_reference.kch --calibration-db haptic4_#{set}.kch --results-db haptic4_#{set}_versus_reference.kch"
+  sh bindir("calibration_reproject") + " --reference-db haptic4/one_reference.kch --calibration-db haptic4/calibrations_#{set}.kch --results-db haptic4/#{set}_versus_reference.kch"
   }
 end
 
 task :dump do
   [ "one", "two" ].each { |set|
-    sh bindir("calibration_db_dump") + " --results-db haptic4_#{set}.kch > haptic4_#{set}_versus_self.txt"
-    sh bindir("calibration_db_dump") + " --results-db haptic4_#{set}_versus_reference.kch > haptic4_#{set}_versus_reference.txt"
+    sh bindir("calibration_db_dump") + " --results-db haptic4/calibrations_#{set}.kch > haptic4/#{set}_versus_self.txt"
+    sh bindir("calibration_db_dump") + " --results-db haptic4/#{set}_versus_reference.kch > haptic4/#{set}_versus_reference.txt"
   }
+end
+
+namespace :simulated do
+
+  task :generate do
+    [ "one", "two" ].each { |set|
+
+    }
+  end
+
+  task :permutations do
+    [ "one", "two" ].each { |set|
+      sh bindir("video_calibration_permutations") + " -d ../data -c haptic4_sim -b april_poster_2in --fix-skew -m angular --calibration-db sim/calibrations_#{set}.kch sim/detections_#{set}.kch"
+    }
+  end
+
+
+
 end
