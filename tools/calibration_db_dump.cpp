@@ -266,7 +266,7 @@ class IntervalCalibration : public RandomCalibration {
       : RandomCalibration()
     {;}
 
-    const int roundTo = 10;
+    const int roundTo = 25;
 
     virtual bool add( const string &key, const string &value )
     {

@@ -4,7 +4,6 @@ include_directories( ${aplcam_INCLUDE_DIR}
 	             ${tclap_INCLUDE_DIR} )
 
 link_libraries(	${aplcam_LIBS}
-        ${OpenCV_LIBS} 
         ${CERES_LIBRARIES}
 	${KyotoCabinet_LIBRARIES}
 	${GSL_LIBRARIES}
@@ -14,6 +13,8 @@ link_libraries(	${aplcam_LIBS}
 if( USE_APRILTAGS )
   link_libraries( ${APRILTAGS_LIBS} )
 endif()
+
+link_libraries( ${OpenCV_LIBS} )
 
 
 add_executable( extract extract.cpp )

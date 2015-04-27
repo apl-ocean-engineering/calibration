@@ -52,13 +52,13 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     CalibrationOpts()
       : CalibrationOptsCommon(), 
       calibrationDb(),
-      videoFile(),
+      detectionDb(),
       saveBoardPoses(),
       fixSkew( true ), overwriteDb( false )
   {;}
 
     string calibrationDb;
-    string videoFile;
+    string detectionDb;
     string saveBoardPoses;
 
     bool fixSkew, overwriteDb;
@@ -113,6 +113,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         { "fix-skew", false, NULL, 'k'},
         { "save-board-poses", required_argument, NULL, 'S' },
         { "calibration-db", required_argument, NULL, 'Z' },
+        { "detection-db", required_argument, NULL, 'D' },
         { "help", false, NULL, '?' },
         { 0, 0, 0, 0 }
       };
@@ -138,6 +139,9 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             break;
           case 'd':
             dataDir = optarg;
+            break;
+          case 'D':
+            detectionDb = optarg;
             break;
           case 'b':
             boardName = optarg;
@@ -175,23 +179,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             return false;
 
         }
-      }
-
-      if( optind >= argc ) {
-        msg = "Must specify splitter type on command line";
-        return false;
-      }
-
-      if( optind >= argc ) {
-        msg = "Must specify video file on command line";
-        return false;
-      }
-
-      videoFile = argv[ optind ];
-
-      if( !file_exists( videoFile ) ) {
-        cerr << "Can't open video file " << videoFile << endl;
-        return false;
       }
 
       if( !validate( msg ) ) return false;
@@ -253,7 +240,7 @@ struct IntervalKeyFinder {
 
 struct CalibrateFunctor {
   public:
-    CalibrateFunctor( const CalibrationOpts &opts, Size &imageSize, CalibrationDb &db, vector< DetectionSet * > &detSets )
+    CalibrateFunctor( const CalibrationOpts &opts, const Size &imageSize, CalibrationDb &db, vector< DetectionSet * > &detSets )
       : _opts( opts ), _imageSize( imageSize ), _db( db ), _detSets( detSets )
     {;}
 
@@ -306,21 +293,12 @@ int main( int argc, char** argv )
   }
 
   DetectionDb db;
-  if( ! db.open( opts.cachePath(), opts.videoFile,  false ) ) {
+  if( ! db.open( opts.detectionDb,  false ) ) {
     cerr << "Error opening db error: " << db.error().name() << endl;
     return -1;
   }
 
-  string videoSource( opts.videoFile );
-  VideoCapture vid( videoSource );
-  if( !vid.isOpened() ) {
-    cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
-    return -1;
-  }
-  int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
-
-  // Get image size
-  Size imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
+  Size imageSize = db.imageSize();
 
   CalibrationDb calDb( opts.calibrationDb );
   if( !calDb.isOpened() ) {
@@ -345,7 +323,7 @@ int main( int argc, char** argv )
   const int spacing = 100;
   const int minImages = 10;
   const int maxReps = 10;
-  const int maxImages = vidLength;
+  const int maxImages = db.vidLength();
 
   keys.clear();
   calDb.findKeysStartingWith( "random", keys );
@@ -354,7 +332,7 @@ int main( int argc, char** argv )
   for( int i = 0; i < maxImages; i+= spacing ) {
 
     int count = std::max( minImages, i );
-    int maxSets = std::min( maxReps, (vidLength-count) );
+    int maxSets = std::min( maxReps, (maxImages-count) );
 
 
     // Parse out the keys with the correct length
@@ -378,7 +356,7 @@ int main( int argc, char** argv )
 
 
     // Now run each one
-    CalibrateFunctor func( opts, imageSize, calDb, detSets );
+    CalibrateFunctor func( opts, db.imageSize(), calDb, detSets );
 #ifdef USE_TBB
     parallel_for( blocked_range<size_t>(0,detSets.size()), func );
 #else

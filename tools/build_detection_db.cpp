@@ -240,6 +240,12 @@ class BuildDbMain
 
       double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
 
+      db.setMeta( vidLength, 
+                  vid.get( CV_CAP_PROP_FRAME_WIDTH ),
+                  vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
+                  vid.get( CV_CAP_PROP_FPS ) );
+
+
       if( opts.intervalSeconds > 0 ) 
         opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
 

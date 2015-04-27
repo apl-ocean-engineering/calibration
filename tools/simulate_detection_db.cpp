@@ -148,21 +148,36 @@ class SimulateDbMain
         return -1;
       }
 
+      Size imgSize( opts.imageSize );
+
       if( ! db.open( opts.outputFile, true ) ) {
         LOG(ERROR) << "Error opening database file: " << db.error().name() << endl;
         return -1;
       }
 
+     if( ! db.setMeta( opts.duration,
+          imgSize.width, imgSize.height, 1 ) ) {
+       LOG(ERROR) << "Unable to save metadata to detection db.";
+       return -1;
+       }
+
       ObjectPointsVec corners = board->corners( Board::BOARD_CENTER );
       vector< int > ids = board->ids();
       vector< bool > visible( ids.size(), true );
+
+      // Set visibility
+      for( size_t i = 0; i < visible.size(); ++i ) {
+        const int pctVisChange = RAND_MAX * 0.80;
+        if( rand() > pctVisChange )
+          visible[i] = false;
+      }
 
       for( unsigned int i = 0; i < opts.duration; ++i ) {
         LOG(INFO) << "Frame " << i;
 
         // Update visibility
         for( size_t i = 0; i < visible.size(); ++i ) {
-          const int pctVisChange = RAND_MAX * 0.95;
+          const int pctVisChange = RAND_MAX * 0.80;
           if( rand() > pctVisChange )
             visible[i] = (visible[i] ? false : true);
         }
@@ -175,7 +190,6 @@ class SimulateDbMain
         ImagePointsVec imgPts;
         dist->projectPoints( corners, pose.rvec, pose.tvec, imgPts );
 
-        Size imgSize( opts.imageSize );
 
         // Selectively drop a few
         for( size_t i = 0; i < corners.size(); ++i ) {
