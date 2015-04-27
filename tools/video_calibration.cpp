@@ -48,12 +48,14 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     CalibrationOpts()
       : CalibrationOptsCommon(), 
       calibrationDb(),
+      detectionDb(),
       videoFile(),
       saveBoardPoses(), 
       fixSkew( true ), overwriteDb( false )
   {;}
 
     string calibrationDb;
+    string detectionDb;
 
     string videoFile;
 
@@ -105,6 +107,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
       static struct option long_options[] = {
         { "data-directory", true, NULL, 'd' },
+        { "detection-db", required_argument, NULL, 'D' },
         { "board", true, NULL, 'b' },
         { "camera", true, NULL, 'c' },
         { "calibation-model", true, NULL, 'm' },
@@ -141,6 +144,9 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             break;
           case 'd':
             dataDir = optarg;
+            break;
+          case 'D':
+            detectionDb = optarg;
             break;
           case 'b':
             boardName = optarg;
@@ -206,16 +212,18 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       if( success == false ) return success;
 
 
-      if( optind >= argc ) {
-        msg = "Must specify video file on command line";
-        return false;
-      }
+      if( detectionDb.empty() ) {
+        if( optind >= argc ) {
+          msg = "Must specify video file on command line";
+          return false;
+        }
 
-      videoFile = argv[ optind ];
+        videoFile = argv[ optind ];
 
-      if( !file_exists( videoFile ) ) {
-        cerr << "Can't open video file " << videoFile << endl;
-        return false;
+        if( !file_exists( videoFile ) ) {
+          cerr << "Can't open video file " << videoFile << endl;
+          return false;
+        }
       }
 
       if( !validate( msg ) ) return false;
@@ -259,21 +267,32 @@ int main( int argc, char** argv )
 
 
   DetectionDb db;
-  if( ! db.open( opts.cachePath(), opts.videoFile ) ) {
-    cerr << "Error opening db error: " << db.error().name() << endl;
-    return -1;
-  }
+  Size imageSize;
 
-  string videoSource( opts.videoFile );
-  VideoCapture vid( videoSource );
-  if( !vid.isOpened() ) {
-    cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
-    return -1;
-  }
-  //int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
+  if( opts.detectionDb.empty() ) {
+    if( ! db.open( opts.cachePath(), opts.videoFile ) ) {
+      cerr << "Error opening db error: " << db.error().name() << endl;
+      return -1;
+    }
 
-  // Get image size
-  Size imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
+    string videoSource( opts.videoFile );
+    VideoCapture vid( videoSource );
+    if( !vid.isOpened() ) {
+      cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
+      return -1;
+    }
+    //int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
+
+    // Get image size
+    imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
+  } else {
+    if( ! db.open( opts.detectionDb ) ) {
+      cerr << "Error opening db error: " << db.error().name() << endl;
+      return -1;
+    }
+
+    imageSize = db.imageSize();
+  }
 
   DetectionSet detSet;
   switch( opts.splitter ) {
