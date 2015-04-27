@@ -294,7 +294,7 @@ int main( int argc, char** argv )
 
   DetectionDb db;
   if( ! db.open( opts.detectionDb,  false ) ) {
-    cerr << "Error opening db error: " << db.error().name() << endl;
+    cerr << "Error opening detection db \"" << opts.detectionDb << "\". Error: " << db.error().name() << endl;
     return -1;
   }
 
@@ -302,7 +302,7 @@ int main( int argc, char** argv )
 
   CalibrationDb calDb( opts.calibrationDb );
   if( !calDb.isOpened() ) {
-    cerr << "Couldn't open database!" << endl;
+    cerr << "Error opening calibration db \"" << opts.calibrationDb << "\".  Error: " << endl;
     exit(-1);
   }
 
