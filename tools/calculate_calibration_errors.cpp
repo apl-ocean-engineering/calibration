@@ -235,7 +235,7 @@ class CalculateReprojectionMain
         }
       } else {
 
-        Detection *detection = NULL;
+        //Detection *detection = NULL;
         //while( (detection = db.loadAdvanceCursor()) != NULL ) {
         //  totalPoints += computeReprojectionError( *dist, *detection, reprojError );
         //}

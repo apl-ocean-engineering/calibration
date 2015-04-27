@@ -36,6 +36,7 @@ struct BuildDbOpts {
       dataDir("data"),
       boardName(), 
       benchmarkFile(),
+      detectionDb(),
       doBenchmark( false ),
       doRewrite( false ),
       doDisplay( false ), yes( false ),
@@ -48,7 +49,7 @@ struct BuildDbOpts {
     int seekTo, intervalFrames, waitKey;
     float intervalSeconds;
     string dataDir;
-    string boardName, benchmarkFile;
+    string boardName, benchmarkFile, detectionDb;
     bool doBenchmark, doRewrite, doDisplay, yes;
     Verbs verb;
 
@@ -112,6 +113,7 @@ struct BuildDbOpts {
     {
       static struct option long_options[] = {
         { "data-directory", true, NULL, 'd' },
+        { "detection-db", required_argument, NULL, 'D' },
         { "board", true, NULL, 'b' },
         { "seek-to", true, NULL, 's' },
         { "interval-frames", true, NULL, 'i' },
@@ -137,6 +139,9 @@ struct BuildDbOpts {
         switch( optVal ) {
           case 'd':
             dataDir = optarg;
+            break;
+          case 'D':
+            detectionDb = optarg;
             break;
           case 'b':
             boardName = optarg;
@@ -233,7 +238,13 @@ class BuildDbMain
       }
 
       mkdir_p( opts.cachePath() );
-      if( ! db.open( opts.cachePath(), opts.inFile, true ) ) {
+      bool dbOpened;
+      if( opts.detectionDb.empty() )
+        dbOpened = db.open( opts.cachePath(), opts.inFile, true );
+      else
+        dbOpened = db.open( opts.detectionDb, true );
+
+      if( !dbOpened ) {
         cerr << "Error opening database file: " << db.error().name() << endl;
         return -1;
       }

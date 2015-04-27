@@ -51,6 +51,10 @@ if( USE_APRILTAGS )
 	include_directories( "${APRILTAGS_INCLUDE_DIR}" )
 endif()
 
+if( USE_TBB )
+  add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
+endif()
+
 
 add_subdirectory (tools)
 
