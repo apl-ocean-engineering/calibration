@@ -155,13 +155,13 @@ class SimulateDbMain
         return -1;
       }
 
-     if( ! db.setMeta( opts.duration,
-          imgSize.width, imgSize.height, 1 ) ) {
-       LOG(ERROR) << "Unable to save metadata to detection db.";
-       return -1;
-       }
+      if( ! db.setMeta( opts.duration,
+            imgSize.width, imgSize.height, 1 ) ) {
+        LOG(ERROR) << "Unable to save metadata to detection db.";
+        return -1;
+      }
 
-      ObjectPointsVec corners = board->corners( Board::BOARD_CENTER );
+      ObjectPointsVec corners = board->corners();  // Board::BOARD_CENTER );
       vector< int > ids = board->ids();
       vector< bool > visible( ids.size(), true );
 
@@ -190,13 +190,11 @@ class SimulateDbMain
         ImagePointsVec imgPts;
         dist->projectPoints( corners, pose.rvec, pose.tvec, imgPts );
 
-
-        // Selectively drop a few
         for( size_t i = 0; i < corners.size(); ++i ) {
           ImagePoint &pt( imgPts[i] );
           if( pt[0] < 0 || pt[0] > imgSize.width ||
               pt[1] < 0 || pt[1] > imgSize.height ) continue;
-          
+
           if( visible[i] ) det.add( corners[i], imgPts[i], ids[i] );
         }
 
@@ -266,11 +264,11 @@ class SimulateDbMain
     struct BoardPose {
       BoardPose( void )
         : tvec( 0, 0, 1000 ), rvec( 0, 0, 0 ),
-          xPeriod( (100.0 * rand()) / RAND_MAX ),
-          yPeriod( (100.0 * rand()) / RAND_MAX ),
-          zPeriod( (100.0 * rand()) / RAND_MAX ),
-          r1Period( (100.0 * rand()) / RAND_MAX ),
-          r2Period( (100.0 * rand()) / RAND_MAX )
+        xPeriod( (100.0 * rand()) / RAND_MAX ),
+        yPeriod( (100.0 * rand()) / RAND_MAX ),
+        zPeriod( (100.0 * rand()) / RAND_MAX ),
+        r1Period( (100.0 * rand()) / RAND_MAX ),
+        r2Period( (100.0 * rand()) / RAND_MAX )
       {
         cout << xPeriod  << " " << yPeriod << " " << zPeriod << endl;
       }
@@ -278,18 +276,18 @@ class SimulateDbMain
       void update( int t )
       {
         // X and Y amplitudes determined experimentally
-const int xAmplitude = 1000;
-const int yAmplitude = 500;
-const int zAmplitude = 250;
+        const int xAmplitude = 1100;
+        const int yAmplitude = 600;
+        const int zAmplitude = 250;
 
-const int zCenter = 1000;
+        const int zCenter = 1000;
 
-tvec[0] = xAmplitude * sin( t / xPeriod );
-tvec[1] = yAmplitude * sin( t / yPeriod );
-tvec[2] = zCenter + zAmplitude * sin( t / zPeriod );
+        tvec[0] = xAmplitude * sin( t / xPeriod );
+        tvec[1] = yAmplitude * sin( t / yPeriod );
+        tvec[2] = zCenter + zAmplitude * sin( t / zPeriod );
 
-rvec[0] = 0.25 * sin( t / r1Period );
-rvec[1] = 0.25 * sin( t / r2Period );
+        rvec[0] = 0.25 * sin( t / r1Period );
+        rvec[1] = 0.25 * sin( t / r2Period );
       }
 
       Vec3d tvec, rvec;
