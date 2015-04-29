@@ -294,6 +294,8 @@ int main( int argc, char** argv )
     imageSize = db.imageSize();
   }
 
+  Board *board = Board::load( opts.boardPath(), opts.boardName );
+
   DetectionSet detSet;
   switch( opts.splitter ) {
     case CalibrationOpts::SPLIT_ALL:
