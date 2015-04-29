@@ -22,11 +22,6 @@ using namespace Distortion;
 #include "calibrator.h"
 using namespace AplCam;
 
-#include "video_splitters/video_splitter_opts.h"
-#include "video_splitters/video_splitters.h"
-using namespace AplCam::VideoSplitters;
-
-
 using namespace cv;
 using namespace std;
 

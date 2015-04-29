@@ -35,9 +35,9 @@ add_executable( composite_video composite_video.cpp )
 
 add_executable( calibration calibration.cpp )
 
-add_executable( video_calibration video_calibration.cpp )
+add_executable( video_calibration video_calibration.cpp ../lib/calibrator.cpp )
 
-add_executable( video_calibration_permutations video_calibration_permutations.cpp )
+add_executable( video_calibration_permutations video_calibration_permutations.cpp ../lib/calibrator.cpp )
 if( USE_TBB )
   target_link_libraries( video_calibration_permutations tbb )
 endif()

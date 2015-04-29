@@ -1,8 +1,3 @@
-//#include "opencv2/core/core.hpp"
-//#include "opencv2/imgproc/imgproc.hpp"
-//#include "opencv2/calib3d/calib3d.hpp"
-//#include "opencv2/highgui/highgui.hpp"
-
 #include <cctype>
 #include <stdio.h>
 #include <string.h>
@@ -12,10 +7,8 @@
 
 #include <iostream>
 
-
 // Disable TBB temporarily, assume threading in the calibration routine (Ceres) itself.
 #undef USE_TBB
-
 
 #ifdef USE_TBB
 #include "tbb/tbb.h"
@@ -38,11 +31,9 @@ using namespace Distortion;
 #include "calibrator.h"
 using namespace AplCam;
 
-#include "video_splitters/video_splitter_opts.h"
-#include "video_splitters/video_splitters.h"
-using namespace AplCam::VideoSplitters;
-
-
+#include "calib_frame_selectors/calib_frame_selector_opts.h"
+#include "calib_frame_selectors/calib_frame_selectors.h"
+using namespace AplCam::CalibFrameSelectors;
 
 using namespace cv;
 using namespace std;
@@ -69,10 +60,10 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     bool fixSkew, overwriteDb;
 
     CalibrationType_t calibType;
-//    SplitterType_t splitter;
+//    SelectorType_t splitter;
 //
-//    IntervalSplitterOpts intervalSplitterOpts;
-//    RandomSplitterOpts randomSplitterOpts;
+//    IntervalSelectorOpts intervalSelectorOpts;
+//    RandomSelectorOpts randomSelectorOpts;
 
 
     //== Option parsing and help ==
@@ -319,7 +310,7 @@ int main( int argc, char** argv )
   calDb.findKeysStartingWith( "all", keys );
   if( keys.size() == 0 ) {
     DetectionSet *all = new DetectionSet;
-    AllVideoSplitter().generate( db, *all );
+    AllFrameSelector().generate( db, *all );
     detSets.push_back( all );
   }
 
@@ -352,7 +343,7 @@ int main( int argc, char** argv )
 
     for( size_t j = 0; detSets.size() < todo; ++j ) {
       DetectionSet *detSet = new DetectionSet;
-      RandomVideoSplitter( count ).generate( db, *detSet );
+      RandomFrameSelector( count ).generate( db, *detSet );
 
       if( calDb.has( detSet->name() ) ) continue;
 
@@ -398,7 +389,7 @@ int main( int argc, char** argv )
         cout  << "Key already exists" << endl;
       } else {
         DetectionSet *detSet = new DetectionSet;
-        IntervalVideoSplitter( offset, interval ).generate( db, *detSet );
+        IntervalFrameSelector( offset, interval ).generate( db, *detSet );
 
         if( calDb.has( detSet->name() ) ) continue;
 

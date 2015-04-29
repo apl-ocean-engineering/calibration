@@ -114,6 +114,23 @@ struct SimulateDbOpts {
 
     bool validate( stringstream &msg )
     {
+      if( imageSize.width <= 0 ) {
+        msg << "Image width less than zero: " << imageSize.width; return false;
+      }
+
+      if( imageSize.height <= 0 ) {
+        msg << "Image height less than zero: " << imageSize.height; return false;
+      }
+
+      if( imageSize.width > 4096 ) {
+        msg << "Image width too large: " << imageSize.width; return false;
+      }
+
+      if( imageSize.height > 4096 ) {
+        msg << "Image height too large: " << imageSize.height; return false;
+      }
+
+
       return true;
     }
 
@@ -150,6 +167,9 @@ class SimulateDbMain
 
       Size imgSize( opts.imageSize );
 
+      // Initialize RNG
+      cv::RNG rng( time( NULL ) );
+
       if( ! db.open( opts.outputFile, true ) ) {
         LOG(ERROR) << "Error opening database file: " << db.error().name() << endl;
         return -1;
@@ -165,20 +185,21 @@ class SimulateDbMain
       vector< int > ids = board->ids();
       vector< bool > visible( ids.size(), true );
 
-      // Set visibility
+      // Set initial visibility
+      const float pVisInitial = 0.3;
+      const float pVisTransition = 0.05;
       for( size_t i = 0; i < visible.size(); ++i ) {
-        const int pctVisChange = RAND_MAX * 0.80;
-        if( rand() > pctVisChange )
+        if( drand48() > pVisInitial )
           visible[i] = false;
       }
 
-      for( unsigned int i = 0; i < opts.duration; ++i ) {
+      bool done = false;
+      for( unsigned int i = 0; (i < opts.duration) && !done ; ++i ) {
         LOG(INFO) << "Frame " << i;
 
         // Update visibility
         for( size_t i = 0; i < visible.size(); ++i ) {
-          const int pctVisChange = RAND_MAX * 0.80;
-          if( rand() > pctVisChange )
+          if( drand48() < pVisTransition )
             visible[i] = (visible[i] ? false : true);
         }
 
@@ -195,24 +216,38 @@ class SimulateDbMain
           if( pt[0] < 0 || pt[0] > imgSize.width ||
               pt[1] < 0 || pt[1] > imgSize.height ) continue;
 
+          // Apply Gaussian noise
+          const float ptSigma = 0.5;
+          pt[0] += rng.gaussian( ptSigma );
+          pt[1] += rng.gaussian( ptSigma );
+
           if( visible[i] ) det.add( corners[i], imgPts[i], ids[i] );
         }
 
-        // Check for edges
-        const int gutter = 30;
-        ImagePoint imgCenter;
-        dist->projectPoint( ObjectPoint(0,0,0), pose.rvec, pose.tvec, imgCenter );
 
         if( opts.doDisplay ) {
-          Mat img = Mat::zeros( opts.imageSize, CV_8UC3 );
+                  Mat img = Mat::zeros( opts.imageSize, CV_8UC3 );
 
           for( ImagePointsVec::const_iterator itr = det.points.begin(); itr != det.points.end(); ++itr ) 
             circle( img, Point((*itr)[0], (*itr)[1]), 3, Scalar(0,0,255), 1 );
 
+//  Draw the center of the board
+        ImagePoint imgCenter;
+        dist->projectPoint( ObjectPoint(0,0,0), pose.rvec, pose.tvec, imgCenter );
+
+
           circle( img, Point( imgCenter[0], imgCenter[1] ), 3, Scalar( 255,255,0 ), 1 );
 
           imshow( WindowName, img );
-          waitKey( opts.waitKey );
+          int c = waitKey( opts.waitKey );
+
+          switch( c ) {
+            case 'q':
+            case 'Q':
+              done = true;
+              break;
+          }
+
         }
 
         db.save( i, det );
@@ -262,37 +297,44 @@ class SimulateDbMain
 
 
     struct BoardPose {
+      static float tMinAmpl( void ) { return 25.0; }
+      static float tVarAmpl( void ) { return 50.0; }
+
       BoardPose( void )
         : tvec( 0, 0, 1000 ), rvec( 0, 0, 0 ),
-        xPeriod( (100.0 * rand()) / RAND_MAX ),
-        yPeriod( (100.0 * rand()) / RAND_MAX ),
-        zPeriod( (100.0 * rand()) / RAND_MAX ),
-        r1Period( (100.0 * rand()) / RAND_MAX ),
-        r2Period( (100.0 * rand()) / RAND_MAX )
+        xPeriod( tMinAmpl() + tVarAmpl() * drand48()),
+        yPeriod( tMinAmpl() + tVarAmpl() * drand48()),
+        zPeriod( tMinAmpl() + tVarAmpl() * drand48()),
+        r0Period( 25.0 * drand48() ),
+        r1Period( 25.0 * drand48() ),
+        r2Period( 25.0 * drand48() )
       {
         cout << xPeriod  << " " << yPeriod << " " << zPeriod << endl;
       }
 
       void update( int t )
       {
-        // X and Y amplitudes determined experimentally
-        const int xAmplitude = 1100;
-        const int yAmplitude = 600;
-        const int zAmplitude = 250;
+        // X, Y and Z amplitudes determined experimentally
+        const float xAmplitude = 1.2;
+        const float yAmplitude = 0.7;
+        const float zAmplitude = 350;
 
-        const int zCenter = 1000;
+        const float zCenter = 1000;
 
-        tvec[0] = xAmplitude * sin( t / xPeriod );
-        tvec[1] = yAmplitude * sin( t / yPeriod );
         tvec[2] = zCenter + zAmplitude * sin( t / zPeriod );
 
-        rvec[0] = 0.25 * sin( t / r1Period );
-        rvec[1] = 0.25 * sin( t / r2Period );
+        tvec[0] = xAmplitude * tvec[2] * sin( t / xPeriod );
+        tvec[1] = yAmplitude * tvec[2] * sin( t / yPeriod );
+
+        rvec[0] = 0.25 * sin( t / r0Period );
+        rvec[1] = 0.25 * sin( t / r1Period );
+        rvec[2] = 0.25 * sin( t / r2Period );
       }
 
       Vec3d tvec, rvec;
 
-      float xPeriod, yPeriod, zPeriod, r1Period, r2Period;
+      float xPeriod,  yPeriod,  zPeriod, 
+            r0Period, r1Period, r2Period;
     };
 
 
@@ -306,7 +348,6 @@ class SimulateDbMain
 
     ofstream _benchmark;
 };
-
 
 
 int main( int argc, char **argv ) 

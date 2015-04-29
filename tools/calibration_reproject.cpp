@@ -27,9 +27,8 @@ using namespace Distortion;
 #include "calibrator.h"
 using namespace AplCam;
 
-#include "video_splitters/video_splitter_opts.h"
-#include "video_splitters/video_splitters.h"
-using namespace AplCam::VideoSplitters;
+#include "calib_frame_selectors/calib_frame_selectors.h"
+using namespace AplCam::CalibFrameSelectors;
 
 
 using namespace cv;
@@ -242,7 +241,7 @@ int main( int argc, char** argv )
   }
 
   DetectionSet refDetections;
-  AllGoodVideoSplitter vs;
+  AllGoodFrameSelector vs;
   vs.generate( refDets, refDetections );
 
   cout << "Loaded reference detection set with " << refDetections.size() << " frames." << endl;

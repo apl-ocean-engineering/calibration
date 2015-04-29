@@ -27,9 +27,9 @@ using namespace Distortion;
 #include "calibrator.h"
 using namespace AplCam;
 
-#include "video_splitters/video_splitter_opts.h"
-#include "video_splitters/video_splitters.h"
-using namespace AplCam::VideoSplitters;
+#include "calib_frame_selectors/calib_frame_selector_opts.h"
+#include "calib_frame_selectors/calib_frame_selectors.h"
+using namespace AplCam::CalibFrameSelectors;
 
 
 
@@ -43,7 +43,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
   public:
 
-    typedef enum { SPLIT_ALL, SPLIT_RANDOM, SPLIT_INTERVAL, SPLIT_NONE = -1 } SplitterType_t;
+    typedef enum { SPLIT_ALL, SPLIT_RANDOM, SPLIT_INTERVAL, SPLIT_NONE = -1 } SelectorType_t;
 
     CalibrationOpts()
       : CalibrationOptsCommon(), 
@@ -64,10 +64,10 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     bool fixSkew, overwriteDb;
 
     CalibrationType_t calibType;
-    SplitterType_t splitter;
+    SelectorType_t splitter;
 
-    IntervalSplitterOpts intervalSplitterOpts;
-    RandomSplitterOpts randomSplitterOpts;
+    IntervalSelectorOpts intervalSelectorOpts;
+    RandomSelectorOpts randomSelectorOpts;
 
 
     //== Option parsing and help ==
@@ -199,10 +199,10 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         success = true;
       } else if( !strcasecmp( verb, "random" ) ) {
         splitter = SPLIT_RANDOM;
-        success = randomSplitterOpts.parseOpts( argc, argv, msg );
+        success = randomSelectorOpts.parseOpts( argc, argv, msg );
       } else if( !strcasecmp( verb, "interval" ) ) {
         splitter = SPLIT_INTERVAL;
-        success = intervalSplitterOpts.parseOpts( argc, argv, msg );
+        success = intervalSelectorOpts.parseOpts( argc, argv, msg );
       } else {
         msgstrm << "Don't understand verb \"" << verb << "\"";
         msg = msgstrm.str();
@@ -297,16 +297,16 @@ int main( int argc, char** argv )
   DetectionSet detSet;
   switch( opts.splitter ) {
     case CalibrationOpts::SPLIT_ALL:
-      AllVideoSplitter().generate( db, detSet );
+      AllFrameSelector().generate( db, detSet );
       break;
     case CalibrationOpts::SPLIT_RANDOM:
-      RandomVideoSplitter( opts.randomSplitterOpts ).generate( db, detSet );
+      RandomFrameSelector( opts.randomSelectorOpts ).generate( db, detSet );
       break;
     case CalibrationOpts::SPLIT_INTERVAL:
-      IntervalVideoSplitter( opts.intervalSplitterOpts ).generate( db, detSet );
+      IntervalFrameSelector( opts.intervalSelectorOpts ).generate( db, detSet );
       break;
     default:
-      cerr << "Unknown video splitter." << endl;
+      cerr << "Unknown frame selector." << endl;
       exit(-1);
   }
 
