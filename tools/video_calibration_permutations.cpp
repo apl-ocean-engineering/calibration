@@ -12,6 +12,11 @@
 
 #include <iostream>
 
+
+// Disable TBB temporarily, assume threading in the calibration routine (Ceres) itself.
+#undef USE_TBB
+
+
 #ifdef USE_TBB
 #include "tbb/tbb.h"
 using namespace tbb;
