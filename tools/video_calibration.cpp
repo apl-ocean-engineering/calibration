@@ -43,7 +43,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
   public:
 
-    typedef enum { SPLIT_ALL, SPLIT_RANDOM, SPLIT_INTERVAL, SPLIT_NONE = -1 } SelectorType_t;
 
     CalibrationOpts()
       : CalibrationOptsCommon(), 
@@ -64,10 +63,12 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     bool fixSkew, overwriteDb;
 
     CalibrationType_t calibType;
-    SelectorType_t splitter;
+
+    AplCam::CalibFrameSelectors::Type_t selector;
 
     IntervalSelectorOpts intervalSelectorOpts;
     RandomSelectorOpts randomSelectorOpts;
+    KeyframeSelectorOpts keyframeSelectorOpts;
 
 
     //== Option parsing and help ==
@@ -195,14 +196,17 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       char *verb = argv[ optind++ ];
       bool success = false;
       if( !strcasecmp( verb, "all" ) ) {
-        splitter = SPLIT_ALL;
+        selector = SPLIT_ALL;
         success = true;
       } else if( !strcasecmp( verb, "random" ) ) {
-        splitter = SPLIT_RANDOM;
+        selector = SPLIT_RANDOM;
         success = randomSelectorOpts.parseOpts( argc, argv, msg );
       } else if( !strcasecmp( verb, "interval" ) ) {
-        splitter = SPLIT_INTERVAL;
+        selector = SPLIT_INTERVAL;
         success = intervalSelectorOpts.parseOpts( argc, argv, msg );
+      } else if( !strcasecmp( verb, "keyframe" ) ) {
+        selector = SPLIT_KEYFRAME;
+        success = keyframeSelectorOpts.parseOpts( argc, argv, msg );
       } else {
         msgstrm << "Don't understand verb \"" << verb << "\"";
         msg = msgstrm.str();
@@ -297,15 +301,18 @@ int main( int argc, char** argv )
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
   DetectionSet detSet;
-  switch( opts.splitter ) {
-    case CalibrationOpts::SPLIT_ALL:
+  switch( opts.selector ) {
+    case CalibFrameSelectors::SPLIT_ALL:
       AllFrameSelector().generate( db, detSet );
       break;
-    case CalibrationOpts::SPLIT_RANDOM:
+    case CalibFrameSelectors::SPLIT_RANDOM:
       RandomFrameSelector( opts.randomSelectorOpts ).generate( db, detSet );
       break;
-    case CalibrationOpts::SPLIT_INTERVAL:
+    case CalibFrameSelectors::SPLIT_INTERVAL:
       IntervalFrameSelector( opts.intervalSelectorOpts ).generate( db, detSet );
+      break;
+    case CalibFrameSelectors::SPLIT_KEYFRAME:
+      KeyframeFrameSelector( *board, opts.keyframeSelectorOpts ).generate( db, detSet );
       break;
     default:
       cerr << "Unknown frame selector." << endl;
