@@ -19,6 +19,8 @@ link_libraries( ${OpenCV_LIBS} )
 
 add_executable( extract extract.cpp )
 
+add_executable( build_stereo_detection_db build_stereo_detection_db.cpp )
+
 add_executable( build_detection_db build_detection_db.cpp )
 if( USE_TBB )
   target_link_libraries( build_detection_db tbb )
