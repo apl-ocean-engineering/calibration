@@ -1,0 +1,15 @@
+namespace :bonjour do
+
+	task :http do
+		sh "dns-sd -B _http._tcp local"
+	end
+
+	task :haptic3 do
+		sh "dns-sd -L \"haptic3@00:14:D1:95:11:DB\" _http._tcp."
+	end
+
+	task :ip do
+		sh "dns-sd -Q TV-IP343PI-0014D19511DB.local"
+	end
+
+end
