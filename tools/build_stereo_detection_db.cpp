@@ -172,16 +172,19 @@ class BuildDbMain
       CompositeCanvas canvas;
 
       while( compVid.read( canvas ) ) {
-
+             int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
         
         for( int i = 0; i < 2; ++i ) {
-          Mat gray;
-          cvtColor( canvas[i], gray, COLOR_BGR2GRAY );
 
-          Detection *det = board->detectPattern( gray );
+          //Mat gray;
+          //cvtColor( canvas[i], gray, COLOR_BGR2GRAY );
+
+          Detection *det = board->detectPattern( canvas[i] );
 
           det->drawCorners( *board, canvas[i] );
 
+          db[i].save( currentFrame, *det );
+          delete det;
         }
 
         if( opts.doDisplay ) {
@@ -193,7 +196,6 @@ class BuildDbMain
         }
 
       }
-      //       int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
       //       cout << currentFrame << " ";
 
       //       if( !db.has( currentFrame ) || opts.doRewrite ) {
