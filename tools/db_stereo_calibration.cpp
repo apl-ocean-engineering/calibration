@@ -27,6 +27,7 @@ struct DbStereoCalibrationOpts {
   {;}
 
   string boardName, dataDir, detectionDbDir, cameraCalibrations[2];
+  bool doDisplay;
 
   const string boardPath( void )
   { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -50,6 +51,7 @@ struct DbStereoCalibrationOpts {
 
       TCLAP::CmdLine cmd("db_stereo_calibration", ' ', "0.1");
 
+      TCLAP::SwitchArg doDisplayArg("X", "do-display", "Do display", cmd, false );
       TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
       TCLAP::ValueArg<std::string> detectionDbDirArg( "", "detection-db-dir", "Detection db directory", false, ".", "dir", cmd );
       TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
@@ -63,6 +65,7 @@ struct DbStereoCalibrationOpts {
       boardName = boardNameArg.getValue();
       cameraCalibrations[0] = cal0Arg.getValue();
       cameraCalibrations[1] = cal1Arg.getValue();
+      doDisplay = doDisplayArg.getValue();
 
     } catch( TCLAP::ArgException &e ) {
       LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
@@ -90,6 +93,33 @@ struct DbStereoCalibrationOpts {
 
 
 
+class StereoCalibrator {
+  public:
+
+    StereoCalibrator( void )
+      : numPts_(0)
+    {;}
+
+    int size( void ) const { return numPts_; }
+
+    void addPoints( const Detection &a, const Detection &b )
+    {
+
+    }
+
+  protected:
+   
+    int numPts_;
+    ImagePointsVecVec imagePoints_[2];
+//    ImagePointsVecVec undistortedImagePoints[2];
+//    // Make ``flattened'' versions as well
+//    ImagePointsVec undistortedImagePts[2];
+//
+//    ObjectPointsVecVec objectPoints;
+
+
+}
+
 
 class DbStereoCalibration {
  public:
@@ -101,26 +131,50 @@ class DbStereoCalibration {
   {
     Board *board = Board::load( opts.boardPath(), opts.boardName );
 
+    for( int i = 0; i < 2; ++i ) {
+dd
+      cameras[i] = CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(i) );
+      if( cameras[i] == NULL ) {
+        LOG(ERROR) << "Couldn't load camera from " << opts_.cameraCalibrationPath(i);
+        return -1;
+      }
+
+      bool dbOpened;
+      dbOpened = db[i].open( opts.detectionDbPath(i), true );
+
+      if( !dbOpened ) {
+        LOG(ERROR) << "Error opening database file " << opts.detectionDbPath(i) << ": " << db[i].error().name() << endl;
+        return -1;
+      }
+    }
+  }
+
+
+  void doCalibrate( void )
+  {
+    const int count = 1000;
+    const int maxRep = 1000;
+
+    StereoCalibrator calibrator;
+
+    int vidLength = min( db[0].vidLength(), db[1].vidLength() );
+    int rep = 0;
+    while( calibrator.size() < count && rep < maxRep ) {
+      int frame = floor( vidLength * drand48() );
+
+      Detections *det[2] = { db[0].get( frame ), db[1].get( frame ) };
+
+      if( det[0] != NULL || det[1] != NULL ) calibrator.addPoints( *det[0], *det[1] );
+
+      ++rep;
+    }
+
+
+
+    // Just implement a random selector for now.
+
 //    float aspectRatio = 1.f;
 //    bool writeExtrinsics = false, writePoints = false;
-//
-//    int numPoints = 0;
-//    ImagePointsVecVec imagePoints[2];
-//    ImagePointsVecVec undistortedImagePoints[2];
-//
-//    // Make ``flattened'' versions as well
-//    ImagePointsVec undistortedImagePts[2];
-//
-//    ObjectPointsVecVec objectPoints;
-
-    cout << "Loading camera 1 from: " << opts_.cameraCalibrationPath(0) << endl;
-    cout << "Loading camera 2 from: " << opts_.cameraCalibrationPath(1) << endl;
-
-    // Load the camera files
-    DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(0) ),
-                                    CameraFactory::LoadDistortionModel( cameraCalibrationPath(1) ) };
-
-
 
 
   }
@@ -129,6 +183,9 @@ class DbStereoCalibration {
  private:
 
   DbStereoCalibrationOpts &opts;
+  DistortionModel *cameras[2];
+  DetectionDb db[2];
+
 };
 
 
