@@ -58,7 +58,7 @@ struct BuildDbOpts {
 
     const string detectionDbPath( const int i ) 
     {
-      return detectionDbDir + "/" + ( ( i == 0 ) ? "left.kch" : "right.kch" );
+      return detectionDbDir + "/" + ( ( i == 0 ) ? "zero.kch" : "one.kch" );
     }
 
     bool parseOpts( int argc, char **argv, stringstream &msg )
