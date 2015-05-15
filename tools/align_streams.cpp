@@ -43,7 +43,7 @@ using namespace AplCam;
 struct AlignmentOptions
 {
 
-  typedef enum { PLAYER, EXTRACT, COMPOSITE, VERB_NONE = -1 } Verb;
+  typedef enum { PLAYER, EXTRACT, COMPOSITE, RECTIFY, VERB_NONE = -1 } Verb;
   typedef enum { TRIGGER_NONE = -1, DT, SHARED_TAGS } ExtractTrigger;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
@@ -177,6 +177,8 @@ struct AlignmentOptions
       verb = EXTRACT;
     } else if( verbStr.compare( "composite" ) == 0 ) {
       verb = COMPOSITE;
+    } else if( verbStr.compare( "rectify" ) == 0 ) {
+      verb = RECTIFY;
     } else {
       msg = "Don't understand the verb \"" + verbStr + "\"";
       return false;
@@ -203,6 +205,12 @@ struct AlignmentOptions
       msg = "Extract trigger unknown";
       return false;
     }
+
+    if( verb == RECTIFY && outputPath.empty() ) {
+      msg = "Must specify output path for rectify";
+      return false;
+    }
+
 
     return true;
   }
@@ -258,6 +266,9 @@ class AlignStreamsMain {
         case AlignmentOptions::COMPOSITE:
           retval = doComposite();
           break;
+        case AlignmentOptions::RECTIFY:
+          retval = doRectify();
+          break;
         case AlignmentOptions::VERB_NONE:
         default:
           cout << "No verb selected, oh well." << endl;
@@ -295,6 +306,7 @@ class AlignStreamsMain {
       return 0;
     }
 
+
     int doComposite( void )
     {
       // Need to generate first composite to get frame size
@@ -315,6 +327,44 @@ class AlignStreamsMain {
       int count = 0;
       do { 
         writer << composite;
+        ++count;
+      } while( sync.nextCompositeFrame( composite ) ); 
+
+      return true;
+    }
+
+
+
+    int doRectify( void )
+    {
+      // Need to generate first composite to get frame size
+      CompositeCanvas composite;
+      sync.nextCompositeFrame( composite );
+
+      //VideoWriter writer( outfile, CV_FOURCC('X','2','6','4'), 
+      //VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
+      VideoWriter writer0( outputPath.videoZero(), CV_FOURCC('X','V','I','D'),
+                          std::min( video0.fps(), video1.fps() ), composite[0].size(), true );
+
+      VideoWriter writer1( outputPath.videoOne(), CV_FOURCC('X','V','I','D'),
+                          std::min( video0.fps(), video1.fps() ), composite[1].size(), true );
+
+
+      if( !writer0.isOpened() ) {
+        cerr << "Couldn't open video writer for \"" << outputPath.videoZero() << "\"" << endl;
+        return -1;
+      }
+
+      if( !writer1.isOpened() ) {
+        cerr << "Couldn't open video writer for \"" << outputPath.videoOne() << "\"" << endl;
+        return -1;
+      }
+
+      int count = 0;
+      do { 
+        writer0 << composite[0];
+        writer1 << composite[1];
+
         ++count;
       } while( sync.nextCompositeFrame( composite ) ); 
 
@@ -499,6 +549,17 @@ class AlignStreamsMain {
         const string compositeVideo( void )
         {
           return _root + "/composite.avi";
+        }
+
+        // Todo.  Hardcoded.
+        const string videoZero( void )
+        {
+          return _root + "/zero.avi";
+        }
+
+        const string videoOne( void )
+        {
+          return _root + "/one.avi";
         }
 
       } outputPath;
