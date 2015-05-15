@@ -12,9 +12,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <kchashdb.h>
-
 #include <TCLAP/CmdLine.h>
-
 #include <glog/logging.h>
 
 #include "board.h"
@@ -54,7 +52,6 @@ struct BuildDbOpts {
 
     const string cachePath( const string &file = "" ) const
     { return dataDir + "/cache/" + file; }
-
 
     const string detectionDbPath( const int i ) 
     {
