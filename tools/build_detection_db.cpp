@@ -24,6 +24,9 @@
 #include "trendnet_time_code.h"
 using namespace AplCam;
 
+#include "apriltag_detector.h"
+using namespace CameraCalibration;
+
 using namespace std;
 using namespace cv;
 using kyotocabinet::HashDB;
@@ -294,19 +297,6 @@ class BuildDbMain
       return 0;
     }
 
-    struct Frame {
-      Frame( int _f, Mat _m )
-        : frame(_f), img( _m )
-      {;}
-
-      int frame;
-      Mat img;
-    };
-
-    typedef vector< Frame > FrameVec_t;
-    typedef pair< int, int64 > TimingData_t;
-    typedef vector< TimingData_t > TimingDataVec_t;
-
     void processFrames( FrameVec_t &frames )
     {
       AprilTagDetectorFunctor f( frames, db, board );
@@ -324,70 +314,6 @@ class BuildDbMain
       frames.clear();
     }
 
-
-    struct AprilTagDetectorFunctor {
-      public:
-        AprilTagDetectorFunctor( FrameVec_t &frames, DetectionDb &db, Board *board )
-          : _frames( frames ), _db(db), _board( *board), timingData()
-        {;}
-
-        FrameVec_t &_frames;
-        DetectionDb &_db;
-        Board &_board;
-        TimingDataVec_t timingData;
-
-#ifdef USE_TBB
-        // Splitting constructor for TBB
-        AprilTagDetectorFunctor( AprilTagDetectorFunctor &other, tbb::split )
-          : _frames( other._frames ), _db( other._db ), _board( other._board ), timingData()
-        {;}
-
-
-        void operator()( const tbb::blocked_range<size_t> &r ) 
-        {
-
-          size_t end = r.end();
-          for( size_t i = r.begin(); i != end; ++i ) {
-#else
-            void operator()( ) 
-            {
-
-              size_t end = _frames.size();
-              for( size_t i = 0; i < end; ++i ) {
-#endif
-                Detection *detection = NULL;
-                Frame &p( _frames[i]);
-
-                //cout << "Extracting from " << p.frame << ". ";
-
-                Mat grey;
-                cvtColor( p.img, grey, CV_BGR2GRAY );
-                vector<Point2f> pointbuf;
-
-                int64 before = getTickCount();
-                detection = _board.detectPattern( grey, pointbuf );
-                int64 elapsed = getTickCount() - before;
-
-                //cout << p.frame << ": " << detection->size() << " features" << endl;
-
-                // Trust the thread-safety of kyotocabinet
-                _db.save( p.frame, *detection);
-
-                int sz = detection->size();
-                delete detection;
-
-                timingData.push_back( make_pair( sz, elapsed ) );
-              }
-            }
-
-#ifdef USE_TBB
-            void join( const AprilTagDetectorFunctor &other )
-            {
-              std::copy( other.timingData.begin(), other.timingData.end(), back_inserter( timingData ) );
-            }
-#endif
-
-          };
 
 
           void saveTimingData( const TimingDataVec_t &td )

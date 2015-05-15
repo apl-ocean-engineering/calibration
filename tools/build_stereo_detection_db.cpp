@@ -12,7 +12,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <kchashdb.h>
-#include <TCLAP/CmdLine.h>
+#include <tclap/CmdLine.h>
 #include <glog/logging.h>
 
 #include "board.h"
@@ -24,6 +24,9 @@
 #include "composite_canvas.h"
 using namespace AplCam;
 
+#include "apriltag_detector.h"
+using namespace CameraCalibration;
+
 using namespace std;
 using namespace cv;
 using kyotocabinet::HashDB;
@@ -33,14 +36,16 @@ struct BuildDbOpts {
     BuildDbOpts()
       : boardName(), 
       detectionDbDir(),
-      doDisplay( false )
+      doDisplay( false ),
+      doParallel( false ),
+      doRewrite( false )
   {;}
 
 
     int waitKey;
     float intervalSeconds;
     string boardName, dataDir, detectionDbDir;
-    bool doDisplay;
+    bool doDisplay, doParallel, doRewrite;
 
     string inFile;
 
@@ -69,6 +74,8 @@ struct BuildDbOpts {
         TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
         TCLAP::ValueArg<std::string> detectionDbDirArg( "", "detection-db-dir", "Detection db directory", false, ".", "dir", cmd );
         TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
+        TCLAP::SwitchArg doParallelArg("P", "do-parallel", "Do run in parallel", cmd, false );
+        TCLAP::SwitchArg doRewriteArg("R", "do-rewrite", "Do rewrite existing entries in detection d/b", cmd, false );
 
         TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "file name", cmd );
 
@@ -78,7 +85,10 @@ struct BuildDbOpts {
         dataDir = dataDirArg.getValue();
         detectionDbDir = detectionDbDirArg.getValue();
         doDisplay = doDisplayArg.getValue();
+        doParallel = doParallelArg.getValue();
+        doRewrite = doRewriteArg.getValue();
         boardName = boardNameArg.getValue();
+        
 
       } catch( TCLAP::ArgException &e ) {
         LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
@@ -119,13 +129,6 @@ class BuildDbMain
     }
 
     int run( void ) {
-      if( opts.doDisplay ) namedWindow( BuildDbWindowName );
-
-      return doBuildDb();
-    }
-
-    int doBuildDb( void )
-    {
       board = Board::load( opts.boardPath(), opts.boardName );
       if( !board ) {
         LOG(ERROR) << "Couldn't open board from " << opts.boardPath() << endl;
@@ -148,35 +151,113 @@ class BuildDbMain
         }
       }
 
-      double vidLength = compVid.get( CV_CAP_PROP_FRAME_COUNT );
-      double fps = compVid.get( CV_CAP_PROP_FPS );
+      if( opts.doDisplay ) {
+        namedWindow( BuildDbWindowName );
+        return doDisplay( compVid );
+      } else if( opts.doParallel ) {
+        LOG(INFO) << "Processing frames in parallel." << endl;
+        return doParallel( compVid );
+      } else {
+        return doSingular( compVid );
+      }
+    }
 
-      int wait = 1.0/fps * 1000, wk = wait;
-
-      //     db.setMeta( vidLength, 
-      //                 vid.get( CV_CAP_PROP_FRAME_WIDTH ),
-      //                 vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
-      //                 vid.get( CV_CAP_PROP_FPS ) );
-
-
-      //     if( opts.intervalSeconds > 0 ) 
-      //       opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
-
-      //     FrameVec_t frames;
-      //     const int chunkSize = 50;
-      //     Mat img;
+    int doSingular( CompositeVideo &compVid )
+    {
 
       CompositeCanvas canvas;
 
       while( compVid.read( canvas ) ) {
-             int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
-        
+        int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
+
         for( int i = 0; i < 2; ++i ) {
+
+          if( db[i].has( currentFrame ) ) continue;
 
           //Mat gray;
           //cvtColor( canvas[i], gray, COLOR_BGR2GRAY );
 
           Detection *det = board->detectPattern( canvas[i] );
+
+          db[i].save( currentFrame, *det );
+          delete det;
+        }
+
+      }
+
+      return 0;
+    }
+
+
+    int doParallel( CompositeVideo &compVid )
+    {
+      CompositeCanvas canvas;
+
+      const int chunkSize = 50;
+      FrameVec_t frames[2];
+
+      while( compVid.read( canvas ) ) {
+        int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
+
+        for( int i = 0; i < 2; ++i ) {
+
+          if( !db[i].has( currentFrame ) || opts.doRewrite ) {
+            frames[i].push_back( Frame( currentFrame, canvas[i].clone() ) );
+          }
+        }
+
+        if( frames[0].size() >= chunkSize || frames[1].size() >= chunkSize ) {
+          processFrames( frames );
+        }
+
+      }
+
+      processFrames( frames );
+
+      return 0;
+    }
+      
+    void processFrames( FrameVec_t *frames )
+    {
+      for( size_t i = 0; i < 2; ++i ) {
+        AprilTagDetectorFunctor f( frames[i], db[i], board );
+
+#ifdef USE_TBB
+        LOG(INFO) << "Processing with TBB" << endl;
+        tbb::parallel_for( tbb::blocked_range<size_t>(0, frames[i].size()), f );
+#else
+        LOG(INFO) << "Processing without TBB" << endl;
+        f();
+#endif
+
+        LOG(INFO) << "Processed " <<  frames[i].size() << " frames" << endl;
+
+        frames[i].clear();
+      }
+    }
+
+    int doDisplay( CompositeVideo &compVid )
+    {
+
+      double vidLength = compVid.get( CV_CAP_PROP_FRAME_COUNT );
+      double fps = compVid.get( CV_CAP_PROP_FPS );
+
+      int wait = 1.0/fps * 1000, wk = wait;
+
+      CompositeCanvas canvas;
+
+      while( compVid.read( canvas ) ) {
+        int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
+
+        for( int i = 0; i < 2; ++i ) {
+
+          if( db[i].has( currentFrame ) && !opts.doRewrite ) continue;
+
+          //Mat gray;
+          //cvtColor( canvas[i], gray, COLOR_BGR2GRAY );
+
+          Detection *det = board->detectPattern( canvas[i] );
+          cout << det->corners.size() << " ";
 
           det->drawCorners( *board, canvas[i] );
 
@@ -184,51 +265,27 @@ class BuildDbMain
           delete det;
         }
 
-        if( opts.doDisplay ) {
-          imshow( BuildDbWindowName, canvas );
-          int ch = waitKey( wk );
-          if( ch == ' ' ) {
-            wk = (wk == 0) ? wait : 0;
-          }
+        imshow( BuildDbWindowName, canvas );
+        int ch = waitKey( wk );
+        if( ch == ' ' ) {
+          wk = (wk == 0) ? wait : 0;
+        } else if( ch == 'q') {
+          return 0;
         }
 
       }
-      //       cout << currentFrame << " ";
-
-      //       if( !db.has( currentFrame ) || opts.doRewrite ) {
-      //         frames.push_back( Frame( currentFrame, img.clone() ) );
-      //       }
-
-      //       if( opts.intervalFrames > 1 ) {
-      //         int destFrame = currentFrame + opts.intervalFrames - 1;
-
-      //         if( destFrame < vidLength ) 
-      //           vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-      //         else 
-      //           break;
-      //       }
-
-      //       if( frames.size() >= chunkSize ) {
-      //         cout << endl;
-      //         processFrames( frames );
-      //       }
-      //     }
-
-      //     cout << endl;
-      //     processFrames( frames );
-
 
       return 0;
-}
+    }
 
-private:
+  private:
 
-static const string BuildDbWindowName;
+    static const string BuildDbWindowName;
 
-BuildDbOpts opts;
+    BuildDbOpts opts;
 
-DetectionDb db[2];
-Board *board;
+    DetectionDb db[2];
+    Board *board;
 };
 
 const string BuildDbMain::BuildDbWindowName = "BuildStereoDb";

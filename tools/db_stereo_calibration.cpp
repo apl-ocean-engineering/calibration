@@ -4,7 +4,7 @@
 
 #include <boost/filesystem.hpp>
 
-#include <TCLAP/CmdLine.h>
+#include <tclap/CmdLine.h>
 #include <glog/logging.h>
 
 #include "board.h"

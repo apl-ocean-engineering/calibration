@@ -21,7 +21,6 @@ find_package( GSL REQUIRED )
 find_package( Eigen REQUIRED )
 
 
-
 # KyotoCabinet stuff
 find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
   HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
