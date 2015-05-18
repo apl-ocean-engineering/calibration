@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <vector>
 
-#include <boost/filesystem.hpp>
+#include "file_utils.h"
 
 #include <tclap/CmdLine.h>
 #include <glog/logging.h>
@@ -118,7 +118,7 @@ class StereoCalibrator {
 //    ObjectPointsVecVec objectPoints;
 
 
-}
+};
 
 
 class DbStereoCalibration {
@@ -132,18 +132,17 @@ class DbStereoCalibration {
     Board *board = Board::load( opts.boardPath(), opts.boardName );
 
     for( int i = 0; i < 2; ++i ) {
-dd
-      cameras[i] = CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(i) );
-      if( cameras[i] == NULL ) {
+      cameras_[i] = CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(i) );
+      if( cameras_[i] == NULL ) {
         LOG(ERROR) << "Couldn't load camera from " << opts_.cameraCalibrationPath(i);
         return -1;
       }
 
       bool dbOpened;
-      dbOpened = db[i].open( opts.detectionDbPath(i), true );
+      dbOpened = db_[i].open( opts.detectionDbPath(i), true );
 
       if( !dbOpened ) {
-        LOG(ERROR) << "Error opening database file " << opts.detectionDbPath(i) << ": " << db[i].error().name() << endl;
+        LOG(ERROR) << "Error opening database file " << opts_.detectionDbPath(i) << ": " << db_[i].error().name() << endl;
         return -1;
       }
     }
@@ -157,12 +156,12 @@ dd
 
     StereoCalibrator calibrator;
 
-    int vidLength = min( db[0].vidLength(), db[1].vidLength() );
+    int vidLength = min( db[0].vidLength(), db_[1].vidLength() );
     int rep = 0;
     while( calibrator.size() < count && rep < maxRep ) {
       int frame = floor( vidLength * drand48() );
 
-      Detections *det[2] = { db[0].get( frame ), db[1].get( frame ) };
+      Detections *det[2] = { db_[0].get( frame ), db_[1].get( frame ) };
 
       if( det[0] != NULL || det[1] != NULL ) calibrator.addPoints( *det[0], *det[1] );
 
@@ -182,9 +181,9 @@ dd
 
  private:
 
-  DbStereoCalibrationOpts &opts;
-  DistortionModel *cameras[2];
-  DetectionDb db[2];
+  DbStereoCalibrationOpts &opts_;
+  DistortionModel *cameras_[2];
+  DetectionDb db_[2];
 
 };
 

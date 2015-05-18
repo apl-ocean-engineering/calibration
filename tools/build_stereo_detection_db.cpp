@@ -45,7 +45,7 @@ struct BuildDbOpts {
     int waitKey;
     float intervalSeconds;
     string boardName, dataDir, detectionDbDir;
-    bool doDisplay, doParallel, doRewrite;
+    bool doDisplay, doParallel, doRewrite, doAnnotate;
 
     string inFile;
 
@@ -74,8 +74,10 @@ struct BuildDbOpts {
         TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
         TCLAP::ValueArg<std::string> detectionDbDirArg( "", "detection-db-dir", "Detection db directory", false, ".", "dir", cmd );
         TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
+
         TCLAP::SwitchArg doParallelArg("P", "do-parallel", "Do run in parallel", cmd, false );
         TCLAP::SwitchArg doRewriteArg("R", "do-rewrite", "Do rewrite existing entries in detection d/b", cmd, false );
+        TCLAP::SwitchArg doAnnotateArg("N", "do-annotate", "Do annotate entries into a video", cmd, false );
 
         TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "file name", cmd );
 
@@ -87,6 +89,8 @@ struct BuildDbOpts {
         doDisplay = doDisplayArg.getValue();
         doParallel = doParallelArg.getValue();
         doRewrite = doRewriteArg.getValue();
+        doAnnotate = doAnnotateArg.getValue();
+
         boardName = boardNameArg.getValue();
         
 
@@ -149,6 +153,11 @@ class BuildDbMain
           LOG(ERROR) << "Error opening database file " << opts.detectionDbPath(i) << ": " << db[i].error().name() << endl;
           return -1;
         }
+
+        db[i].setMeta( compVid.get( CV_CAP_PROP_FRAME_COUNT ),
+            compVid.get( CV_CAP_PROP_FRAME_WIDTH )/ 2.0,
+            compVid.get( CV_CAP_PROP_FRAME_HEIGHT ),
+            compVid.fps() );
       }
 
       if( opts.doDisplay ) {
@@ -159,6 +168,11 @@ class BuildDbMain
         return doParallel( compVid );
       } else {
         return doSingular( compVid );
+      }
+
+      if( opts.doAnnotate ) {
+        compVid.rewind();
+        doAnnotate( compVid );
       }
     }
 
@@ -239,7 +253,7 @@ class BuildDbMain
     int doDisplay( CompositeVideo &compVid )
     {
 
-      double vidLength = compVid.get( CV_CAP_PROP_FRAME_COUNT );
+      //double vidLength = compVid.get( CV_CAP_PROP_FRAME_COUNT );
       double fps = compVid.get( CV_CAP_PROP_FPS );
 
       int wait = 1.0/fps * 1000, wk = wait;
@@ -271,6 +285,33 @@ class BuildDbMain
           wk = (wk == 0) ? wait : 0;
         } else if( ch == 'q') {
           return 0;
+        }
+
+      }
+
+      return 0;
+    }
+
+    int doAnnotate( CompositeVideo &compVid )
+    {
+      CompositeCanvas canvas;
+
+      VideoWriter writer("annotated.avi", VideoWriter::fourcc('X','V','I','D'), compVid.fps(), compVid.fullSize() );
+
+      while( compVid.read( canvas ) ) {
+        int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
+
+        for( int i = 0; i < 2; ++i ) {
+
+          if(  !db[i].has( currentFrame ) ) continue;
+
+          Detection *det = db[i].load( currentFrame );
+
+          det->drawCorners( *board, canvas[i] );
+
+          writer.write( canvas );
+
+          delete det;
         }
 
       }

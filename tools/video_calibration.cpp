@@ -12,6 +12,8 @@
 
 #include <iostream>
 
+#include <glog/logging.h>
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -62,8 +64,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
     bool fixSkew, overwriteDb;
 
-    CalibrationType_t calibType;
-
     AplCam::CalibFrameSelectors::Type_t selector;
 
     IntervalSelectorOpts intervalSelectorOpts;
@@ -111,7 +111,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         { "detection-db", required_argument, NULL, 'D' },
         { "board", true, NULL, 'b' },
         { "camera", true, NULL, 'c' },
-        { "calibation-model", true, NULL, 'm' },
+        { "calibration-model", true, NULL, 'm' },
         { "fix-skew", false, NULL, 'k'},
         { "save-board-poses", required_argument, NULL, 'S' },
         { "calibration-file", required_argument, NULL, 'z' },
@@ -166,15 +166,16 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             break;
           case 'm':
             c = optarg;
-            if( c.compare("angular") == 0 ) {
+            LOG(INFO) << "Calibration model: " << optarg << endl;
+            if( c == "angular" ) {
               calibType = ANGULAR_POLYNOMIAL;
-            } else if (c.compare("radial") == 0) {
-              calibType = RADIAL_POLYNOMIAL;
-            } else if (c.compare("radial8") == 0) {
+            } else if ( c == "radial8" ) {
               calibType = RADIAL_POLYNOMIAL;
               calibFlags |= CV_CALIB_RATIONAL_MODEL;
+            } else if ( c.compare("radial") == 0 ) {
+              calibType = RADIAL_POLYNOMIAL;
             } else {
-              cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
+              LOG(ERROR) <<  "Can't figure out the calibration model \"" <<  c << "\"";
               return false;
             }
             break;
@@ -225,7 +226,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
         videoFile = argv[ optind ];
 
         if( !file_exists( videoFile ) ) {
-          cerr << "Can't open video file " << videoFile << endl;
+          LOG(ERROR) << "Can't open video file " << videoFile << endl;
           return false;
         }
       }
@@ -260,6 +261,9 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
 int main( int argc, char** argv )
 {
+ google::InitGoogleLogging( argv[0] );
+   FLAGS_logtostderr = 1;
+
 
   CalibrationOpts opts;
 
@@ -275,14 +279,14 @@ int main( int argc, char** argv )
 
   if( opts.detectionDb.empty() ) {
     if( ! db.open( opts.cachePath(), opts.videoFile ) ) {
-      cerr << "Error opening db error: " << db.error().name() << endl;
+      LOG(ERROR) << "Error opening db error: " << db.error().name();
       return -1;
     }
 
     string videoSource( opts.videoFile );
     VideoCapture vid( videoSource );
     if( !vid.isOpened() ) {
-      cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
+      LOG(ERROR) << "Couldn't open video source \"" << videoSource << "\"";
       return -1;
     }
     //int vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
@@ -291,7 +295,12 @@ int main( int argc, char** argv )
     imageSize = Size( vid.get( CV_CAP_PROP_FRAME_WIDTH ), vid.get(CV_CAP_PROP_FRAME_HEIGHT ) );
   } else {
     if( ! db.open( opts.detectionDb ) ) {
-      cerr << "Error opening db error: " << db.error().name() << endl;
+      LOG(ERROR) << "Error opening db error: " << db.error().name();
+      return -1;
+    }
+
+    if( ! db.has_meta() ) {
+      LOG(ERROR) << "Database doesn't have metainformation";
       return -1;
     }
 
@@ -315,7 +324,7 @@ int main( int argc, char** argv )
       KeyframeFrameSelector( *board, opts.keyframeSelectorOpts ).generate( db, detSet );
       break;
     default:
-      cerr << "Unknown frame selector." << endl;
+      LOG(ERROR) << "Unknown frame selector.";
       exit(-1);
   }
 

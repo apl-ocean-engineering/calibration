@@ -41,16 +41,22 @@ namespace AplCam {
     // Could/should farm this out to distortion..
     switch( _opts.calibType ) {
       case CalibrationOptsCommon::ANGULAR_POLYNOMIAL:
+        cout << "Using angular polynomial (Olson) calibration" << endl;
         _distModel = new Distortion::AngularPolynomial;
         break;
       case CalibrationOptsCommon::RADIAL_POLYNOMIAL:
+        cout << "Using radial polynomial (normal OpenCV) calibration" << endl;
         _distModel = new Distortion::RadialPolynomial;
         break;
+      case CalibrationOptsCommon::CALIBRATION_NONE:
+      default:
+        cout << "Not calibration model specified!" << endl;
+        return;
     }
 
     if( !_distModel ) {
       cerr << "Something went wrong choosing a distortion model." << endl;
-      exit(-1);
+      return;
     }
 
     int flags =  _opts.calibFlags;

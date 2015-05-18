@@ -12,6 +12,7 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 
+#include <glog/logging.h>
 
 #include <cctype>
 #include <stdio.h>
@@ -472,6 +473,8 @@ bool hartleyMethod( ImagePointsVec *undistortedImagePts,
 
 int main( int argc, char** argv )
 {
+  google::InitGoogleLogging( argv[0] );
+    FLAGS_logtostderr = 1;
 
   StereoCalibrationOpts opts( argc, argv );
 
@@ -505,7 +508,7 @@ int main( int argc, char** argv )
 
   for( int i = 0; i < 2; ++i ) 
     if( !cameras[i] ) {
-      cerr << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
+      LOG(ERROR)  << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
       exit(-1);
     }
 
