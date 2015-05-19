@@ -122,18 +122,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
             break;
           case 'm':
-            c = optarg;
-            if( c.compare("angular") == 0 ) {
-              calibType = ANGULAR_POLYNOMIAL;
-            } else if (c.compare("radial") == 0) {
-              calibType = RADIAL_POLYNOMIAL;
-            } else if (c.compare("radial8") == 0) {
-              calibType = RADIAL_POLYNOMIAL;
-              calibFlags |= CV_CALIB_RATIONAL_MODEL;
-            } else {
-              cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
-              exit(-1);
-            }
+            calibType = DistortionModel::ParseCalibrationType( optarg );
             break;
           case 'r':
             retryUnregistered = true;
@@ -286,18 +275,10 @@ int main( int argc, char** argv )
 
   int flags =  opts.calibFlags;
 
-  DistortionModel *distModel = NULL;
-  switch( opts.calibType ) {
-    case CalibrationOpts::ANGULAR_POLYNOMIAL:
-      distModel = new Distortion::AngularPolynomial;
-      break;
-    case CalibrationOpts::RADIAL_POLYNOMIAL:
-      distModel = new Distortion::RadialPolynomial;
-      break;
-  }
+  DistortionModel *distModel = DistortionModel::MakeDistortionModel( opts.calibType );
 
   if( !distModel ) {
-    cerr << "Something went wrong choosing a distortion model." << endl;
+    cerr << "Something went wrong making a distortion model." << endl;
     exit(-1);
   }
 

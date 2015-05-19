@@ -165,19 +165,8 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             overwriteDb = true;
             break;
           case 'm':
-            c = optarg;
-            LOG(INFO) << "Calibration model: " << optarg << endl;
-            if( c == "angular" ) {
-              calibType = ANGULAR_POLYNOMIAL;
-            } else if ( c == "radial8" ) {
-              calibType = RADIAL_POLYNOMIAL;
-              calibFlags |= CV_CALIB_RATIONAL_MODEL;
-            } else if ( c.compare("radial") == 0 ) {
-              calibType = RADIAL_POLYNOMIAL;
-            } else {
-              LOG(ERROR) <<  "Can't figure out the calibration model \"" <<  c << "\"";
-              return false;
-            }
+            calibType = DistortionModel::ParseCalibrationType( optarg );
+            cout << calibType << endl;
             break;
           case '?': 
             help();
@@ -261,8 +250,8 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
 int main( int argc, char** argv )
 {
- google::InitGoogleLogging( argv[0] );
-   FLAGS_logtostderr = 1;
+  google::InitGoogleLogging( argv[0] );
+  FLAGS_logtostderr = 1;
 
 
   CalibrationOpts opts;
@@ -340,9 +329,9 @@ int main( int argc, char** argv )
 
 
     if( opts.saveBoardPoses.length() > 0 ) {
-     DetectionDb savedPoses( opts.saveBoardPoses, true ); 
-     cal.updateDetectionPoses( detSet );
-     savedPoses.save( detSet );
+      DetectionDb savedPoses( opts.saveBoardPoses, true ); 
+      cal.updateDetectionPoses( detSet );
+      savedPoses.save( detSet );
     }
   } else {
     cout << "Calibration failed." << endl;
