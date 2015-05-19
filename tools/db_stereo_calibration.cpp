@@ -28,10 +28,11 @@ struct DbStereoCalibrationOpts {
   public:
     DbStereoCalibrationOpts()
       : boardName(), 
-      detectionDbDir()
+      detectionDbDir(),
+      stereoCalOutput()
   {;}
 
-    string boardName, dataDir, detectionDbDir, cameraCalibrations[2];
+    string boardName, dataDir, detectionDbDir, cameraCalibrations[2], stereoCalOutput;
 
     const string boardPath( void )
     { return dataDir + "/boards/" + boardName + ".yml"; }
@@ -60,6 +61,7 @@ struct DbStereoCalibrationOpts {
         TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
         TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
         TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
+        TCLAP::ValueArg<std::string> stereoCalArg( "o", "calibration-output", "Filename for resulting stereo calibration", true, "", "dir", cmd );
 
         cmd.parse( argc, argv );
 
@@ -68,6 +70,7 @@ struct DbStereoCalibrationOpts {
         boardName = boardNameArg.getValue();
         cameraCalibrations[0] = cal0Arg.getValue();
         cameraCalibrations[1] = cal1Arg.getValue();
+        stereoCalOutput = stereoCalArg.getValue();
 
       } catch( TCLAP::ArgException &e ) {
         LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
@@ -312,10 +315,12 @@ class DbStereoCalibration {
 
       StereoCalibrationData calData, undistortData;
 
+      // Just implement a random selector for now.
       int vidLength = min( db_[0].vidLength(), db_[1].vidLength() );
       int rep = 0;
-      while( calData.size() < count && rep < maxRep ) {
-        int frame = floor( vidLength * drand48() );
+      //while( calData.size() < count && rep < maxRep ) {
+      //  int frame = floor( vidLength * drand48() );
+      for( int frame = 0; frame < vidLength; ++frame ) {
 
         Detection *det[2] = { db_[0].load( frame ), db_[1].load( frame ) };
 
@@ -334,19 +339,19 @@ class DbStereoCalibration {
       FlatCalibrationData flatUndistortData;
       undistortData.flatten( flatUndistortData );
 
-      StereoCalibration hartleyCal;
-      hartleyMethod( flatUndistortData, hartleyCal );
+      StereoCalibration cal;
+
+      if( true ) {
+      hartleyMethod( flatUndistortData, cal );
+      } else {
+      //opencvMethod( calData, opencvCal );
+      }
 
 
-      StereoCalibration opencvCal;
-      opencvMethod( calData, opencvCal );
+      cal.dumpDecomp();
 
-      // Just implement a random selector for now.
-
-      //    float aspectRatio = 1.f;
-      //    bool writeExtrinsics = false, writePoints = false;
-
-
+      LOG(INFO) << "Saving to " <<  opts_.stereoCalOutput;
+      cal.save( opts_.stereoCalOutput );
     }
 
 
@@ -412,7 +417,7 @@ class DbStereoCalibration {
       //cout << "Est F: " << endl << estF << endl;
 
       Mat estE;
-      estE = findFundamentalMat(Mat(normData.imagePoints_[0]), Mat(normData.imagePoints_[1]), FM_RANSAC, 5./1600, 0.99, status);
+      estE = findFundamentalMat(Mat(normData.imagePoints_[0]), Mat(normData.imagePoints_[1]), FM_RANSAC, 3./1600, 0.99, status);
 
       cout << "estimated e: " << endl << estE << endl;
       // Normalize e
