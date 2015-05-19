@@ -119,7 +119,8 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             ignoreCache = true;
             break;
           case 'k':
-            calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            //calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            cout << "Skew is always fixed." << endl;
             break;
           case 'm':
             calibType = DistortionModel::ParseCalibrationType( optarg );

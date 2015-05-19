@@ -159,14 +159,14 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             saveBoardPoses = optarg;
             break;
           case 'k':
-            calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            //calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            cout << "Skew is always fixed." << endl;
             break;
           case 'y':
             overwriteDb = true;
             break;
           case 'm':
             calibType = DistortionModel::ParseCalibrationType( optarg );
-            cout << calibType << endl;
             break;
           case '?': 
             help();

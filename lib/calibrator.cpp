@@ -44,6 +44,8 @@ namespace AplCam {
     }
 
     int flags =  _opts.calibFlags;
+
+    cout << "Flags: " << flags << endl;
     _distModel->calibrate( objectPoints, imagePoints, 
         _imageSize, result, flags,
         cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 1000, DBL_EPSILON)  );  
