@@ -10,6 +10,11 @@
 #include "board.h"
 #include "distortion_model.h"
 
+#include "detection_db.h"
+#include "camera_factory.h"
+
+#include "stereo_calibration.h"
+
 using namespace cv;
 using namespace std;
 
@@ -19,171 +24,427 @@ using namespace AplCam;
 
 
 struct DbStereoCalibrationOpts {
- public:
-  DbStereoCalibrationOpts()
+  public:
+    DbStereoCalibrationOpts()
       : boardName(), 
-      detectionDbDir(),
-      doDisplay( false )
+      detectionDbDir()
   {;}
 
-  string boardName, dataDir, detectionDbDir, cameraCalibrations[2];
-  bool doDisplay;
+    string boardName, dataDir, detectionDbDir, cameraCalibrations[2];
 
-  const string boardPath( void )
-  { return dataDir + "/boards/" + boardName + ".yml"; }
+    const string boardPath( void )
+    { return dataDir + "/boards/" + boardName + ".yml"; }
 
-  const string tmpPath( const string &file )
-  { return dataDir + "/tmp/" + file; }
+    const string tmpPath( const string &file )
+    { return dataDir + "/tmp/" + file; }
 
-  const string cachePath( const string &file = "" ) const
-  { return dataDir + "/cache/" + file; }
+    const string cachePath( const string &file = "" ) const
+    { return dataDir + "/cache/" + file; }
 
-  const string detectionDbPath( const int i ) 
-  { return detectionDbDir + "/" + ( ( i == 0 ) ? "zero.kch" : "one.kch" ); }
+    const string detectionDbPath( const int i ) 
+    { return detectionDbDir + "/" + ( ( i == 0 ) ? "zero.kch" : "one.kch" ); }
 
-  const string cameraCalibrationPath( const int i )
-  { return dataDir + "/cameras/" + cameraCalibrations[i] + ".yml"; }
+    const string cameraCalibrationPath( const int i )
+    { return cameraCalibrations[i] + ".yml"; }
 
-  bool parseOpts( int argc, char **argv, stringstream &msg )
-  {
+    bool parseOpts( int argc, char **argv, stringstream &msg )
+    {
 
-    try {
+      try {
 
-      TCLAP::CmdLine cmd("db_stereo_calibration", ' ', "0.1");
+        TCLAP::CmdLine cmd("db_stereo_calibration", ' ', "0.1");
 
-      TCLAP::SwitchArg doDisplayArg("X", "do-display", "Do display", cmd, false );
-      TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
-      TCLAP::ValueArg<std::string> detectionDbDirArg( "", "detection-db-dir", "Detection db directory", false, ".", "dir", cmd );
-      TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
-      TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
-      TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
+        TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
+        TCLAP::ValueArg<std::string> detectionDbDirArg( "", "detection-db-dir", "Detection db directory", false, ".", "dir", cmd );
+        TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
+        TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
+        TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
 
-      cmd.parse( argc, argv );
+        cmd.parse( argc, argv );
 
-      dataDir = dataDirArg.getValue();
-      detectionDbDir = detectionDbDirArg.getValue();
-      boardName = boardNameArg.getValue();
-      cameraCalibrations[0] = cal0Arg.getValue();
-      cameraCalibrations[1] = cal1Arg.getValue();
-      doDisplay = doDisplayArg.getValue();
+        dataDir = dataDirArg.getValue();
+        detectionDbDir = detectionDbDirArg.getValue();
+        boardName = boardNameArg.getValue();
+        cameraCalibrations[0] = cal0Arg.getValue();
+        cameraCalibrations[1] = cal1Arg.getValue();
 
-    } catch( TCLAP::ArgException &e ) {
-      LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
+      } catch( TCLAP::ArgException &e ) {
+        LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
+      }
+
+      return validate( msg );
     }
 
-    return validate( msg );
-  }
+    bool validate( stringstream &msg )
+    {
+      if( !file_exists( boardPath() ) ) {
+        msg << "Can't find board file: " << boardPath();
+        return false;
+      }
 
-  bool validate( stringstream &msg )
-  {
-    if( !file_exists( boardPath() ) ) {
-      msg << "Can't find board file: " << boardPath();
-      return false;
+      if( !directory_exists( detectionDbDir ) ) {
+        msg << "Detection db directory doesn't exist: " << detectionDbDir;
+        return false;
+      }
+
+      return true;
     }
-
-    if( !directory_exists( detectionDbDir ) ) {
-      msg << "Detection db directory doesn't exist: " << detectionDbDir;
-      return false;
-    }
-
-    return true;
-  }
 
 };
 
+struct TxRectifier {
+  TxRectifier( const Mat &r )
+    : _r( r) {;}
+  const Mat &_r;
+
+  ImagePoint operator()( const ImagePoint &pt )
+  {
+    Vec3d p( pt[0], pt[1], 1.0 );
+    Mat r = _r * Mat(p);
+    return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
+  }
+};
 
 
-class StereoCalibrator {
+struct FlatCalibrationData {
+  FlatCalibrationData() {;}
+
+  size_t size( void ) const { return objectPoints_.size(); }
+
+  ImagePointsVec imagePoints_[2];
+  ObjectPointsVec objectPoints_;
+};
+
+
+class StereoCalibrationData {
   public:
 
-    StereoCalibrator( void )
+    StereoCalibrationData( void )
       : numPts_(0)
     {;}
+
+    void clear( void )
+    {
+      numPts_ = 0;
+      objectPoints_.clear();
+      imagePoints_[0].clear();
+      imagePoints_[1].clear();
+    }
+
+    void undistort( StereoCalibrationData &other, DistortionModel &cama, DistortionModel &camb )
+    {
+      other.clear();
+
+      for( size_t i = 0; i < objectPoints_.size(); ++i ) {
+        ImagePointsVec undist[2] = {
+          cama.undistort( imagePoints_[0][i] ),
+          camb.undistort( imagePoints_[1][i] ) };
+
+        other.add( objectPoints_[i], undist[0], undist[1] );
+      }
+    }
+
+    void add( ObjectPointsVec &obj, ImagePointsVec &imga, ImagePointsVec &imgb )
+    {
+      objectPoints_.push_back( obj );
+      imagePoints_[0].push_back( imga );
+      imagePoints_[1].push_back( imgb );
+      numPts_ += obj.size();
+    }
+
+    void flatten( FlatCalibrationData &other )
+    {
+      for( size_t i = 0; i < objectPoints_.size(); ++i ) {
+
+        std::copy( objectPoints_[i].begin(), objectPoints_[i].end(), back_inserter(  other.objectPoints_ ) );
+        std::copy( imagePoints_[0][i].begin(), imagePoints_[0][i].end(), back_inserter(  other.imagePoints_[0] ) );
+        std::copy( imagePoints_[1][i].begin(), imagePoints_[1][i].end(), back_inserter(  other.imagePoints_[1] ) );
+      }
+    }
+
 
     int size( void ) const { return numPts_; }
 
     void addPoints( const Detection &a, const Detection &b )
     {
+      SharedPoints shared( Detection::sharedWith( a, b ) );
 
+      assert( (shared.worldPoints.size() != shared.imagePoints[0].size()) ||
+          (shared.worldPoints.size() == shared.imagePoints[1].size() ) );
+
+      if( shared.worldPoints.size() > 0 ) {
+        objectPoints_.push_back( shared.worldPoints );
+        numPts_ += shared.worldPoints.size();
+
+        //:ImagePointsVec undistortedPoints[2] = {
+        //:  ImagePointsVec( shared.imagePoints[0].size() ), 
+        //:  ImagePointsVec( shared.imagePoints[1].size() )  };
+
+        // Generate undistorted image points as well
+        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
+          imagePoints_[imgIdx].push_back( shared.imagePoints[imgIdx] );
+
+          // Technically this is normalize->undistort->reimage
+
+          //  undistortedImagePoints_[imgIdx].push_back( undist );
+          //  std::copy( undist.begin(), undist.end(), back_inserter( undistortedImagePts_[imgIdx] ) );
+        }
+      }
     }
 
-  protected:
-   
     int numPts_;
     ImagePointsVecVec imagePoints_[2];
-//    ImagePointsVecVec undistortedImagePoints[2];
-//    // Make ``flattened'' versions as well
-//    ImagePointsVec undistortedImagePts[2];
-//
-//    ObjectPointsVecVec objectPoints;
+    ObjectPointsVecVec objectPoints_;
 
+    //    ImagePointsVecVec undistortedImagePoints_[2];
+    ////    // Make ``flattened'' versions as well
+    //    ImagePointsVec undistortedImagePts_[2];
 
 };
 
 
+
+
+
+//
+//      ImagePair &thisPair( pairs[i] );
+//      CompositeCanvas canvas( thisPair[0].img(), thisPair[1].img(), false );
+//
+//      for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) 
+//        cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
+//
+//      for( int j = 0; j < shared.worldPoints.size(); ++j ) {
+//        //cout << shared.worldPoints[j] << undistortedPoints[0][j] << undistortedPoints[1][j] << endl;
+//        //cout << shared.worldPoints[j] << shared.aPoints[j] << shared.bPoints[j] << endl;
+//        float i = (float)j / shared.worldPoints.size();
+//        Scalar color( 255*i, 0, (1-i)*255);
+//
+//        cv::circle( canvas[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
+//        cv::circle( canvas[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
+//
+//        cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
+//                 canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
+//                 color, 1 );
+//      }
+//
+//      string outfile( opts.tmpPath( String("annotated/") +  pairs[i][0].basename() + ".jpg" ) );
+//      mkdir_p( outfile );
+//      imwrite(  outfile, canvas );
+//
+//    }
+//
+//  }
+//
+//  if( detection[0] ) delete detection[0];
+//  if( detection[1] ) delete detection[1];
+//}
+
+
 class DbStereoCalibration {
- public:
-  DbStereoCalibration( DbStereoCalibrationOpts &opts )
+  public:
+    DbStereoCalibration( DbStereoCalibrationOpts &opts )
       : opts_( opts ) {;}
 
+    int run( void )
+    {
+      Board *board = Board::load( opts_.boardPath(), opts_.boardName );
 
-  int run( void )
-  {
-    Board *board = Board::load( opts.boardPath(), opts.boardName );
+      for( int i = 0; i < 2; ++i ) {
+        cameras_[i] = CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(i) );
+        if( cameras_[i] == NULL ) {
+          LOG(ERROR) << "Couldn't load camera from " << opts_.cameraCalibrationPath(i);
+          return -1;
+        }
 
-    for( int i = 0; i < 2; ++i ) {
-      cameras_[i] = CameraFactory::LoadDistortionModel( opts_.cameraCalibrationPath(i) );
-      if( cameras_[i] == NULL ) {
-        LOG(ERROR) << "Couldn't load camera from " << opts_.cameraCalibrationPath(i);
-        return -1;
+        bool dbOpened;
+        dbOpened = db_[i].open( opts_.detectionDbPath(i), true );
+
+        if( !dbOpened ) {
+          LOG(ERROR) << "Error opening database file " << opts_.detectionDbPath(i) << ": " << db_[i].error().name() << endl;
+          return -1;
+        }
       }
 
-      bool dbOpened;
-      dbOpened = db_[i].open( opts.detectionDbPath(i), true );
+      doCalibrate();
 
-      if( !dbOpened ) {
-        LOG(ERROR) << "Error opening database file " << opts_.detectionDbPath(i) << ": " << db_[i].error().name() << endl;
-        return -1;
-      }
-    }
-  }
-
-
-  void doCalibrate( void )
-  {
-    const int count = 1000;
-    const int maxRep = 1000;
-
-    StereoCalibrator calibrator;
-
-    int vidLength = min( db[0].vidLength(), db_[1].vidLength() );
-    int rep = 0;
-    while( calibrator.size() < count && rep < maxRep ) {
-      int frame = floor( vidLength * drand48() );
-
-      Detections *det[2] = { db_[0].get( frame ), db_[1].get( frame ) };
-
-      if( det[0] != NULL || det[1] != NULL ) calibrator.addPoints( *det[0], *det[1] );
-
-      ++rep;
+      return 0;
     }
 
 
+    void doCalibrate( void )
+    {
+      const int count = 1000;
+      const int maxRep = 1000;
 
-    // Just implement a random selector for now.
+      StereoCalibrationData calData, undistortData;
 
-//    float aspectRatio = 1.f;
-//    bool writeExtrinsics = false, writePoints = false;
+      int vidLength = min( db_[0].vidLength(), db_[1].vidLength() );
+      int rep = 0;
+      while( calData.size() < count && rep < maxRep ) {
+        int frame = floor( vidLength * drand48() );
+
+        Detection *det[2] = { db_[0].load( frame ), db_[1].load( frame ) };
+
+        if( det[0] != NULL || det[1] != NULL ) calData.addPoints( *det[0], *det[1] );
+
+        if( det[0] ) delete det[0];
+        if( det[1] ) delete det[1];
+
+        ++rep;
+      }
+
+      LOG(INFO) << "Have created set of " << calData.size() << " points." << endl;
+
+      calData.undistort( undistortData, *cameras_[0], *cameras_[1] );
+
+      FlatCalibrationData flatUndistortData;
+      undistortData.flatten( flatUndistortData );
+
+      StereoCalibration hartleyCal;
+      hartleyMethod( flatUndistortData, hartleyCal );
 
 
-  }
+      // Just implement a random selector for now.
+
+      //    float aspectRatio = 1.f;
+      //    bool writeExtrinsics = false, writePoints = false;
 
 
- private:
+    }
 
-  DbStereoCalibrationOpts &opts_;
-  DistortionModel *cameras_[2];
-  DetectionDb db_[2];
+    bool hartleyMethod( FlatCalibrationData &data,
+        StereoCalibration &cal )
+    {
+      cout << "!!! Using Hartley !!!" << endl;
+
+      // Hartley method calculates F directly.  Then decomposes that into E and decomposes
+      // that into T and R
+      //
+      // In this case, assume the cameras are calibrated properly, find E directly, then
+      // generate F, T, R
+      //
+      // NEEDS a single vector of undistorted points
+      // Make a set of flattened, undistorted points
+      //  and a set of flattened, undistorted, normalized points
+      ImagePointsVec normimgpt[2];
+
+      Mat e,f, status;
+
+      for( int k = 0; k < 2; ++k )
+        std::transform(data.imagePoints_[k].begin(), data.imagePoints_[k].end(),
+            back_inserter(normimgpt[k]), cameras_[k]->makeNormalizer()  );
+
+
+      //Mat status, estF;
+      //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
+      //cout << "Est F: " << endl << estF << endl;
+
+
+      Mat estE;
+      estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
+
+      cout << "estimated e: " << endl << estE << endl;
+      // Normalize e
+      SVD svdE( estE );
+      Matx33d idealSigma( 1,0,0,
+          0,1,0,
+          0,0,0 );
+      cout << "eigenvalues of calculated e: " << svdE.w << endl;
+      e = svdE.u * Mat(idealSigma) * svdE.vt;
+      e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
+      cout << "ideal e: " << e << endl;
+
+
+      int count = 0;
+      for( int i = 0; i < status.size().area(); ++i ) 
+        if( status.at<unsigned int>(i,0) > 0 ) ++count;
+      cout << count << "/" << data.size() << " points considered inlier." << endl;
+
+      // Calculate the mean reprojection error under this f
+      double error = 0;
+      for( size_t i = 0; i < normimgpt[0].size(); ++i ) {
+        if( status.at<uint8_t>(i) > 0 ) {
+          Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
+              e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
+          error += pow(err.at<double>(0,0),2);
+        }
+      }
+
+      error /= count;
+      cout << "Mean E reproj error " << error << endl;
+
+      // Calculate f
+      f = cameras_[1]->mat().inv().t() * e * cameras_[0]->mat().inv();
+      f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
+
+      // Calculate the mean reprojection error under this f
+      error = 0.0;
+      //for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
+      //  if( status.data[i] > 0 ) {
+      //    Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
+      //        f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
+      //    error += pow(err.at<double>(0,0),2);
+      //  }
+      //}
+
+      error /= count;
+      cout << "Mean F reproj error " << error << endl;
+
+      // Disambiguate the four solutions by:
+      // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
+      Mat W( Matx33d(0,-1,0,
+            1,0,0,
+            0,0,1) );
+      Mat u( svdE.u ), vt( svdE.vt );
+      if( determinant(u) < 0 )  u*= -1;
+      if( determinant(vt) < 0 ) vt *= -1;
+      Mat rcand = u * W * vt;
+      Mat tcand = u.col(2);
+
+      bool done = false;
+      while( !done ) {
+        Mat M = rcand.t() * tcand;
+        double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
+        Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
+
+        Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
+                x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
+
+        Mat X1 = Mx * Mat(x1),
+            X2 = Mx * rcand.t() * Mat(x2);
+
+        if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+          rcand = u * W.t() * vt;
+        else if (X1.at<double>(2) < 0) 
+          tcand *= -1;
+        else 
+          done = true;
+      }
+
+
+      cal.F = f;
+      cal.E = e;
+      cal.R = rcand;
+      cal.t = tcand;
+
+      return true;
+
+      //Mat H[2];
+      //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
+
+      //for( int k = 0; k < 2; ++k ) {
+      //  R[k] = cam[k].inv()*H[k]*cam[k];
+      //  P[k] = cam[k];
+      //}
+    }
+
+
+
+  private:
+
+    DbStereoCalibrationOpts &opts_;
+    DistortionModel *cameras_[2];
+    DetectionDb db_[2];
 
 };
 
@@ -200,7 +461,7 @@ int main( int argc, char** argv )
     exit(-1);
   }
 
-  DbStereoCalibrationMain main( opts );
+  DbStereoCalibration main( opts );
 
   exit( main.run() );
 
@@ -225,7 +486,7 @@ static double computeReprojectionErrors(
   for( i = 0; i < (int)objectPoints.size(); i++ )
   {
     projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i],
-                  cameraMatrix, distCoeffs, imagePoints2);
+        cameraMatrix, distCoeffs, imagePoints2);
     err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
     int n = (int)objectPoints[i].size();
     perViewErrors[i] = (float)std::sqrt(err*err/n);
@@ -251,9 +512,9 @@ static string mkDbStereoPairFileName( const string &cam0, const string &cam1 )
 
 
 void saveDbStereoCalibration( const string &filename,
-                             const DbStereoCalibration &cal,
-                             const DbStereoRectification &rect,
-                             const string &cam0, const string &cam1 )
+    const DbStereoCalibration &cal,
+    const DbStereoRectification &rect,
+    const string &cam0, const string &cam1 )
 {
 
   FileStorage fs( filename, FileStorage::WRITE );
@@ -275,147 +536,6 @@ void saveDbStereoCalibration( const string &filename,
 }
 
 
-
-
-struct TxRectifier {
-  TxRectifier( const Mat &r )
-      : _r( r) {;}
-  const Mat &_r;
-
-  ImagePoint operator()( const ImagePoint &pt )
-  {
-    Vec3d p( pt[0], pt[1], 1.0 );
-    Mat r = _r * Mat(p);
-    return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
-  }
-};
-
-bool hartleyMethod( ImagePointsVec *undistortedImagePts,
-                   DistortionModel *cameras[],
-                   DbStereoCalibration &cal )
-{
-  cout << "!!! Using Hartley !!!" << endl;
-
-  // Hartley method calculates F directly.  Then decomposes that into E and decomposes
-  // that into T and R
-  //
-  // In this case, assume the cameras are calibrated properly, find E directly, then
-  // generate F, T, R
-  //
-  // NEEDS a single vector of undistorted points
-  // Make a set of flattened, undistorted points
-  //  and a set of flattened, undistorted, normalized points
-  ImagePointsVec normimgpt[2];
-
-  Mat e,f, status;
-
-  for( int k = 0; k < 2; ++k )
-    std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
-                   back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
-
-
-  //Mat status, estF;
-  //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
-  //cout << "Est F: " << endl << estF << endl;
-
-
-  Mat estE;
-  estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
-
-  cout << "estimated e: " << endl << estE << endl;
-  // Normalize e
-  SVD svdE( estE );
-  Matx33d idealSigma( 1,0,0,
-                     0,1,0,
-                     0,0,0 );
-  cout << "eigenvalues of calculated e: " << svdE.w << endl;
-  e = svdE.u * Mat(idealSigma) * svdE.vt;
-  e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
-  cout << "ideal e: " << e << endl;
-
-
-  int count = 0;
-  for( int i = 0; i < status.size().area(); ++i ) 
-    if( status.at<unsigned int>(i,0) > 0 ) ++count;
-  cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
-
-  // Calculate the mean reprojection error under this f
-  double error = 0;
-  for( int i = 0; i < normimgpt[0].size(); ++i ) {
-    if( status.at<uint8_t>(i) > 0 ) {
-      Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
-              e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
-      error += pow(err.at<double>(0,0),2);
-    }
-  }
-
-  error /= count;
-  cout << "Mean E reproj error " << error << endl;
-
-  // Calculate f
-  f = cameras[1]->mat().inv().t() * e * cameras[0]->mat().inv();
-  f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
-
-  // Calculate the mean reprojection error under this f
-  error = 0.0;
-  for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
-    if( status.data[i] > 0 ) {
-      Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
-              f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
-      error += pow(err.at<double>(0,0),2);
-    }
-  }
-
-  error /= count;
-  cout << "Mean F reproj error " << error << endl;
-
-  // Disambiguate the four solutions by:
-  // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
-  Mat W( Matx33d(0,-1,0,
-                 1,0,0,
-                 0,0,1) );
-  Mat u( svdE.u ), vt( svdE.vt );
-  if( determinant(u) < 0 )  u*= -1;
-  if( determinant(vt) < 0 ) vt *= -1;
-  Mat rcand = u * W * vt;
-  Mat tcand = u.col(2);
-
-  bool done = false;
-  while( !done ) {
-    Mat M = rcand.t() * tcand;
-    double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
-    Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
-
-    Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
-            x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
-
-    Mat X1 = Mx * Mat(x1),
-        X2 = Mx * rcand.t() * Mat(x2);
-
-    if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
-      rcand = u * W.t() * vt;
-    else if (X1.at<double>(2) < 0) 
-      tcand *= -1;
-    else 
-      done = true;
-  }
-
-
-  cal.F = f;
-  cal.E = e;
-  cal.R = rcand;
-  cal.t = tcand;
-
-  return true;
-
-  //Mat H[2];
-  //stereoRectifyUncalibrated(Mat(allimgpt[0]), Mat(allimgpt[1]), e, imageSize, H[0], H[1], 3);
-
-  //for( int k = 0; k < 2; ++k ) {
-  //  R[k] = cam[k].inv()*H[k]*cam[k];
-  //  P[k] = cam[k];
-  //}
-}
 
 
 
@@ -450,7 +570,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
   Image compositeImage( opts.inFiles[i], view );
 
   ImagePair pair( Image( opts.inFiles[i] + "-left", rois[0] ),
-                 Image( opts.inFiles[i] + "-right", rois[1] ) );
+      Image( opts.inFiles[i] + "-right", rois[1] ) );
   pairs.push_back( pair );
 
   // Technically speaking you could eager load the images ... you don't even need them
@@ -495,7 +615,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
     SharedPoints shared( Detection::sharedWith( *detection[0], *detection[1] ) );
 
     assert( (shared.worldPoints.size() != shared.imagePoints[0].size()) ||
-           (shared.worldPoints.size() == shared.imagePoints[1].size() ) );
+        (shared.worldPoints.size() == shared.imagePoints[1].size() ) );
 
     if( shared.worldPoints.size() > 0 ) {
       objectPoints.push_back( shared.worldPoints );
@@ -532,8 +652,8 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
         cv::circle( canvas[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
         cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
-                 canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
-                 color, 1 );
+            canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
+            color, 1 );
       }
 
       string outfile( opts.tmpPath( String("annotated/") +  pairs[i][0].basename() + ".jpg" ) );
@@ -580,10 +700,10 @@ if( method == HARTLEY ) {
   // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
   // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
   reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
-                                            *cameras[0], *cameras[1],
-                                            imageSize, r, t, e, f, 
-                                            TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
-                                            flags );
+      *cameras[0], *cameras[1],
+      imageSize, r, t, e, f, 
+      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+      flags );
 
   SVD svd(e);
   cout << "sigma: " << svd.w << endl;
@@ -613,8 +733,8 @@ Rect validROI[2];
 float alpha = -1;
 
 Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, cal.R, cal.t,
-                          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
-                          alpha, imageSize, validROI[0], validROI[1] );
+    R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+    alpha, imageSize, validROI[0], validROI[1] );
 
 DbStereoRectification rect;
 rect.R[0] = R[0];
@@ -623,7 +743,7 @@ rect.P[0] = P[0];
 rect.P[1] = P[1];
 
 saveDbStereoCalibration( opts.stereoPairPath( mkDbStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ) ),
-                        cal, rect, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );
+    cal, rect, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );
 
 cout << "R: " << endl << cal.R << endl;
 cout << "T: " << endl << cal.t << endl;
@@ -669,7 +789,7 @@ for( int k = 0; k < 2; ++k ) {
   //cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
   //    imageSize, CV_32FC1, map[k][0], map[k][1] );
   cameras[k]->initUndistortRectifyMap( R[k], P[k],
-                                      imageSize, CV_32FC1, map[k][0], map[k][1] );
+      imageSize, CV_32FC1, map[k][0], map[k][1] );
 
   //cout << "map" << k << "0: " << endl << map[k][0] << endl;
   //cout << "map" << k << "1: " << endl << map[k][1] << endl;
@@ -778,7 +898,7 @@ for( int i = 0; i < pairs.size(); ++i ) {
     Mat worldPoints;
 
     triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, 
-                      undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
+        undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
     //cout << "World points: " << worldPoints << endl;
 

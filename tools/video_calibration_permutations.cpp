@@ -59,12 +59,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
     bool fixSkew, overwriteDb;
 
-    CalibrationType_t calibType;
-//    SelectorType_t splitter;
-//
-//    IntervalSelectorOpts intervalSelectorOpts;
-//    RandomSelectorOpts randomSelectorOpts;
-
 
     //== Option parsing and help ==
     void help()
@@ -146,7 +140,8 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             cameraName = optarg;
             break;
           case 'k':
-            calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            //calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
+            cout << "Skew is always fixed." << endl;
             break;
           case 'y':
             overwriteDb = true;
@@ -155,18 +150,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
             saveBoardPoses = optarg;
             break;
           case 'm':
-            c = optarg;
-            if( c.compare("angular") == 0 ) {
-              calibType = ANGULAR_POLYNOMIAL;
-            } else if (c.compare("radial") == 0) {
-              calibType = RADIAL_POLYNOMIAL;
-            } else if (c.compare("radial8") == 0) {
-              calibType = RADIAL_POLYNOMIAL;
-              calibFlags |= CV_CALIB_RATIONAL_MODEL;
-            } else {
-              cerr <<  "Can't figure out the calibration model \"" <<  c << "\"";
-              return false;
-            }
+            calibType = DistortionModel::ParseCalibrationType( optarg );
             break;
           case '?': 
             help();
