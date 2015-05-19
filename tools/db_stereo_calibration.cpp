@@ -14,6 +14,7 @@
 #include "camera_factory.h"
 
 #include "stereo_calibration.h"
+#include "distortion_stereo.h"
 
 using namespace cv;
 using namespace std;
@@ -110,6 +111,39 @@ struct FlatCalibrationData {
   FlatCalibrationData() {;}
 
   size_t size( void ) const { return objectPoints_.size(); }
+
+  void clear( void )
+  {
+    objectPoints_.clear();
+    imagePoints_[0].clear();
+    imagePoints_[1].clear();
+  }
+
+  void normalize( FlatCalibrationData &other, DistortionModel &cama, DistortionModel &camb )
+  {
+    other.clear();
+    other.objectPoints_ = objectPoints_;
+    std::transform(imagePoints_[0].begin(), imagePoints_[0].end(),
+        back_inserter(other.imagePoints_[0]), cama.makeNormalizer() );
+
+    std::transform(imagePoints_[1].begin(), imagePoints_[1].end(),
+        back_inserter(other.imagePoints_[1]), camb.makeNormalizer() );
+  }
+
+
+  void keepIf( FlatCalibrationData &other, vector<bool> &keep )
+  {
+    other.clear();
+    for( size_t i = 0; i < objectPoints_.size(); ++i  ) {
+      if( keep[i] ) {
+        other.objectPoints_.push_back( objectPoints_[i] );
+        other.imagePoints_[0].push_back( imagePoints_[0][i] );
+        other.imagePoints_[1].push_back( imagePoints_[1][i] );
+      }
+    }
+
+  }
+
 
   ImagePointsVec imagePoints_[2];
   ObjectPointsVec objectPoints_;
@@ -304,6 +338,9 @@ class DbStereoCalibration {
       hartleyMethod( flatUndistortData, hartleyCal );
 
 
+      StereoCalibration opencvCal;
+      opencvMethod( calData, opencvCal );
+
       // Just implement a random selector for now.
 
       //    float aspectRatio = 1.f;
@@ -311,6 +348,43 @@ class DbStereoCalibration {
 
 
     }
+
+
+    bool opencvMethod( StereoCalibrationData &data,
+        StereoCalibration &cal )
+    {
+      cout << "!!! Using stereoCalibrate !!!" << endl;
+
+      Mat r, t, e, f;
+      int flags = CV_CALIB_FIX_INTRINSIC;
+      Size imageSize( db_[0].imageSize() );
+
+      // For what it's worth, cvDbStereoCalibrate appears to optimize for the translation and rotation
+      // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
+      // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
+      double reprojError = Distortion::stereoCalibrate( data.objectPoints_, data.imagePoints_[0], data.imagePoints_[1], 
+          *cameras_[0], *cameras_[1],
+          imageSize, r, t, e, f, 
+          TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
+          flags );
+
+      SVD svd(e);
+      cout << "sigma: " << svd.w << endl;
+      //
+      //cout << "cam0 after: " << endl << cam0 << endl;
+      //  cout << "cam1 after: " << endl << cam1 << endl;
+      //
+      //  cout << "dist0 after: " << endl << dist0 << endl;
+      //  cout << "dist1 after: " << endl << dist1 << endl;
+
+      cal.F = f;
+      cal.E = e;
+      cal.R = r;
+      cal.t = t;
+
+      cout << "Reprojection error: " << reprojError << endl;
+    }
+
 
     bool hartleyMethod( FlatCalibrationData &data,
         StereoCalibration &cal )
@@ -326,22 +400,19 @@ class DbStereoCalibration {
       // NEEDS a single vector of undistorted points
       // Make a set of flattened, undistorted points
       //  and a set of flattened, undistorted, normalized points
-      ImagePointsVec normimgpt[2];
 
       Mat e,f, status;
 
-      for( int k = 0; k < 2; ++k )
-        std::transform(data.imagePoints_[k].begin(), data.imagePoints_[k].end(),
-            back_inserter(normimgpt[k]), cameras_[k]->makeNormalizer()  );
 
+      FlatCalibrationData normData;
+      data.normalize( normData, *cameras_[0], *cameras_[1] );
 
       //Mat status, estF;
       //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
       //cout << "Est F: " << endl << estF << endl;
 
-
       Mat estE;
-      estE = findFundamentalMat(Mat(normimgpt[0]), Mat(normimgpt[1]), FM_RANSAC, 1./1600, 0.99, status);
+      estE = findFundamentalMat(Mat(normData.imagePoints_[0]), Mat(normData.imagePoints_[1]), FM_RANSAC, 5./1600, 0.99, status);
 
       cout << "estimated e: " << endl << estE << endl;
       // Normalize e
@@ -354,41 +425,29 @@ class DbStereoCalibration {
       e /= (e.at<double>(2,2) == 0 ? 1.0 : e.at<double>(2,2) );
       cout << "ideal e: " << e << endl;
 
-
       int count = 0;
+      vector<bool> statusVec( status.size().area(), false );
       for( int i = 0; i < status.size().area(); ++i ) 
-        if( status.at<unsigned int>(i,0) > 0 ) ++count;
+        if( status.at<unsigned int>(i,0) > 0 ) {
+          statusVec[i] = true;
+          ++count;
+        }
       cout << count << "/" << data.size() << " points considered inlier." << endl;
 
-      // Calculate the mean reprojection error under this f
-      double error = 0;
-      for( size_t i = 0; i < normimgpt[0].size(); ++i ) {
-        if( status.at<uint8_t>(i) > 0 ) {
-          Mat err( Mat(Vec3d( normimgpt[1][i][0], normimgpt[1][i][1], 1.0 )).t() *
-              e * Mat(Vec3d( normimgpt[0][i][0], normimgpt[0][i][1], 1.0 ) ) );
-          error += pow(err.at<double>(0,0),2);
-        }
-      }
+      FlatCalibrationData goodNorm, goodData;
+      data.keepIf( goodData, statusVec );
+      normData.keepIf( goodNorm, statusVec );
 
-      error /= count;
-      cout << "Mean E reproj error " << error << endl;
+      double eError = reprojectionError( goodNorm, e );
+      cout << "Mean E reproj error " << eError << endl;
 
       // Calculate f
       f = cameras_[1]->mat().inv().t() * e * cameras_[0]->mat().inv();
       f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
 
       // Calculate the mean reprojection error under this f
-      error = 0.0;
-      //for( int i = 0; i < undistortedImagePts[0].size(); ++i ) {
-      //  if( status.data[i] > 0 ) {
-      //    Mat err(  Mat(Vec3d( undistortedImagePts[1][i][0], undistortedImagePts[1][i][1], 1.0 ) ) .t() *
-      //        f * Mat(Vec3d( undistortedImagePts[0][i][0], undistortedImagePts[0][i][1], 1.0 ) ) );
-      //    error += pow(err.at<double>(0,0),2);
-      //  }
-      //}
-
-      error /= count;
-      cout << "Mean F reproj error " << error << endl;
+      double fError = reprojectionError( goodData, f );
+      cout << "Mean F reproj error " << fError << endl;
 
       // Disambiguate the four solutions by:
       // http://stackoverflow.com/questions/22807039/decomposition-of-essential-matrix-validation-of-the-four-possible-solutions-for
@@ -407,8 +466,8 @@ class DbStereoCalibration {
         double m1 = M.at<double>(0), m2 = M.at<double>(1), m3 = M.at<double>(2);
         Mat Mx = (Mat_<double>(3,3) << 0, -m3, m2, m3, 0, -m1, -m2, m1, 0 );
 
-        Point3d x1( normimgpt[0][0][0], normimgpt[0][0][1], 1.0 ),
-                x2( normimgpt[1][0][0], normimgpt[1][0][1], 1.0 );
+        Point3d x1( goodNorm.imagePoints_[0][0][0], goodNorm.imagePoints_[0][0][1], 1.0 ),
+                x2( goodNorm.imagePoints_[1][0][0], goodNorm.imagePoints_[1][0][1], 1.0 );
 
         Mat X1 = Mx * Mat(x1),
             X2 = Mx * rcand.t() * Mat(x2);
@@ -437,6 +496,26 @@ class DbStereoCalibration {
       //  P[k] = cam[k];
       //}
     }
+
+
+    double reprojectionError( FlatCalibrationData &data, Mat &e ) 
+    {
+
+      // Calculate the mean reprojection error under this f
+      double error = 0;
+      for( size_t i = 0; i < data.size(); ++i ) {
+        Mat err( Mat(Vec3d( data.imagePoints_[1][i][0], data.imagePoints_[1][i][1], 1.0 )).t() *
+            e * Mat(Vec3d( data.imagePoints_[0][i][0], data.imagePoints_[0][i][1], 1.0 ) ) );
+
+        double f = err.at<double>(0,0);
+
+        error += f*f;
+      }
+
+      error /= data.size();
+      return error;
+    }
+
 
 
 
@@ -691,35 +770,6 @@ DbStereoCalibration cal;
 if( method == HARTLEY ) {
   hartleyMethod( undistortedImagePts, cameras, cal );
 } else if( method == STEREO_CALIBRATE ) {
-  cout << "!!! Using stereoCalibrate !!!" << endl;
-
-  Mat r, t, e, f;
-  int flags = CV_CALIB_FIX_INTRINSIC;
-
-  // For what it's worth, cvDbStereoCalibrate appears to optimize for the translation and rotation
-  // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
-  // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
-  reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
-      *cameras[0], *cameras[1],
-      imageSize, r, t, e, f, 
-      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
-      flags );
-
-  SVD svd(e);
-  cout << "sigma: " << svd.w << endl;
-  //
-  //cout << "cam0 after: " << endl << cam0 << endl;
-  //  cout << "cam1 after: " << endl << cam1 << endl;
-  //
-  //  cout << "dist0 after: " << endl << dist0 << endl;
-  //  cout << "dist1 after: " << endl << dist1 << endl;
-
-  cal.F = f;
-  cal.E = e;
-  cal.R = r;
-  cal.t = t;
-
-  cout << "Reprojection error: " << reprojError << endl;
 } else {
   cout << "No method specified.  Stopping..." << endl;
   exit(0);
