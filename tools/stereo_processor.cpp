@@ -36,7 +36,7 @@ using namespace AplCam;
 struct Options
 {
 
-  typedef enum { RECTIFY, VERB_NONE = -1 } Verb;
+  typedef enum { DENSE_STEREO, RECTIFY, VERB_NONE = -1 } Verb;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options()
@@ -88,6 +88,8 @@ struct Options
       string v = verbArg.getValue();
       if( v == "rectify" ) {
         verb = RECTIFY;
+      } else if( v == "dense" || v == "dense_stereo" ) {
+        verb = DENSE_STEREO;
       }
 
 
@@ -138,23 +140,6 @@ class StereoProcessorMain {
 
       if( loadCalibrationFiles() == false ) return -1;
 
-      switch( opts.verb ) {
-        case Options::RECTIFY:
-          return doRectify();
-          break;
-        case Options::VERB_NONE:
-        default:
-          LOG(ERROR) << "No verb selected, oh well." << endl;
-          return 0;
-      }
-
-      return 0;
-    }
-
-    int doRectify( void )
-    {
-      VideoWriter writer;
-
       if( opts.outputFileGiven() ) {
         float fps = video.fps();
         if( isnan( fps ) ) fps = 30.0;
@@ -167,13 +152,60 @@ class StereoProcessorMain {
         }
       }
 
-      Mat map[2][2];
+      switch( opts.verb ) {
+        case Options::RECTIFY:
+          return doRectify();
+          break;
+        case Options::DENSE_STEREO:
+          return doDenseStereo();
+          break;
+        case Options::VERB_NONE:
+        default:
+          LOG(ERROR) << "No verb selected, oh well." << endl;
+          return 0;
+      }
+
+      return 0;
+    }
+
+  private:
+    Options &opts;
+    CompositeVideo video;
+
+    StereoCalibration sCal;
+    StereoRectification sRect;
+    Mat map[2][2];
+
+    DistortionModel *cameras[2];
+
+    VideoWriter writer;
+
+
+    void calculateRectification( void )
+    {
+      Mat R[2], P[2], disparity;
+      Rect validROI[2];
+      float alpha = -1;
+
+      Distortion::stereoRectify( *cameras[0], *cameras[1], video.frameSize(), sCal.R, sCal.t,
+          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+          alpha, video.frameSize(), validROI[0], validROI[1] );
+
+      sRect.R[0] = R[0];
+      sRect.R[1] = R[1];
+      sRect.P[0] = P[0];
+      sRect.P[1] = P[1];
+
       Size frameSize( video.frameSize() );
       for( int k = 0; k < 2; ++k ) {
         cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
             frameSize, CV_32FC1, map[k][0], map[k][1] );
       }
+    }
 
+
+    int doRectify( void )
+    {
       LOG(INFO) << "Fps: " << video.fps();
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       int wait = wk;
@@ -212,52 +244,30 @@ class StereoProcessorMain {
     }
 
 
-  private:
-    Options &opts;
-    CompositeVideo video;
 
-    StereoCalibration sCal;
-    StereoRectification sRect;
-    DistortionModel *cameras[2];
-
-
-    void calculateRectification( void )
+    bool doDenseStereo( void )
     {
-      Mat R[2], P[2], disparity;
-      Rect validROI[2];
-      float alpha = -1;
-
-      Distortion::stereoRectify( *cameras[0], *cameras[1], video.frameSize(), sCal.R, sCal.t,
-          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
-          alpha, video.frameSize(), validROI[0], validROI[1] );
-
-      sRect.R[0] = R[0];
-      sRect.R[1] = R[1];
-      sRect.P[0] = P[0];
-      sRect.P[1] = P[1];
-    }
-
-
-    bool doDenseStereo( const CompositeCanvas &canvas )
-    {
-      int numberOfDisparities = ((canvas[0].size().width / 8) + 15) & -16;
+      int numberOfDisparities = (video.frameSize().width / 8 + 15) & -16;
       int SADWindowSize = 0;
 
-      //     StereoBM bm;
+      Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
       //     StereoSGBM sgbm;
 
+      bm->setMinDisparity( 0 );
+      bm->setSpeckleRange( 32 );
+      bm->setSpeckleWindowSize( 100 );
 
       //     // bm.state->roi1 = roi1;
       //     // bm.state->roi2 = roi2;
       //     // bm.state->preFilterCap = 31;
       //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
-      //     bm.state->minDisparity = 0;
-      //     bm.state->numberOfDisparities = numberOfDisparities;
-      //     bm.state->textureThreshold = 10;
-      //     bm.state->uniquenessRatio = 15;
-      //     bm.state->speckleWindowSize = 100;
-      //     bm.state->speckleRange = 32;
-      //     bm.state->disp12MaxDiff = 1;
+      //bm.state->minDisparity = 0;
+      //bm.state->numberOfDisparities = numberOfDisparities;
+      //bm.state->textureThreshold = 10;
+      //bm.state->uniquenessRatio = 15;
+      //bm.state->speckleWindowSize = 100;
+      //bm.state->speckleRange = 32;
+      //bm.state->disp12MaxDiff = 1;
 
       //     sgbm.preFilterCap = 63;
       //     sgbm.SADWindowSize = 3;
@@ -274,17 +284,63 @@ class StereoProcessorMain {
       //     sgbm.disp12MaxDiff = 1;
       //     sgbm.fullDP = false;
 
-      //     Mat scaled[2];
 
-      //     if( opts.scale > 0 ) {
-      //       resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-      //       resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-      //       cvtColor( scaled[0], scaled[0], CV_BGR2GRAY );
-      //       cvtColor( scaled[1], scaled[1], CV_BGR2GRAY );
-      //     } else {
-      //       cvtColor( canvas[0], scaled[0], CV_BGR2GRAY );
-      //       cvtColor( canvas[1], scaled[1], CV_BGR2GRAY );
-      //     }
+      int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
+      if( wk < 1 ) wk = 1;
+      cout << "wk: " << wk << endl;
+      int wait = wk;
+
+      int count = 0;
+      CompositeCanvas canvas;
+      while( video.read( canvas ) ) {
+
+        for( int k = 0; k < 2; ++k ) 
+          remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+        Mat scaled[2];
+
+        if( opts.scale > 0 ) {
+          resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+          resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+          cvtColor( scaled[0], scaled[0], CV_BGR2GRAY );
+          cvtColor( scaled[1], scaled[1], CV_BGR2GRAY );
+        } else {
+          cvtColor( canvas[0], scaled[0], CV_BGR2GRAY );
+          cvtColor( canvas[1], scaled[1], CV_BGR2GRAY );
+        }
+
+        Mat disparity;
+        int64 t = getTickCount();
+        bm->compute( scaled[0], scaled[1], disparity );
+        //sgbm( scaled[0], scaled[1], disparity );
+        t = getTickCount() - t;
+        cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+
+        Mat disp8;
+        disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+
+        if( writer.isOpened() ) {
+          if( count % 100 == 0 ) { LOG(INFO) << count; }
+          Mat colorDisparity;
+          cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
+          writer << colorDisparity;
+        }
+
+        if( opts.doDisplay ) {
+
+          imshow( DenseStereoWindowName, disp8 );
+
+          int ch;
+          ch = waitKey( wait );
+          if( ch == 'q' )
+            break;
+          else if(ch==' ') {
+            wait = (wait == 0) ? wk : 0;
+          }
+        }
+
+        ++count;
+
+      }
 
 
       //     Mat disparity;
@@ -331,11 +387,12 @@ class StereoProcessorMain {
     }
 
 
-    static const string RectifyWindowName;
+    static const string RectifyWindowName, DenseStereoWindowName;
 
 };
 
 const string StereoProcessorMain::RectifyWindowName = "Rectify";
+const string StereoProcessorMain::DenseStereoWindowName = "Dense Stereo";
 
 int main( int argc, char **argv )
 {
