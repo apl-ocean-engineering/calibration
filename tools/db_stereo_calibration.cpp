@@ -274,26 +274,19 @@ class DbStereoCalibration {
 
     void doCalibrate( void )
     {
-      const int count = 1000;
-      const int maxRep = 1000;
 
       StereoCalibrationData calData, undistortData;
 
       // Just implement a random selector for now.
       int vidLength = min( db_[0].vidLength(), db_[1].vidLength() );
-      int rep = 0;
-      //while( calData.size() < count && rep < maxRep ) {
-      //  int frame = floor( vidLength * drand48() );
-      for( int frame = 0; frame < vidLength; ++frame ) {
 
+      for( int frame = 0; frame < vidLength; ++frame ) {
         Detection *det[2] = { db_[0].load( frame ), db_[1].load( frame ) };
 
         if( det[0] != NULL || det[1] != NULL ) calData.addPoints( *det[0], *det[1] );
 
         if( det[0] ) delete det[0];
         if( det[1] ) delete det[1];
-
-        ++rep;
       }
 
       LOG(INFO) << "Have created set of " << calData.size() << " points." << endl;
@@ -312,6 +305,57 @@ class DbStereoCalibration {
       }
 
 
+      // Solve scale
+      ObjectPointsVecVec triangPts;
+      vector< double > scales;
+      //for( size_t i = 0; i < calData.objectPoints_.size(); ++i ) {
+      for( size_t i = 0; i < 5; ++i ) {
+
+        ImagePointsVec &imgPts0 = calData.imagePoints_[0][i],
+                       &imgPts1 = calData.imagePoints_[1][i];
+        ObjectPointsVec &objPts   = calData.objectPoints_[i];
+
+        // Only estimate scale if two or more detections...
+        if( objPts.size() < 2 ) continue;
+
+        ObjectPointsVec tri;
+        Distortion::triangulate( *cameras_[0], *cameras_[1], cal, imgPts0, imgPts1, tri );
+
+        triangPts.push_back( tri );
+
+        // Estimate scale
+        ObjectPoint dDet = objPts[1] - objPts[0];
+        double delDet = sqrt( dDet.ddot( dDet ) );
+
+        ObjectPoint dTri = tri[1] - tri[0];
+        double delTri = sqrt(dTri.ddot( dTri ));
+
+        double scale = delDet / delTri;
+        scales.push_back( scale );
+
+
+        LOG(INFO) << "dDet: " << dDet << "   delDet: " << delDet;
+        LOG(INFO) << "dTri: " << dTri << "   delTri: " << delTri;
+        LOG(INFO) << "Scale: " << scale;
+        
+      }
+
+
+      // Compute mean scale
+      double meanScale = 0.0, varScale = 0.0;
+      size_t sz = scales.size();
+      for( size_t i = 0; i < sz; ++i ) { meanScale += scales[i]; }
+      meanScale /= sz;
+      for( size_t i = 0; i < sz; ++i ) { 
+        float f = scales[i] - meanScale;
+        varScale += f*f;
+      }
+      varScale /= sz;
+
+
+      LOG(INFO) << "Scale: " << meanScale << "   sigma: " << sqrt(varScale);
+
+      cal.t *= meanScale;
       cal.dumpDecomp();
 
       LOG(INFO) << "Saving to " <<  opts_.stereoCalOutput;
