@@ -46,7 +46,7 @@ struct Options
 
 
   Verb verb;
-  string stereoCalibration, cameraCalibrations[2], videoFile;
+  string stereoCalibration, cameraCalibrations[2], videoFile, outputFile;
   float scale, fastForward;
   bool doDisplay;
 
@@ -62,6 +62,7 @@ struct Options
       TCLAP::ValueArg<std::string> stereoCalibrationArg( "s", "stereo-calibration", "Stereo calibration file", true, "", "YAML file", cmd );
       TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
       TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> outputFileArg("o", "output-file", "Output file", false, "", "file name", cmd );
 
       TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, -1.0, "scale factor", cmd );
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
@@ -75,6 +76,7 @@ struct Options
 
       doDisplay = doDisplayArg.getValue();
 
+      outputFile = outputFileArg.getValue();
       videoFile = videoFileArg.getValue();
       cameraCalibrations[0] = cal0Arg.getValue();
       cameraCalibrations[1] = cal1Arg.getValue();
@@ -113,6 +115,8 @@ struct Options
     return true;
   }
 
+  bool outputFileGiven( void ) { return outputFile.length() > 0; }
+
 };
 
 
@@ -149,6 +153,20 @@ class StereoProcessorMain {
 
     int doRectify( void )
     {
+      VideoWriter writer;
+
+      if( opts.outputFileGiven() ) {
+        float fps = video.fps();
+        if( isnan( fps ) ) fps = 30.0;
+        LOG(INFO) << "Fps: " << fps;
+        writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, video.fullSize() );
+
+        if( !writer.isOpened() ) {
+          LOG(ERROR) << "Error creating writer for " << opts.outputFile;
+          return -1;
+        }
+      }
+
       Mat map[2][2];
       Size frameSize( video.frameSize() );
       for( int k = 0; k < 2; ++k ) {
@@ -156,13 +174,19 @@ class StereoProcessorMain {
             frameSize, CV_32FC1, map[k][0], map[k][1] );
       }
 
+      LOG(INFO) << "Fps: " << video.fps();
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       int wait = wk;
 
+      int count = 0;
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
-        for( int k = 0; k < 2; ++k ) {
+        for( int k = 0; k < 2; ++k ) 
           remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+
+        if( writer.isOpened() ) {
+          if( count % 100 == 0 ) { LOG(INFO) << count; }
+          writer << canvas;
         }
 
         if( opts.doDisplay ) {
@@ -180,6 +204,8 @@ class StereoProcessorMain {
             wait = (wait == 0) ? wk : 0;
           }
         }
+
+        ++count;
       }
 
       return 0;
