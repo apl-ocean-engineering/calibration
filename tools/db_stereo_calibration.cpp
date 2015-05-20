@@ -308,8 +308,7 @@ class DbStereoCalibration {
       // Solve scale
       ObjectPointsVecVec triangPts;
       vector< double > scales;
-      //for( size_t i = 0; i < calData.objectPoints_.size(); ++i ) {
-      for( size_t i = 0; i < 5; ++i ) {
+      for( size_t i = 0; i < calData.objectPoints_.size(); ++i ) {
 
         ImagePointsVec &imgPts0 = calData.imagePoints_[0][i],
                        &imgPts1 = calData.imagePoints_[1][i];
@@ -323,21 +322,22 @@ class DbStereoCalibration {
 
         triangPts.push_back( tri );
 
-        // Estimate scale
-        ObjectPoint dDet = objPts[1] - objPts[0];
-        double delDet = sqrt( dDet.ddot( dDet ) );
+        for( size_t j = 1; j < objPts.size(); ++j ) {
+          // Estimate scale
+          ObjectPoint dDet = objPts[j] - objPts[0];
+          double delDet = dDet.ddot( dDet );
 
-        ObjectPoint dTri = tri[1] - tri[0];
-        double delTri = sqrt(dTri.ddot( dTri ));
+          ObjectPoint dTri = tri[j] - tri[0];
+          double delTri = dTri.ddot( dTri);
 
-        double scale = delDet / delTri;
-        scales.push_back( scale );
+          double scale = sqrt(delDet / delTri);
+          scales.push_back( scale );
 
+          //LOG(INFO) << "dDet: " << dDet << "   delDet: " << delDet;
+          //LOG(INFO) << "dTri: " << dTri << "   delTri: " << delTri;
+          //LOG(INFO) << "Scale: " << scale;
+        }
 
-        LOG(INFO) << "dDet: " << dDet << "   delDet: " << delDet;
-        LOG(INFO) << "dTri: " << dTri << "   delTri: " << delTri;
-        LOG(INFO) << "Scale: " << scale;
-        
       }
 
 
