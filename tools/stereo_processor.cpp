@@ -144,7 +144,18 @@ class StereoProcessorMain {
         float fps = video.fps();
         if( isnan( fps ) ) fps = 30.0;
         LOG(INFO) << "Fps: " << fps;
-        writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, video.fullSize() );
+
+        Size outputSize( video.fullSize() );
+        //switch( opts.verb ) {
+        //  case Options::RECTIFY:
+        //    outputSize = video.fullSize();
+        //    break;
+        //  case Options::DENSE_STEREO:
+        //    outputSize = video.frameSize();
+        //    break;
+        //}
+
+        writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, outputSize );
 
         if( !writer.isOpened() ) {
           LOG(ERROR) << "Error creating writer for " << opts.outputFile;
@@ -320,15 +331,19 @@ class StereoProcessorMain {
 
         if( writer.isOpened() ) {
           if( count % 100 == 0 ) { LOG(INFO) << count; }
-          Mat colorDisparity;
+
+          Mat colorDisparity( disp8.size(), CV_8UC3 );
           cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
-          writer << colorDisparity;
+
+          CompositeCanvas c( canvas[0], colorDisparity );
+
+          writer << c;
         }
 
         if( opts.doDisplay ) {
 
-          imshow( DenseStereoWindowName, disp8 );
 
+          imshow( DenseStereoWindowName, disp8 );
           int ch;
           ch = waitKey( wait );
           if( ch == 'q' )
