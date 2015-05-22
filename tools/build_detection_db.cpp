@@ -295,24 +295,24 @@ class BuildDbMain
 
           // apply the CLAHE algorithm to the L channel
           cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
-          clahe->setClipLimit(4);
+          //clahe->setClipLimit(4);
+          //clahe->setTileGridSize( 9 );
           cv::Mat dst;
           clahe->apply(lab_planes[0], dst);
 
-          dst.copyTo( grey );
 
           // Merge the the color planes back into an Lab image
-          //dst.copyTo(lab_planes[0]);
-          //cv::merge(lab_planes, lab_image);
+          dst.copyTo(lab_planes[0]);
+          cv::merge(lab_planes, lab_image);
 
           //// convert back to RGB
           //cv::Mat image_clahe;
-          //cv::cvtColor(lab_image, image_clahe, CV_Lab2BGR);
+          cv::cvtColor(lab_image, img, CV_Lab2BGR);
 
-        } else {
-          cvtColor( img, grey, CV_BGR2GRAY );
-        }
+          //dst.copyTo( grey );
+        } 
 
+        cvtColor( img, grey, CV_BGR2GRAY );
 
 
         if( opts.doDisplay ) {
@@ -326,9 +326,9 @@ class BuildDbMain
           // Trust the thread-safety of kyotocabinet
           db.save( currentFrame, *detection);
 
-          detection->drawCorners( *board, grey );
+          detection->drawCorners( *board, img );
 
-          imshow( "Detector", grey );
+          imshow( "Detector", img );
           int ch = waitKey(1);
           switch( ch ) {
             case 'q': return 0;
