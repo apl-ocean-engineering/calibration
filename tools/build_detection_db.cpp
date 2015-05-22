@@ -43,6 +43,7 @@ struct BuildDbOpts {
       doBenchmark( false ),
       doRewrite( false ),
       doDisplay( false ), yes( false ),
+      doClahe( false ),
       verb( NONE )
   {;}
 
@@ -53,7 +54,7 @@ struct BuildDbOpts {
     float intervalSeconds;
     string dataDir;
     string boardName, benchmarkFile, detectionDb;
-    bool doBenchmark, doRewrite, doDisplay, yes;
+    bool doBenchmark, doRewrite, doDisplay, yes, doClahe;
     Verbs verb;
 
     string inFile;
@@ -116,6 +117,7 @@ struct BuildDbOpts {
     {
       static struct option long_options[] = {
         { "data-directory", true, NULL, 'd' },
+        { "do-clahe", false, NULL, 'C' },
         { "detection-db", required_argument, NULL, 'D' },
         { "board", true, NULL, 'b' },
         { "seek-to", true, NULL, 's' },
@@ -138,8 +140,11 @@ struct BuildDbOpts {
 
       int indexPtr;
       int optVal;
-      while( (optVal = getopt_long( argc, argv, "b:c:d:K:I:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
+      while( (optVal = getopt_long( argc, argv, "b:c:Cd:K:I:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
         switch( optVal ) {
+          case 'C': 
+            doClahe = true;
+            break;
           case 'd':
             dataDir = optarg;
             break;
@@ -255,13 +260,16 @@ class BuildDbMain
       double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
 
       db.setMeta( vidLength, 
-                  vid.get( CV_CAP_PROP_FRAME_WIDTH ),
-                  vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
-                  vid.get( CV_CAP_PROP_FPS ) );
+          vid.get( CV_CAP_PROP_FRAME_WIDTH ),
+          vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
+          vid.get( CV_CAP_PROP_FPS ) );
 
 
       if( opts.intervalSeconds > 0 ) 
         opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
+
+      if( opts.seekTo > 0 )
+        vid.set( CV_CAP_PROP_POS_FRAMES, opts.seekTo );
 
       FrameVec_t frames;
       const int chunkSize = 50;
@@ -271,22 +279,82 @@ class BuildDbMain
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
         cout << currentFrame << " ";
 
-        if( !db.has( currentFrame ) || opts.doRewrite ) {
-          frames.push_back( Frame( currentFrame, img.clone() ) );
+          if(  !(opts.doDisplay || opts.doRewrite)  && db.has( currentFrame ) ) continue;
+
+        Mat grey;
+
+        if( opts.doClahe ) {
+
+          //READ RGB color image and convert it to Lab
+          cv::Mat lab_image;
+          cv::cvtColor(img, lab_image, CV_BGR2Lab);
+
+          // Extract the L channel
+          std::vector<cv::Mat> lab_planes(3);
+          cv::split(lab_image, lab_planes);  // now we have the L image in lab_planes[0]
+
+          // apply the CLAHE algorithm to the L channel
+          cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
+          clahe->setClipLimit(4);
+          cv::Mat dst;
+          clahe->apply(lab_planes[0], dst);
+
+          dst.copyTo( grey );
+
+          // Merge the the color planes back into an Lab image
+          //dst.copyTo(lab_planes[0]);
+          //cv::merge(lab_planes, lab_image);
+
+          //// convert back to RGB
+          //cv::Mat image_clahe;
+          //cv::cvtColor(lab_image, image_clahe, CV_Lab2BGR);
+
+        } else {
+          cvtColor( img, grey, CV_BGR2GRAY );
         }
 
-        if( opts.intervalFrames > 1 ) {
-          int destFrame = currentFrame + opts.intervalFrames - 1;
 
-          if( destFrame < vidLength ) 
-            vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-          else 
-            break;
-        }
 
-        if( frames.size() >= chunkSize ) {
-          cout << endl;
-          processFrames( frames );
+        if( opts.doDisplay ) {
+          Detection *detection = NULL;
+          //cout << "Extracting from " << p.frame << ". ";
+
+          vector<Point2f> pointbuf;
+
+          detection = board->detectPattern( grey, pointbuf );
+
+          // Trust the thread-safety of kyotocabinet
+          db.save( currentFrame, *detection);
+
+          detection->drawCorners( *board, grey );
+
+          imshow( "Detector", grey );
+          int ch = waitKey(1);
+          switch( ch ) {
+            case 'q': return 0;
+          }
+
+
+          delete detection;
+
+        } else {
+          if( !db.has( currentFrame ) || opts.doRewrite ) {
+            frames.push_back( Frame( currentFrame, grey.clone() ) );
+          }
+
+          if( opts.intervalFrames > 1 ) {
+            int destFrame = currentFrame + opts.intervalFrames - 1;
+
+            if( destFrame < vidLength ) 
+              vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
+            else 
+              break;
+          }
+
+          if( frames.size() >= chunkSize ) {
+            cout << endl;
+            processFrames( frames );
+          }
         }
       }
 
@@ -316,41 +384,41 @@ class BuildDbMain
 
 
 
-          void saveTimingData( const TimingDataVec_t &td )
-          {
-            if( !_benchmark.is_open() ) _benchmark.open( opts.benchmarkFile, ios_base::trunc );
+    void saveTimingData( const TimingDataVec_t &td )
+    {
+      if( !_benchmark.is_open() ) _benchmark.open( opts.benchmarkFile, ios_base::trunc );
 
-            for( TimingDataVec_t::const_iterator itr = td.begin();  itr != td.end(); ++itr )
-              _benchmark << (*itr).first << ',' << ((*itr).second / getTickFrequency()) << endl;
-          }
-
-
-
-          private:
-          BuildDbOpts opts;
-
-          DetectionDb db;
-          Board *board;
-
-          ofstream _benchmark;
-        };
+      for( TimingDataVec_t::const_iterator itr = td.begin();  itr != td.end(); ++itr )
+        _benchmark << (*itr).first << ',' << ((*itr).second / getTickFrequency()) << endl;
+    }
 
 
 
-        int main( int argc, char **argv ) 
-        {
+  private:
+    BuildDbOpts opts;
 
-          BuildDbOpts opts;
-          string msg;
-          if( !opts.parseOpts( argc, argv, msg ) ) {
-            cout << msg << endl;
-            exit(-1);
-          }
+    DetectionDb db;
+    Board *board;
 
-          BuildDbMain main( opts );
+    ofstream _benchmark;
+};
 
-          exit( main.run() );
 
-        }
+
+int main( int argc, char **argv ) 
+{
+
+  BuildDbOpts opts;
+  string msg;
+  if( !opts.parseOpts( argc, argv, msg ) ) {
+    cout << msg << endl;
+    exit(-1);
+  }
+
+  BuildDbMain main( opts );
+
+  exit( main.run() );
+
+}
 
 

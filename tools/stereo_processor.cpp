@@ -305,18 +305,17 @@ class StereoProcessorMain {
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
 
-        for( int k = 0; k < 2; ++k ) 
-          remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
         Mat scaled[2];
+        for( int k = 0; k < 2; ++k )  {
+          remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
 
-        if( opts.scale > 0 ) {
-          resize( canvas[0], scaled[0], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-          resize( canvas[1], scaled[1], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-          cvtColor( scaled[0], scaled[0], CV_BGR2GRAY );
-          cvtColor( scaled[1], scaled[1], CV_BGR2GRAY );
-        } else {
-          cvtColor( canvas[0], scaled[0], CV_BGR2GRAY );
-          cvtColor( canvas[1], scaled[1], CV_BGR2GRAY );
+          if( opts.scale > 0 ) {
+            resize( canvas[k], scaled[k], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+            cvtColor( scaled[k], scaled[k], CV_BGR2GRAY );
+          } else {
+            cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
+          }
+
         }
 
         Mat disparity;
@@ -328,12 +327,11 @@ class StereoProcessorMain {
 
         Mat disp8;
         disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+          Mat colorDisparity( disp8.size(), CV_8UC3 );
+          cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
 
         if( writer.isOpened() ) {
           if( count % 100 == 0 ) { LOG(INFO) << count; }
-
-          Mat colorDisparity( disp8.size(), CV_8UC3 );
-          cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
 
           CompositeCanvas c( canvas[0], colorDisparity );
 
@@ -342,8 +340,7 @@ class StereoProcessorMain {
 
         if( opts.doDisplay ) {
 
-
-          imshow( DenseStereoWindowName, disp8 );
+          imshow( DenseStereoWindowName, colorDisparity );
           int ch;
           ch = waitKey( wait );
           if( ch == 'q' )

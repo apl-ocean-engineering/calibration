@@ -60,12 +60,12 @@ namespace CameraCalibration {
 
               //cout << "Extracting from " << p.frame << ". ";
 
-              Mat grey;
-              cvtColor( p.img, grey, CV_BGR2GRAY );
+//              Mat grey;
+//              cvtColor( p.img, grey, CV_BGR2GRAY );
               vector<Point2f> pointbuf;
 
               int64 before = cv::getTickCount();
-              detection = _board.detectPattern( grey, pointbuf );
+              detection = _board.detectPattern( p.img, pointbuf );
               int64 elapsed = cv::getTickCount() - before;
 
               //cout << p.frame << ": " << detection->size() << " features" << endl;
