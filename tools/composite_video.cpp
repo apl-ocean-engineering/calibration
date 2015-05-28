@@ -227,7 +227,7 @@ struct TxKeyPointInTimecode {
 
   bool operator()( const KeyPoint &kp )
   {
-    return timeCodeROI_1920x1080.contains( kp.pt * _scale );
+    return TimeCode_1920x1080::timeCodeROI.contains( kp.pt * _scale );
   }
 };
 
