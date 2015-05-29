@@ -44,8 +44,8 @@ struct BuildDbOpts {
 
     int waitKey;
     float intervalSeconds;
-    string boardName, dataDir, detectionDbDir;
-    bool doDisplay, doParallel, doRewrite, doAnnotate;
+    string boardName, dataDir, detectionDbDir, doAnnotate;
+    bool doDisplay, doParallel, doRewrite;
 
     string inFile;
 
@@ -77,7 +77,7 @@ struct BuildDbOpts {
 
         TCLAP::SwitchArg doParallelArg("P", "do-parallel", "Do run in parallel", cmd, false );
         TCLAP::SwitchArg doRewriteArg("R", "do-rewrite", "Do rewrite existing entries in detection d/b", cmd, false );
-        TCLAP::SwitchArg doAnnotateArg("N", "do-annotate", "Do annotate entries into a video", cmd, false );
+        TCLAP::ValueArg<std::string> doAnnotateArg("N", "do-annotate", "Do annotate entries into a video", false, "", "filename", cmd );
 
         TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "file name", cmd );
 
@@ -92,7 +92,7 @@ struct BuildDbOpts {
         doAnnotate = doAnnotateArg.getValue();
 
         boardName = boardNameArg.getValue();
-        
+
 
       } catch( TCLAP::ArgException &e ) {
         LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
@@ -160,20 +160,26 @@ class BuildDbMain
             compVid.fps() );
       }
 
+      int retval = 0;
       if( opts.doDisplay ) {
         namedWindow( BuildDbWindowName );
         return doDisplay( compVid );
       } else if( opts.doParallel ) {
-        LOG(INFO) << "Processing frames in parallel." << endl;
-        return doParallel( compVid );
+        LOG(INFO) << "Processing frames in parallel.";
+        retval = doParallel( compVid );
       } else {
-        return doSingular( compVid );
+        retval = doSingular( compVid );
       }
 
-      if( opts.doAnnotate ) {
-        compVid.rewind();
-        doAnnotate( compVid );
-      }
+        if( opts.doAnnotate.length() > 0 ) {
+          LOG(INFO) << "Annotating";
+
+          compVid.rewind();
+          doAnnotate( compVid );
+        }     
+
+        return retval;
+
     }
 
     int doSingular( CompositeVideo &compVid )
@@ -230,7 +236,7 @@ class BuildDbMain
 
       return 0;
     }
-      
+
     void processFrames( FrameVec_t *frames )
     {
       for( size_t i = 0; i < 2; ++i ) {
@@ -296,10 +302,14 @@ class BuildDbMain
     {
       CompositeCanvas canvas;
 
-      VideoWriter writer("annotated.avi", VideoWriter::fourcc('X','V','I','D'), compVid.fps(), compVid.fullSize() );
+      VideoWriter writer( opts.doAnnotate, VideoWriter::fourcc('X','V','I','D'), 30, compVid.fullSize() );
+
 
       while( compVid.read( canvas ) ) {
         int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
+
+        if( (currentFrame % 100) == 0 ) 
+          LOG(INFO) << currentFrame;
 
         for( int i = 0; i < 2; ++i ) {
 
@@ -309,10 +319,10 @@ class BuildDbMain
 
           det->drawCorners( *board, canvas[i] );
 
-          writer.write( canvas );
-
           delete det;
         }
+
+        writer.write( canvas );
 
       }
 
