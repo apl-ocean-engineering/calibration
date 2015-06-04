@@ -24,6 +24,8 @@
 #include "trendnet_time_code.h"
 using namespace AplCam;
 
+#include <tclap/CmdLine.h>
+#include <glog/logging.h>
 #include "apriltag_detector.h"
 using namespace CameraCalibration;
 
@@ -31,192 +33,124 @@ using namespace std;
 using namespace cv;
 using kyotocabinet::HashDB;
 
+namespace fs = boost::filesystem;
+
 struct BuildDbOpts {
-  public:
-    BuildDbOpts()
+ public:
+  BuildDbOpts()
       : seekTo(-1), intervalFrames(-1), waitKey( 1 ), 
       intervalSeconds( -1 ),
-      dataDir("data"),
-      boardName(), 
+      boardFile(),
       benchmarkFile(),
       detectionDb(),
       doBenchmark( false ),
       doRewrite( false ),
       doDisplay( false ), yes( false ),
       doClahe( false ),
-      verb( NONE )
+      mode
   {;}
 
-
-    typedef enum {  NONE = -1} Verbs;
-
-    int seekTo, intervalFrames, waitKey;
-    float intervalSeconds;
-    string dataDir;
-    string boardName, benchmarkFile, detectionDb;
-    bool doBenchmark, doRewrite, doDisplay, yes, doClahe;
-    Verbs verb;
-
-    string inFile;
-
-    const string boardPath( void )
-    { return dataDir + "/boards/" + boardName + ".yml"; }
-
-    const string tmpPath( const string &file )
-    { return dataDir + "/tmp/" + file; }
-
-    const string cachePath( const string &file = "" ) const
-    { return dataDir + "/cache/" + file; }
-
-    //== Option parsing and help ==
-
-    string help( void )
-    {
-      stringstream strm;
-      const int w = 20;
-
-      strm <<  "This is a tool for extracting images from a video file." << endl;
-      strm << setw( w ) <<  "--data-directory, -d" << "Set location of data directory." << endl;
-      strm << setw( w ) << "--do-display, -x" << "Do display video" << endl;
-      strm << setw( w ) << "--do-benchmark [file]" << "Save benchmarking information to [file]" << endl;
-      strm << setw( w ) << "--do-rewrite" << "Extract features even if it already exists in database" << endl;
-      //    "Usage: calibration\n"
-      //    "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
-      //    "     --board,-b <board_name>    # Name of calibration pattern\n"
-      //    "     --camera, -c <camera_name> # Name of camera\n"
-      //    "     --seek-to <frame>          # Seek to specified frame before starting\n"
-      //    //     "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
-      //    //     "                              # (used only for video capturing)\n"
-      //    //     "     [-o <out_camera_params>] # the output filename for intrinsic [and extrinsic] parameters\n"
-      //    //     "     [-op]                    # write detected feature points\n"
-      //    //     "     [-oe]                    # write extrinsic parameters\n"
-      //    //     "     [-zt]                    # assume zero tangential distortion\n"
-      //    //     "     [-a <aspectRatio>]      # fix aspect ratio (fx/fy)\n"
-      //    //     "     [-p]                     # fix the principal point at the center\n"
-      //    //     "     [-v]                     # flip the captured images around the horizontal axis\n"
-      //    //     "     [-V]                     # use a video file, and not an image list, uses\n"
-      //    //     "                              # [input_data] string for the video file name\n"
-      //    //     "     [-su]                    # show undistorted images after calibration\n"
-      //    "     [input_data]             # list of files to use\n"
-      //    "\n" );
-      //printf("\n%s",usage);
-      //printf( "\n%s", liveCaptureHelp );
-
-      return strm.str();
-    }
-
-    string unknownOption( const char opt )
-    {
-      stringstream strm;
-      strm << "Unknown option \"" << opt << "\"";
-      return strm.str();
-    }
+  typedef enum { NONE, VIDEO, STILL } Mode;
 
 
-    bool parseOpts( int argc, char **argv, string &msg )
-    {
-      static struct option long_options[] = {
-        { "data-directory", true, NULL, 'd' },
-        { "do-clahe", false, NULL, 'C' },
-        { "detection-db", required_argument, NULL, 'D' },
-        { "board", true, NULL, 'b' },
-        { "seek-to", true, NULL, 's' },
-        { "interval-frames", true, NULL, 'i' },
-        { "interval-seconds", true, NULL, 'I' },
-        { "do-rewrite", no_argument, NULL, 'R' },
-        { "do-display", no_argument,  NULL, 'x' },
-        { "do-benchmark", required_argument, NULL, 'K' },
-        { "yes", no_argument, NULL, 'y' },
-        { "help", false, NULL, '?' },
-        { 0, 0, 0, 0 }
-      };
+  int seekTo, intervalFrames, waitKey;
+  float intervalSeconds;
+  string boardFile, benchmarkFile, detectionDb;
+  bool doBenchmark, doRewrite, doDisplay, yes, doClahe;
+  Mode mode;
 
+  string inFile;
 
-      if( argc < 2 )
-      {
-        msg =  help();
-        return false;
+  const string boardPath( void )
+  { return dataDir + "/boards/" + boardName + ".yml"; }
+
+  const string tmpPath( const string &file )
+  { return dataDir + "/tmp/" + file; }
+
+  const string cachePath( const string &file = "" ) const
+  { return dataDir + "/cache/" + file; }
+
+  bool parseOpts( int argc, char **argv, stringstream &msg )
+  {
+
+    try {
+      TCLAP::CmdLine cmd("build a database of detections", ' ', "0.1" );
+
+      TCLAP::ValueArg<std::string> boardArg( "b", "board", "Board", true, "", "board name", cmd );
+      TCLAP::ValueArg<std::string> detDbArg("D", "output-db", "Detection db", true, "", "db name", cmd );
+      TCLAP::ValueArg<std::string> modeArg("m", "mode", "Mode", false, "video", "video or stills", cmd );
+
+      TCLAP::ValueArg< int > waitKeyArg( "w", "wait-key", "Wait key", false, 0, "ms", cmd );
+
+      TCLAP::SwitchArg doDisplayArg("X", "do-display", "Do display output", cmd );
+
+      TCLAP::SwitchArg doClaheArg("C", "do-clahe", "Do CLAHE on images", cmd );
+
+      TCLAP::UnlabeledMultiArg< std::string > fileNamesArg("files", "Files", "true", "file names", cmd );
+
+      cmd.parse( argc, argv );
+
+      inFiles = fileNamesArg.getValue();
+
+      boardFile = boardArg.getValue();
+      detectionDb = detDbArg.getValue();
+
+      doClahe = doClaheArg.getValue();
+      doDisplay = doDisplayArg.getValue();
+      waitKey = waitKeyArg.getValue();
+
+      string modeStr( modeArg.getValue() );
+      if( modeStr == "still" )
+        mode = STILL;
+      else if( modeStr == "video" )
+        mode = VIDEO;
+      else {
+        LOG(INFO) << "Mode not specified, assuming video";
+        mode = VIDEO;
       }
 
-      int indexPtr;
-      int optVal;
-      while( (optVal = getopt_long( argc, argv, "b:c:Cd:K:I:i:Rs:x?", long_options, &indexPtr )) != -1 ) {
-        switch( optVal ) {
-          case 'C': 
-            doClahe = true;
-            break;
-          case 'd':
-            dataDir = optarg;
-            break;
-          case 'D':
-            detectionDb = optarg;
-            break;
-          case 'b':
-            boardName = optarg;
-            break;
-          case 'i':
-            intervalFrames = atoi( optarg );
-            break;
-          case 'I':
-            intervalSeconds = atof( optarg );
-            break;
-          case 'K':
-            doBenchmark = true;
-            benchmarkFile = optarg;
-            break;
-          case 'R':
-            doRewrite = true;
-            break;
-          case 's':
-            seekTo = atoi( optarg );
-            break;
-          case 'x':
-            doDisplay = true;
-            break;
-          case 'y':
-            yes = true;
-            break;
-          case '?': 
-            msg = help();
-            return false;
-            break;
-          default:
-            msg = unknownOption( optVal );
-            return false;
-        }
-      }
-
-      if( optind == argc )
-      {
-        msg = help();
-        return false;
-      }
-
-      inFile = argv[optind];
-
-      if( intervalFrames > 0 && intervalSeconds > 0 ) {
-        msg = "Can't specify both interval frames and interval seconds at the same time.";
-        return false;
-      }
-
-      return validate( msg );
-    }
-
-    bool validate( string &msg )
+    } catch( TCLAP::ArgException &e )
     {
-      return true;
+      LOG(ERROR) << "Parsing error: " << e.error() << " for " << e.argId();
     }
 
-};
+
+
+    //      static struct option long_options[] = {
+    //        { "seek-to", true, NULL, 's' },
+    //        { "interval-frames", true, NULL, 'i' },
+    //        { "interval-seconds", true, NULL, 'I' },
+    //        { "do-rewrite", no_argument, NULL, 'R' },
+    //        { "do-benchmark", required_argument, NULL, 'K' },
+
+    return validate( msg );
+  }
+
+  bool validate( string &msg )
+  {
+    //    if( intervalFrames > 0 && intervalSeconds > 0 ) {
+    //      msg = "Can't specify both interval frames and interval seconds at the same time.";
+    //      return false;
+    //    }
+
+    if( mode  == NONE ) {
+      LOG(ERROR) << "Mode not set (this shouldn't happen)";
+      return false;
+    }
+
+    return true;
+  }
+
+  };
 
 
 
 
-class BuildDbMain 
-{
-  public:
+  class BuildDbMain 
+  {
+   public:
     BuildDbMain( BuildDbOpts &options )
-      : opts( options ), _benchmark() 
+        : opts( options ), _benchmark() 
     {;}
 
     ~BuildDbMain( void )
@@ -260,9 +194,9 @@ class BuildDbMain
       double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
 
       db.setMeta( vidLength, 
-          vid.get( CV_CAP_PROP_FRAME_WIDTH ),
-          vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
-          vid.get( CV_CAP_PROP_FPS ) );
+                 vid.get( CV_CAP_PROP_FRAME_WIDTH ),
+                 vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
+                 vid.get( CV_CAP_PROP_FPS ) );
 
 
       if( opts.intervalSeconds > 0 ) 
@@ -279,7 +213,7 @@ class BuildDbMain
         int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
         cout << currentFrame << " ";
 
-          if(  !(opts.doDisplay || opts.doRewrite)  && db.has( currentFrame ) ) continue;
+        if(  !(opts.doDisplay || opts.doRewrite)  && db.has( currentFrame ) ) continue;
 
         Mat grey;
 
@@ -382,8 +316,6 @@ class BuildDbMain
       frames.clear();
     }
 
-
-
     void saveTimingData( const TimingDataVec_t &td )
     {
       if( !_benchmark.is_open() ) _benchmark.open( opts.benchmarkFile, ios_base::trunc );
@@ -393,32 +325,57 @@ class BuildDbMain
     }
 
 
-
-  private:
+   private:
     BuildDbOpts opts;
 
     DetectionDb db;
     Board *board;
 
     ofstream _benchmark;
-};
+  };
+
+
+  class BuildDbVideo : public BuildDbMain {
+   public:
+    BuildDbVideo( BuildDbOpts &opts )
+        : BuildDbMain( opts )
+    {;}
+
+  };
+
+  class BuildDbStill : public BuildDbStill {
+   public:
+    BUildDBStill( BuildDbOpts &opts )
+        : BuildDbMain( opts )
+    {;}
+
+  };
 
 
 
-int main( int argc, char **argv ) 
-{
+  int main( int argc, char **argv ) 
+  {
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = true;
 
-  BuildDbOpts opts;
-  string msg;
-  if( !opts.parseOpts( argc, argv, msg ) ) {
-    cout << msg << endl;
-    exit(-1);
+    BuildDbOpts opts;
+    stringstream msg;
+    if( !opts.parseOpts( argc, argv, msg ) ) {
+      cout << msg << endl;
+      exit(-1);
+    }
+
+    int retval = -1;
+    if( opts.mode == BuildDbOpts::STILL ) {
+      BuildDbMain main( opts );
+      retval = main.run();
+    } else {
+      BuildDbVideo main( opts );
+      retval = main.run();
+    }
+
+    exit( retval );
+
   }
-
-  BuildDbMain main( opts );
-
-  exit( main.run() );
-
-}
 
 
