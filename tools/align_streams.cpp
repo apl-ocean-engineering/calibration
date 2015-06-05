@@ -324,8 +324,11 @@ class AlignStreamsMain {
     string outfile = outputPath.compositeVideo();
     //VideoWriter writer( outfile, CV_FOURCC('X','2','6','4'), 
     //VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
-    VideoWriter writer( outfile, CV_FOURCC('X','V','I','D'),
-                       std::min( video0.fps(), video1.fps() ), composite.size(), true );
+    double fps = std::min( video0.fps(), video1.fps() );
+
+    cout << "Writing at " << fps << " fps" << endl;
+    VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
+                       fps, composite.size(), true );
 
     if( !writer.isOpened() ) {
       cerr << "Couldn't open video writer for \"" << outfile << "\"" << endl;
@@ -336,6 +339,7 @@ class AlignStreamsMain {
     do { 
 
       if( opts.doDisplayCodes ) displayTimeCodes( composite );
+
       writer << composite;
       ++count;
     } while( sync.nextCompositeFrame( composite ) ); 
