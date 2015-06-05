@@ -15,6 +15,10 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#include <tclap/CmdLine.h>
+#include <glog/logging.h>
+#include <boost/filesystem.hpp>
+
 #include <kchashdb.h>
 
 #include "board.h"
@@ -24,8 +28,6 @@
 #include "trendnet_time_code.h"
 using namespace AplCam;
 
-#include <tclap/CmdLine.h>
-#include <glog/logging.h>
 #include "apriltag_detector.h"
 using namespace CameraCalibration;
 
@@ -37,6 +39,7 @@ namespace fs = boost::filesystem;
 
 struct BuildDbOpts {
  public:
+
   BuildDbOpts()
       : seekTo(-1), intervalFrames(-1), waitKey( 1 ), 
       intervalSeconds( -1 ),
@@ -45,46 +48,44 @@ struct BuildDbOpts {
       detectionDb(),
       doBenchmark( false ),
       doRewrite( false ),
-      doDisplay( false ), yes( false ),
+      doDisplay( false ),
       doClahe( false ),
-      mode
+      hasCalledMakeDetectionDb(false)
   {;}
 
-  typedef enum { NONE, VIDEO, STILL } Mode;
 
 
   int seekTo, intervalFrames, waitKey;
   float intervalSeconds;
   string boardFile, benchmarkFile, detectionDb;
-  bool doBenchmark, doRewrite, doDisplay, yes, doClahe;
-  Mode mode;
+  bool doBenchmark, doRewrite, doDisplay, yes, doClahe, noTbb;
 
-  string inFile;
+  vector<string> inFiles;
 
-  const string boardPath( void )
-  { return dataDir + "/boards/" + boardName + ".yml"; }
+  //  const string boardPath( void )
+  //  { return dataDir + "/boards/" + boardName + ".yml"; }
 
-  const string tmpPath( const string &file )
-  { return dataDir + "/tmp/" + file; }
+  //  const string tmpPath( const string &file )
+  //  { return dataDir + "/tmp/" + file; }
+  //
+  //  const string cachePath( const string &file = "" ) const
+  //  { return dataDir + "/cache/" + file; }
 
-  const string cachePath( const string &file = "" ) const
-  { return dataDir + "/cache/" + file; }
-
-  bool parseOpts( int argc, char **argv, stringstream &msg )
+  bool parseOpts( int argc, char **argv )
   {
 
     try {
       TCLAP::CmdLine cmd("build a database of detections", ' ', "0.1" );
 
       TCLAP::ValueArg<std::string> boardArg( "b", "board", "Board", true, "", "board name", cmd );
-      TCLAP::ValueArg<std::string> detDbArg("D", "output-db", "Detection db", true, "", "db name", cmd );
-      TCLAP::ValueArg<std::string> modeArg("m", "mode", "Mode", false, "video", "video or stills", cmd );
+      TCLAP::ValueArg<std::string> detDbArg("D", "detection-db", "Detection db", true, "", "db name or directory", cmd );
 
       TCLAP::ValueArg< int > waitKeyArg( "w", "wait-key", "Wait key", false, 0, "ms", cmd );
 
       TCLAP::SwitchArg doDisplayArg("X", "do-display", "Do display output", cmd );
 
       TCLAP::SwitchArg doClaheArg("C", "do-clahe", "Do CLAHE on images", cmd );
+      TCLAP::SwitchArg noTbbArg("T", "no-tbb", "Don't use TBB", cmd );
 
       TCLAP::UnlabeledMultiArg< std::string > fileNamesArg("files", "Files", "true", "file names", cmd );
 
@@ -98,19 +99,9 @@ struct BuildDbOpts {
       doClahe = doClaheArg.getValue();
       doDisplay = doDisplayArg.getValue();
       waitKey = waitKeyArg.getValue();
+      noTbb = noTbbArg.getValue();
 
-      string modeStr( modeArg.getValue() );
-      if( modeStr == "still" )
-        mode = STILL;
-      else if( modeStr == "video" )
-        mode = VIDEO;
-      else {
-        LOG(INFO) << "Mode not specified, assuming video";
-        mode = VIDEO;
-      }
-
-    } catch( TCLAP::ArgException &e )
-    {
+    } catch( TCLAP::ArgException &e ) {
       LOG(ERROR) << "Parsing error: " << e.error() << " for " << e.argId();
     }
 
@@ -123,23 +114,44 @@ struct BuildDbOpts {
     //        { "do-rewrite", no_argument, NULL, 'R' },
     //        { "do-benchmark", required_argument, NULL, 'K' },
 
-    return validate( msg );
+    return validate( );
   }
 
-  bool validate( string &msg )
+  bool validate( void )
   {
     //    if( intervalFrames > 0 && intervalSeconds > 0 ) {
     //      msg = "Can't specify both interval frames and interval seconds at the same time.";
     //      return false;
     //    }
 
-    if( mode  == NONE ) {
-      LOG(ERROR) << "Mode not set (this shouldn't happen)";
+    if( (inFiles.size() > 1 ) && (!fs::is_directory( detectionDb ) ) ) {
+      LOG(ERROR) << "If multiple files are specified on command line, detection-db cannot be a file.";
       return false;
     }
 
     return true;
   }
+
+
+  string makeDetectionDb( const string &inFile )
+  {
+    if( fs::path( detectionDb ).has_filename() && hasCalledMakeDetectionDb ) {
+      LOG(ERROR) << "detection-db is a file, but makeDetectionDb called multiple times!";
+      return detectionDb;
+    }
+
+    // Otherwise construct a path
+    fs::path p( detectionDb );
+    p += fs::path( inFile ).filename();
+    p.replace_extension(".kch");
+
+    hasCalledMakeDetectionDb = true;
+
+    return p.string();
+  }
+
+  // Just insert a test 
+  bool hasCalledMakeDetectionDb;
 
   };
 
@@ -159,35 +171,69 @@ struct BuildDbOpts {
     }
 
     int run( void ) {
-      if( opts.doDisplay ) namedWindow( "BuildDb" );
+      board = Board::load( opts.boardFile,
+                          fs::path( opts.boardFile ).stem().string() );
+      if( !board ) {
+        LOG(ERROR) << "Couldn't open board from " << opts.boardFile;
+        return -1;
+      }
 
-      return doBuildDb();
+      for( vector<string>::iterator itr = opts.inFiles.begin(); itr != opts.inFiles.end(); ++itr ) {
+
+        string dbFile( opts.makeDetectionDb( *itr ) );
+
+        DetectionDb db;
+
+        if ( !db.open( dbFile, true ) )  {
+          LOG(ERROR) << "Error opening database file " << dbFile << ": " << db.error().name();
+          return -1;
+        }
+
+        if( isVideoFile( *itr ) ) {
+          processVideo( *itr, db );
+        } else {
+          processStill( *itr, db );
+        }
+
+      }
+
+      return 0;
     }
 
-    int doBuildDb( void )
+    bool isVideoFile( const string &filename )
     {
-      board = Board::load( opts.boardPath(), opts.boardName );
-      if( !board ) {
-        cerr << "Couldn't open board from " << opts.boardPath() << endl;
+      // Not the most satisfying algorithm but good enough for now...
+      boost::filesystem::path p(filename);
+      string ext( p.extension().string() );
+
+      if( ext == ".mov" || ext == ".mp4" || ext == ".avi" ) return true;
+
+      return false;
+    }
+
+    virtual int processStill( const string &inFile, DetectionDb &db )
+    {
+
+      Mat img;
+      img = imread( inFile );
+
+      if( img.empty() ) {
+        LOG(ERROR) << "Couldn't load image from \"" << inFile << "\"";
         return -1;
       }
 
-      string videoSource( opts.inFile );
-      VideoCapture vid( videoSource );
+      Detection *detection = processFrame( img, 0, db );
+      doDisplay( img, detection );
+      delete detection;
+
+      return 0;
+    }
+
+    virtual int processVideo( const string &inFile, DetectionDb &db )
+    {
+      VideoCapture vid( inFile );
       if( !vid.isOpened() ) {
-        cerr << "Couldn't open video source \"" << videoSource << "\"" << endl;
-        return -1;
-      }
-
-      mkdir_p( opts.cachePath() );
-      bool dbOpened;
-      if( opts.detectionDb.empty() )
-        dbOpened = db.open( opts.cachePath(), opts.inFile, true );
-      else
-        dbOpened = db.open( opts.detectionDb, true );
-
-      if( !dbOpened ) {
-        cerr << "Error opening database file: " << db.error().name() << endl;
+        cerr << "Couldn't open video source \"" << inFile << "\"" << endl;
         return -1;
       }
 
@@ -199,114 +245,125 @@ struct BuildDbOpts {
                  vid.get( CV_CAP_PROP_FPS ) );
 
 
-      if( opts.intervalSeconds > 0 ) 
-        opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
+      //      if( opts.intervalSeconds > 0 ) 
+      //        opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
+      //
+      //      if( opts.seekTo > 0 )
+      //        vid.set( CV_CAP_PROP_POS_FRAMES, opts.seekTo );
 
-      if( opts.seekTo > 0 )
-        vid.set( CV_CAP_PROP_POS_FRAMES, opts.seekTo );
 
-      FrameVec_t frames;
-      const int chunkSize = 50;
       Mat img;
 
-      while( vid.read( img ) ) {
-        int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
-        cout << currentFrame << " ";
+      if( opts.doDisplay ) {
 
-        if(  !(opts.doDisplay || opts.doRewrite)  && db.has( currentFrame ) ) continue;
-
-        Mat grey;
-
-        if( opts.doClahe ) {
-
-          //READ RGB color image and convert it to Lab
-          cv::Mat lab_image;
-          cv::cvtColor(img, lab_image, CV_BGR2Lab);
-
-          // Extract the L channel
-          std::vector<cv::Mat> lab_planes(3);
-          cv::split(lab_image, lab_planes);  // now we have the L image in lab_planes[0]
-
-          // apply the CLAHE algorithm to the L channel
-          cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
-          //clahe->setClipLimit(4);
-          //clahe->setTileGridSize( 9 );
-          cv::Mat dst;
-          clahe->apply(lab_planes[0], dst);
-
-
-          // Merge the the color planes back into an Lab image
-          dst.copyTo(lab_planes[0]);
-          cv::merge(lab_planes, lab_image);
-
-          //// convert back to RGB
-          //cv::Mat image_clahe;
-          cv::cvtColor(lab_image, img, CV_Lab2BGR);
-
-          //dst.copyTo( grey );
-        } 
-
-        cvtColor( img, grey, CV_BGR2GRAY );
-
-
-        if( opts.doDisplay ) {
-          Detection *detection = NULL;
-          //cout << "Extracting from " << p.frame << ". ";
-
-          vector<Point2f> pointbuf;
-
-          detection = board->detectPattern( grey, pointbuf );
-
-          // Trust the thread-safety of kyotocabinet
-          db.save( currentFrame, *detection);
-
-          detection->drawCorners( *board, img );
-
-          imshow( "Detector", img );
-          int ch = waitKey(1);
-          switch( ch ) {
-            case 'q': return 0;
+        while( vid.read( img ) ) {
+          int currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
+          Detection *detection = processFrame( img, currentFrame, db );
+          if( !doDisplay( img, detection ) ) {
+            delete detection;
+            return 0;
           }
-
 
           delete detection;
+        }
 
-        } else {
-          if( !db.has( currentFrame ) || opts.doRewrite ) {
-            frames.push_back( Frame( currentFrame, grey.clone() ) );
-          }
 
-          if( opts.intervalFrames > 1 ) {
-            int destFrame = currentFrame + opts.intervalFrames - 1;
+      } else {
+        FrameVec_t frames;
+        const int chunkSize = 50;
+        int currentFrame;
 
-            if( destFrame < vidLength ) 
-              vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-            else 
-              break;
-          }
+        while( vid.read( img ) ) {
+          currentFrame = vid.get( CV_CAP_PROP_POS_FRAMES );
+          //cout << currentFrame << " ";
+
+          if( !opts.doRewrite  && db.has( currentFrame ) ) continue;
+
+          frames.push_back( Frame( currentFrame, img.clone() ) );
+
+          //          if( opts.intervalFrames > 1 ) {
+          //            int destFrame = currentFrame + opts.intervalFrames - 1;
+          //
+          //            if( destFrame < vidLength ) 
+          //              vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
+          //            else 
+          //              break;
+          //          }
 
           if( frames.size() >= chunkSize ) {
-            cout << endl;
-            processFrames( frames );
+            LOG(INFO) << "Processing up to frame " << currentFrame;
+            bulkProcessFrames( frames, db, opts.noTbb );
           }
         }
+
+        LOG(INFO) << "Processing remaining frames to " << currentFrame;
+        bulkProcessFrames( frames, db, opts.noTbb );
+
       }
-
-      cout << endl;
-      processFrames( frames );
-
 
       return 0;
     }
 
-    void processFrames( FrameVec_t &frames )
+
+    void prepFrame( Mat &frame )
+    {
+
+      if( opts.doClahe ) {
+
+        //READ RGB color image and convert it to Lab
+        cv::Mat lab_image;
+        cv::cvtColor(frame, lab_image, CV_BGR2Lab);
+
+        // Extract the L channel
+        std::vector<cv::Mat> lab_planes(3);
+        cv::split(lab_image, lab_planes);  // now we have the L image in lab_planes[0]
+
+        // apply the CLAHE algorithm to the L channel
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
+        //clahe->setClipLimit(4);
+        //clahe->setTileGridSize( 9 );
+        cv::Mat dst;
+        clahe->apply(lab_planes[0], dst);
+
+
+        // Merge the the color planes back into an Lab image
+        dst.copyTo(lab_planes[0]);
+        cv::merge(lab_planes, lab_image);
+
+        //// convert back to RGB
+        //cv::Mat image_clahe;
+        cv::cvtColor(lab_image, frame, CV_Lab2BGR);
+
+        //dst.copyTo( grey );
+      } 
+      cvtColor( frame, frame, CV_BGR2GRAY );
+    }
+
+    Detection *processFrame( Mat &frame, int currentFrame, DetectionDb &db )
+    {
+      prepFrame( frame );
+
+      vector<Point2f> pointbuf;
+      Detection *detection = board->detectPattern( frame, pointbuf );
+      db.save( currentFrame, *detection);
+
+      return detection;
+    }
+
+
+    void bulkProcessFrames( FrameVec_t &frames, DetectionDb &db, bool noTbb )
     {
       AprilTagDetectorFunctor f( frames, db, board );
 
+      for( FrameVec_t::iterator itr = frames.begin(); itr != frames.end(); ++itr ) 
+        prepFrame( itr->img );
+
 #ifdef USE_TBB
-      tbb::parallel_reduce( tbb::blocked_range<size_t>(0, frames.size()), f );
+      if( !noTbb )
+        tbb::parallel_reduce( tbb::blocked_range<size_t>(0, frames.size()), f );
+      else
 #else
-      f();
+        f();
 #endif
 
       cout << "Processed " <<  frames.size() << " frames,  produced " << f.timingData.size() <<  " timing data" << endl;
@@ -315,6 +372,22 @@ struct BuildDbOpts {
 
       frames.clear();
     }
+
+    bool doDisplay( Mat &img, Detection *detection )
+    {
+      detection->drawCorners( *board, img );
+
+      imshow( WindowName, img );
+
+      int ch = waitKey( opts.waitKey );
+
+      switch( ch ) {
+        case 'q': return false;
+      }
+
+    }
+
+
 
     void saveTimingData( const TimingDataVec_t &td )
     {
@@ -325,31 +398,16 @@ struct BuildDbOpts {
     }
 
 
-   private:
+   protected: 
     BuildDbOpts opts;
 
-    DetectionDb db;
     Board *board;
 
     ofstream _benchmark;
+
+    const string WindowName = "BuildDb";
   };
 
-
-  class BuildDbVideo : public BuildDbMain {
-   public:
-    BuildDbVideo( BuildDbOpts &opts )
-        : BuildDbMain( opts )
-    {;}
-
-  };
-
-  class BuildDbStill : public BuildDbStill {
-   public:
-    BUildDBStill( BuildDbOpts &opts )
-        : BuildDbMain( opts )
-    {;}
-
-  };
 
 
 
@@ -359,20 +417,13 @@ struct BuildDbOpts {
     FLAGS_logtostderr = true;
 
     BuildDbOpts opts;
-    stringstream msg;
-    if( !opts.parseOpts( argc, argv, msg ) ) {
-      cout << msg << endl;
+    if( !opts.parseOpts( argc, argv ) ) {
       exit(-1);
     }
 
-    int retval = -1;
-    if( opts.mode == BuildDbOpts::STILL ) {
-      BuildDbMain main( opts );
-      retval = main.run();
-    } else {
-      BuildDbVideo main( opts );
-      retval = main.run();
-    }
+    int retval;
+    BuildDbMain main( opts );
+    retval = main.run();
 
     exit( retval );
 
