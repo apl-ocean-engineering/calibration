@@ -263,6 +263,7 @@ class BuildDbMain
       double fps = compVid.get( CV_CAP_PROP_FPS );
 
       int wait = 1.0/fps * 1000, wk = wait;
+      LOG(INFO) << " Wait = " << wait;
 
       CompositeCanvas canvas;
 

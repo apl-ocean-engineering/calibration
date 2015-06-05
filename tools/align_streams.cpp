@@ -255,7 +255,7 @@ class AlignStreamsMain {
       cout << "Using user-supplied offset of " << opts.offset << " frames" << endl;
       sync.setOffset( opts.offset );
     } else {
-      cout << "Estimating offset between videos" << endl;
+      cout << "Estimating offset between videos with window " << opts.window << endl;
       sync.bootstrap( opts.window, opts.maxDelta, opts.seekTo );
     }
 
@@ -357,6 +357,7 @@ class AlignStreamsMain {
     roi1.copyTo( out1 );
 
     imshow( "time code", out );
+    waitKey(1);
 
   }
 

@@ -78,7 +78,7 @@ struct BuildDbOpts {
       TCLAP::CmdLine cmd("build a database of detections", ' ', "0.1" );
 
       TCLAP::ValueArg<std::string> boardArg( "b", "board", "Board", true, "", "board name", cmd );
-      TCLAP::ValueArg<std::string> detDbArg("D", "detection-db", "Detection db", true, "", "db name or directory", cmd );
+      TCLAP::ValueArg<std::string> detDbArg("D", "-tdb", "Detection db", true, "", "db name or directory", cmd );
 
       TCLAP::ValueArg< int > waitKeyArg( "w", "wait-key", "Wait key", false, 0, "ms", cmd );
 
@@ -222,6 +222,8 @@ struct BuildDbOpts {
         return -1;
       }
 
+      db.setMeta( 1, img.size().width, img.size().height, 1 );
+
       Detection *detection = processFrame( img, 0, db );
       doDisplay( img, detection );
       delete detection;
@@ -336,15 +338,15 @@ struct BuildDbOpts {
 
         //dst.copyTo( grey );
       } 
-      cvtColor( frame, frame, CV_BGR2GRAY );
+
+      //cvtColor( frame, frame, CV_BGR2GRAY );
     }
 
     Detection *processFrame( Mat &frame, int currentFrame, DetectionDb &db )
     {
       prepFrame( frame );
 
-      vector<Point2f> pointbuf;
-      Detection *detection = board->detectPattern( frame, pointbuf );
+      Detection *detection = board->detectPattern( frame );
       db.save( currentFrame, *detection);
 
       return detection;

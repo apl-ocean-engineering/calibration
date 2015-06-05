@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <vector>
 
+#include <opencv2/calib3d.hpp>
+
 #include "file_utils.h"
 
 #include <tclap/CmdLine.h>

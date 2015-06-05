@@ -230,10 +230,9 @@ int main( int argc, char** argv )
       //if( flipVertical )
       //  flip( view, view, 0 );
 
-      vector<Point2f> pointbuf;
       cvtColor(view, viewGray, COLOR_BGR2GRAY);
 
-      detection = board->detectPattern( viewGray, pointbuf );
+      detection = board->detectPattern( viewGray );
 
       if( detection->found )  
         cout << "  Found calibration pattern." << endl;

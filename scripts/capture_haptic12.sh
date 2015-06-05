@@ -3,8 +3,8 @@
 
 ## Choice one, one ffmpeg process
 ffmpeg -y -thread_queue_size 16536 \
-       -i rtsp://stream:knot4ewe@10.95.76.232/ \
-       -i rtsp://stream:knot4ewe@10.95.76.233/ \
+       -i rtsp://stream:knot4ewe@10.95.191.19/ \
+       -i rtsp://stream:knot4ewe@10.95.191.20/ \
        -vcodec copy -map 0:0 haptic1.mp4 \
        -vcodec copy -map 1:0 haptic2.mp4
 

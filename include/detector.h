@@ -1,14 +1,16 @@
-
-
 #ifndef __DETECTOR_H__
 #define __DETECTOR_H__
 
-#include <opencv2/core/core.hpp>
+#include <vector>
 
+#include <opencv2/core/core.hpp>
 
 namespace CameraCalibration {
 
   using cv::Mat;
+
+  using std::pair;
+  using std::vector;
 
   struct Frame {
     Frame( int _f, Mat _m )
