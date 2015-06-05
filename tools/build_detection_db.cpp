@@ -78,7 +78,7 @@ struct BuildDbOpts {
       TCLAP::CmdLine cmd("build a database of detections", ' ', "0.1" );
 
       TCLAP::ValueArg<std::string> boardArg( "b", "board", "Board", true, "", "board name", cmd );
-      TCLAP::ValueArg<std::string> detDbArg("D", "-tdb", "Detection db", true, "", "db name or directory", cmd );
+      TCLAP::ValueArg<std::string> detDbArg("D", "detection-db", "Detection db", true, "", "db name or directory", cmd );
 
       TCLAP::ValueArg< int > waitKeyArg( "w", "wait-key", "Wait key", false, 0, "ms", cmd );
 
