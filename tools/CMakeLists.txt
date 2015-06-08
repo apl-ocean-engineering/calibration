@@ -44,6 +44,11 @@ if( USE_TBB )
   target_link_libraries( video_calibration_permutations tbb )
 endif()
 
+add_executable( video_calibration_random50_permutations video_calibration_random50_permutations.cpp 
+  ../lib/calibrator.cpp 
+  ../lib/calibration_permutations.cpp )
+
+
 add_executable( calibration_reproject calibration_reproject.cpp )
 if( USE_TBB )
   target_link_libraries( calibration_reproject tbb )
