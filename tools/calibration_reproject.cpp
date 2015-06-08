@@ -7,6 +7,8 @@
 
 #include <iostream>
 
+#include <glog/logging.h>
+
 #ifdef USE_TBB
 #include "tbb/tbb.h"
 using namespace tbb;
@@ -23,7 +25,7 @@ using namespace tbb;
 using namespace Distortion;
 
 #include "calibration_db.h"
-#include "calibration_opts_common.h"
+#include "calibration_opts.h"
 #include "calibrator.h"
 using namespace AplCam;
 
@@ -37,108 +39,57 @@ using namespace std;
 using kyotocabinet::HashDB;
 using kyotocabinet::DB;
 
-class CalibrationReprojectOpts : public AplCam::CalibrationOptsCommon {
+class CalibrationReprojectOpts : public CalibrationOpts {
 
   public:
 
     CalibrationReprojectOpts()
-      : CalibrationOptsCommon(), 
-      calibrationDb(), resultsDb(), 
+      : CalibrationOpts(), 
+      resultsDb(), 
       referenceDb()
   {;}
 
-    string calibrationDb;
     string resultsDb;
     string referenceDb;
 
-    //== Option parsing and help ==
-    string help( void )
-    {
-      stringstream strm;
+  protected:
 
-      return strm.str();
+
+    virtual void doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
+    {
+      TCLAP::ValueArg< std::string > resultsDbArg("R", "results-db", "Results db", true, "", "db name", cmd );
+      TCLAP::ValueArg< std::string > referenceDbArg("r", "reference-db", "Reference db", true, "", "db name", cmd );
+
+      CalibrationOpts::doParseCmdLine( cmd, argc, argv );
+
+      resultsDb = resultsDbArg.getValue();
+      referenceDb = referenceDbArg.getValue();
     }
 
-
-    bool parseOpts( int argc, char **argv, string &msg )
-    {
-      stringstream msgstrm;
-
-      static struct option long_options[] = {
-        { "data-directory", true, NULL, 'd' },
-        { "calibration-db", required_argument, NULL, 'Z' },
-        { "reference-db", required_argument, NULL, 'r' },
-        { "results-db", required_argument, NULL, 'R' },
-        { "help", false, NULL, '?' },
-        { 0, 0, 0, 0 }
-      };
-
-
-      int indexPtr;
-      int optVal;
-      string c;
-
-      // The '+' option ensures it stops on the first non-conforming option. Required for the
-      //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
-      // pattern I'm using
-      while( (optVal = getopt_long( argc, argv, "d:r:R:Z:?", long_options, &indexPtr )) != -1 ) {
-        switch( optVal ) {
-          case 'Z':
-            calibrationDb = optarg;
-            break;
-          case 'd':
-            dataDir = optarg;
-            break;
-          case 'R':
-            resultsDb = optarg;
-            break;
-          case 'r':
-            referenceDb = optarg;
-            break;
-          case '?': 
-            cout << help() << endl;;
-            return false;
-            break;
-          default:
-            return false;
-
-        }
-      }
-
-      if( !validate( msg ) ) return false;
-
-      return true;
-    }
-
-
-    bool checkForDb( const string &db, const string &name, string &msg )
-    {
-      if( db.empty() ) {
-        msg = string("Must specify ") + name + " db";
-        return false;
-      }
-
-      if( !file_exists( db ) ) {
-        msg = string("Can't find ") + name + " db " + db;
-        return false;
-      }
-
-      return true;
-    }
-
-    virtual bool validate( string &msg )
+    virtual bool validate( void )
     {
 
-      if( !checkForDb( calibrationDb, "calibration", msg ) ) return false;
-      if( !checkForDb( referenceDb, "reference", msg ) ) return false;
+      if( !checkForDb( calibrationDb, "calibration" ) ) return false;
+      if( !checkForDb( referenceDb, "reference" ) ) return false;
 
       if( resultsDb.empty() ) {
-        msg = "Must specify results db";
+         LOG(ERROR) << "Must specify results db";
         return false;
       }
 
       return true;
     }
+
+    bool checkForDb( const string &db, const string &name )
+    {
+      if( !file_exists( db ) ) {
+        LOG(ERROR) << "Can't find " << name << " db \"" << db << "\"";
+        return false;
+      }
+
+      return true;
+    }
+
 
 };
 
@@ -228,11 +179,7 @@ int main( int argc, char** argv )
 
   CalibrationReprojectOpts opts;
 
-  string optsMsg;
-  if( !opts.parseOpts( argc, argv, optsMsg ) ) {
-    cout << optsMsg << endl;
-    exit(-1);
-  }
+  if( !opts.parseOpts( argc, argv ) ) exit(-1);
 
   DetectionDb refDets;
   if( ! refDets.open( opts.referenceDb ) ) {

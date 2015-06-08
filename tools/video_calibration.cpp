@@ -25,7 +25,6 @@
 using namespace Distortion;
 
 #include "calibration_db.h"
-#include "calibration_opts_common.h"
 #include "calibrator.h"
 using namespace AplCam;
 
@@ -33,6 +32,7 @@ using namespace AplCam;
 #include "calib_frame_selectors/calib_frame_selectors.h"
 using namespace AplCam::CalibFrameSelectors;
 
+#include "calibration_opts.h"
 
 
 using namespace cv;
@@ -41,28 +41,16 @@ using namespace std;
 using kyotocabinet::HashDB;
 using kyotocabinet::DB;
 
-class CalibrationOpts : public AplCam::CalibrationOptsCommon {
+class VideoCalibrationOpts : public CalibrationOpts {
 
   public:
 
-
-    CalibrationOpts()
-      : CalibrationOptsCommon(), 
-      calibrationDb(),
-      detectionDb(),
-      videoFile(),
-      saveBoardPoses(), 
-      overwriteDb( false ), doValidate( true )
+    VideoCalibrationOpts()
+      : CalibrationOpts(),
+      videoFile()
   {;}
 
-    string calibrationDb;
-    string detectionDb;
-
     string videoFile;
-
-    string saveBoardPoses;
-
-    bool overwriteDb, doValidate;
 
     AplCam::CalibFrameSelectors::Type_t selector;
 
@@ -70,171 +58,66 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
     RandomSelectorOpts randomSelectorOpts;
     KeyframeSelectorOpts keyframeSelectorOpts;
 
+  protected:
 
-    //== Option parsing and help ==
-    void help()
+    virtual void doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
     {
-      printf( "This is a camera calibration sample.\n"
-          "Usage: calibration\n"
-          "     -d <data directory>      # Specify top-level directory for board/camera/cache files.\n"
-          "     --board,-b <board_name>    # Name of calibration pattern\n"
-          "     --camera, -c <camera_name> # Name of camera\n"
-          "     --ignore-cache, -i       # Ignore and overwrite files in cache\n"
-          "     --retry-unregistered, -r   # Re-try to find the chessboard if the cache file is empty\n"
-          "     --calibration-model, -m   # Set the distortion model to: angular, radial, radial8\n"
-          "     --fix-skew, -k            # Fix skew (alpha) to 0\n"
-          //     "     [-d <delay>]             # a minimum delay in ms between subsequent attempts to capture a next view\n"
-          //     "                              # (used only for video capturing)\n"
-          //     "     [-o <out_camera_params>] # the output filename for intrinsic [and extrinsic] parameters\n"
-          //     "     [-op]                    # write detected feature points\n"
-          //     "     [-oe]                    # write extrinsic parameters\n"
-          //     "     [-zt]                    # assume zero tangential distortion\n"
-          //     "     [-a <aspectRatio>]      # fix aspect ratio (fx/fy)\n"
-          //     "     [-p]                     # fix the principal point at the center\n"
-          //     "     [-v]                     # flip the captured images around the horizontal axis\n"
-          //     "     [-V]                     # use a video file, and not an image list, uses\n"
-          //     "                              # [input_data] string for the video file name\n"
-          //     "     [-su]                    # show undistorted images after calibration\n"
-        "     [input_data]             # list of files to use\n"
-        "\n" );
-      //printf("\n%s",usage);
-      //printf( "\n%s", liveCaptureHelp );
-    }
+      TCLAP::UnlabeledValueArg< std::string > selectorArg( "selector", "Frame selector", true, "", "{all|interval|random}", cmd );
+      TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "Video file", cmd );
 
+      // Options for selectors
+      TCLAP::ValueArg< int > randomCountArg( "c", "count", "Count", false, 1, "Count", cmd );
 
-    bool parseOpts( int argc, char **argv, string &msg )
-    {
-      stringstream msgstrm;
+      CalibrationOpts::doParseCmdLine( cmd, argc, argv );
 
-      static struct option long_options[] = {
-        { "data-directory", true, NULL, 'd' },
-        { "detection-db", required_argument, NULL, 'D' },
-        { "board", true, NULL, 'b' },
-        { "camera", true, NULL, 'c' },
-        { "calibration-model", true, NULL, 'm' },
-        { "fix-skew", false, NULL, 'k'},
-        { "save-board-poses", required_argument, NULL, 'S' },
-        { "calibration-file", required_argument, NULL, 'z' },
-        { "calibration-db", required_argument, NULL, 'Z' },
-        { "overwrite-db", no_argument, NULL, 'y' },
-        { "help", false, NULL, '?' },
-        { 0, 0, 0, 0 }
-      };
+      videoFile = videoFileArg.getValue();
 
-
-      if( argc < 2 )
-      {
-        help();
-        return false;
-      }
-
-      int indexPtr;
-      int optVal;
-      string c;
-
-      // The '+' option ensures it stops on the first non-conforming option. Required for the
-      //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
-      // pattern I'm using
-      while( (optVal = getopt_long( argc, argv, "+z:yZ:RSrb:c:d:km:?", long_options, &indexPtr )) != -1 ) {
-        switch( optVal ) {
-          case 'z':
-            calibrationFile = optarg;
-            break;
-          case 'Z':
-            calibrationDb = optarg;
-            break;
-          case 'd':
-            dataDir = optarg;
-            break;
-          case 'D':
-            detectionDb = optarg;
-            break;
-          case 'b':
-            boardName = optarg;
-            break;
-          case 'c':
-            cameraName = optarg;
-            break;
-          case 'S':
-            saveBoardPoses = optarg;
-            break;
-          case 'k':
-            //calibFlags |= PinholeCamera::CALIB_FIX_SKEW;
-            cout << "Skew is always fixed." << endl;
-            break;
-          case 'y':
-            overwriteDb = true;
-            break;
-          case 'm':
-            calibType = DistortionModel::ParseCalibrationType( optarg );
-            break;
-          case '?': 
-            help();
-            break;
-          default:
-            return false;
-
-        }
-      }
-
-      if( optind >= argc ) {
-        msg = "Must specify splitter type on command line";
-        return false;
-      }
-
-      // Next, expect a verb
-      char *verb = argv[ optind++ ];
-      bool success = false;
-      if( !strcasecmp( verb, "all" ) ) {
-        selector = SPLIT_ALL;
-        success = true;
-      } else if( !strcasecmp( verb, "random" ) ) {
+      string selector( selectorArg.getValue() );
+      if( selector.compare("random") == 0 ) {
         selector = SPLIT_RANDOM;
-        success = randomSelectorOpts.parseOpts( argc, argv, msg );
-      } else if( !strcasecmp( verb, "interval" ) ) {
-        selector = SPLIT_INTERVAL;
-        success = intervalSelectorOpts.parseOpts( argc, argv, msg );
-      } else if( !strcasecmp( verb, "keyframe" ) ) {
-        selector = SPLIT_KEYFRAME;
-        success = keyframeSelectorOpts.parseOpts( argc, argv, msg );
+        randomSelectorOpts.count = randomCountArg.getValue();
       } else {
-        msgstrm << "Don't understand verb \"" << verb << "\"";
-        msg = msgstrm.str();
+        LOG(ERROR) << "Don't understand the selector \"" << selector << "\"";
+      }
+
+      // Hm, need to restructure the verb parsing
+      // Next, expect a verb
+      //char *verb = argv[ optind++ ];
+      //bool success = false;
+      //if( !strcasecmp( verb, "all" ) ) {
+      //  selector = SPLIT_ALL;
+      //  success = true;
+      //} else if( !strcasecmp( verb, "random" ) ) {
+      //  selector = SPLIT_RANDOM;
+      //  success = randomSelectorOpts.parseOpts( argc, argv, msg );
+      //} else if( !strcasecmp( verb, "interval" ) ) {
+      //  selector = SPLIT_INTERVAL;
+      //  success = intervalSelectorOpts.parseOpts( argc, argv, msg );
+      //} else if( !strcasecmp( verb, "keyframe" ) ) {
+      //  selector = SPLIT_KEYFRAME;
+      //  success = keyframeSelectorOpts.parseOpts( argc, argv, msg );
+      //} else {
+      //  msgstrm << "Don't understand verb \"" << verb << "\"";
+      //  msg = msgstrm.str();
+      //  return false;
+      //}
+
+    }
+
+    virtual bool validate( void )
+    {
+
+      if( !file_exists( videoFile ) ) {
+        LOG(ERROR) << "Can't open video file " << videoFile << endl;
         return false;
       }
 
-      if( success == false ) return success;
-
-
-      if( detectionDb.empty() ) {
-        if( optind >= argc ) {
-          msg = "Must specify video file on command line";
-          return false;
-        }
-
-        videoFile = argv[ optind ];
-
-        if( !file_exists( videoFile ) ) {
-          LOG(ERROR) << "Can't open video file " << videoFile << endl;
-          return false;
-        }
-      }
-
-      if( !validate( msg ) ) return false;
-
-      return true;
-    }
-
-    virtual bool validate( string &msg )
-    {
       if( !calibrationDb.empty() ) {
         if( !calibrationFile.empty() ) {
-          msg = "Can't set both calibration file and calibration db";
+          LOG(ERROR) << "Can't set both calibration file and calibration db";
           return false;
         }
       }
-
-      if( !CalibrationOptsCommon::validate( msg ) ) return false;
 
       // The super will auto-fill calibrationFile if not set
       if( !calibrationDb.empty() ) calibrationFile.clear();
@@ -253,13 +136,9 @@ int main( int argc, char** argv )
   FLAGS_logtostderr = 1;
 
 
-  CalibrationOpts opts;
+  VideoCalibrationOpts opts;
 
-  string optsMsg;
-  if( !opts.parseOpts( argc, argv, optsMsg ) ) {
-    cout << optsMsg << endl;
-    exit(-1);
-  }
+  if( !opts.parseOpts( argc, argv ) ) exit(-1);
 
 
   DetectionDb db;
@@ -322,8 +201,8 @@ int main( int argc, char** argv )
     detSet.validate();
     size_t sizeAfter = detSet.size();
 
-  LOG(INFO) << "Detection set went from " << sizeBefore << " to " << sizeAfter << " during validation.";
-}
+    LOG(INFO) << "Detection set went from " << sizeBefore << " to " << sizeAfter << " during validation.";
+  }
 
   Calibrator cal( opts, detSet, imageSize );
   cal.run();

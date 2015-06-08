@@ -22,7 +22,8 @@ using namespace Distortion;
 #include "calib_frame_selectors/calib_frame_selectors.h"
 using namespace AplCam::CalibFrameSelectors;
 
-#include "calibration_permutations.h"
+#include "calibration_opts.h"
+#include "calibrator.h"
 
 using namespace cv;
 using namespace std;

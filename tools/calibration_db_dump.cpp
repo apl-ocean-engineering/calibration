@@ -18,7 +18,6 @@
 using namespace Distortion;
 
 #include "calibration_db.h"
-#include "calibration_opts_common.h"
 #include "calibrator.h"
 using namespace AplCam;
 
@@ -107,7 +106,6 @@ class Options {
 
     virtual bool validate( string &msg )
     {
-
       if( !checkForDb( resultsDb, "results", msg ) ) return false;
 
       return true;
@@ -246,7 +244,7 @@ class RandomCalibration : public Calibration {
     virtual void dump( ostream &strm ) 
     {
       for( map< unsigned int, Datum >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-      strm << itr->first <<  " " << itr->second.toString() << endl;
+        strm << itr->first <<  " " << itr->second.toString() << endl;
       }
     }
 

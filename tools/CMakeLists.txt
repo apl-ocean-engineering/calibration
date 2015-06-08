@@ -1,4 +1,8 @@
 
+set( CALIBRATION_SRCS
+  ../lib/calibrator.cpp
+  ../lib/calibration_opts.cpp )
+
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 include_directories( ${aplcam_INCLUDE_DIR} 
 	             ${tclap_INCLUDE_DIR} )
@@ -35,21 +39,21 @@ add_executable( align_streams align_streams.cpp )
 
 add_executable( composite_video composite_video.cpp )
 
-add_executable( calibration calibration.cpp )
+add_executable( calibration calibration.cpp
+  ${CALIBRATION_SRCS} )
 
-add_executable( video_calibration video_calibration.cpp ../lib/calibrator.cpp )
+add_executable( video_calibration video_calibration.cpp  ${CALIBRATION_SRCS} )
 
-add_executable( video_calibration_permutations video_calibration_permutations.cpp ../lib/calibrator.cpp )
-if( USE_TBB )
-  target_link_libraries( video_calibration_permutations tbb )
-endif()
+add_executable( video_calibration_permutations 
+  video_calibration_permutations.cpp
+  ${CALIBRATION_SRCS} )
 
-add_executable( video_calibration_random50_permutations video_calibration_random50_permutations.cpp 
-  ../lib/calibrator.cpp 
-  ../lib/calibration_permutations.cpp )
+add_executable( video_calibration_random50_permutations 
+  video_calibration_random50_permutations.cpp 
+  ${CALIBRATION_SRCS} )
 
 
-add_executable( calibration_reproject calibration_reproject.cpp )
+add_executable( calibration_reproject calibration_reproject.cpp ${CALIBRATION_SRCS} )
 if( USE_TBB )
   target_link_libraries( calibration_reproject tbb )
 endif()

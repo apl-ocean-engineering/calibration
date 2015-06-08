@@ -1,12 +1,18 @@
 
-#include "calibration_permutations.h"
+#include "calibration_opts.h"
 
 CalibrationOpts::CalibrationOpts()
-: CalibrationOptsCommon(), 
-  calibrationDb(),
+: calibrationDb(),
   detectionDb(),
   saveBoardPoses(),
-  fixSkew( true ), overwriteDb( false )
+  dataDir("../data"),
+  boardName(), 
+  cameraName(), 
+  calibrationFile(),
+  calibType( DistortionModel::CALIBRATION_NONE ),
+  overwriteDb( false ),
+  huberLoss( false ),
+  fixSkew( true )
 {;}
 
 bool CalibrationOpts::parseOpts( int argc, char **argv )
@@ -19,7 +25,7 @@ bool CalibrationOpts::parseOpts( int argc, char **argv )
     LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
   }
 
-  return validate();
+  return validateOpts();
 }
 
 void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
@@ -34,6 +40,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
 
   TCLAP::SwitchArg overWriteDbArg("y", "overwrite-db", "Overwriting existing entries in calibration db", cmd, false );
   TCLAP::SwitchArg saveBoardPosesArg("S", "save-board-poses", "Save board poses back to detection db", cmd, false );
+  TCLAP::SwitchArg doValidateArg("V", "dont-validate", "Don't validate data", cmd, true );
 
   cmd.parse( argc, argv );
 
@@ -44,6 +51,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
   cameraName = cameraNameArg.getValue();
   overwriteDb = overWriteDbArg.getValue();
   saveBoardPoses = saveBoardPosesArg.getValue();
+  doValidate = doValidateArg.getValue();
 
   calibType = DistortionModel::ParseCalibrationType( calibTypeArg.getValue() );
 }
@@ -117,7 +125,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
 //}
 
 
-bool CalibrationOpts::validate(  void )
+bool CalibrationOpts::validateOpts( void )
 {
   if( !calibrationDb.empty() ) {
     if( !calibrationFile.empty() ) {
@@ -126,15 +134,28 @@ bool CalibrationOpts::validate(  void )
     }
   }
 
-  string msg;
-  if( !CalibrationOptsCommon::validate( msg ) ) {
-    LOG(ERROR) << msg;
-    return false;
-  }
+      if( boardName.empty() ) {
+      LOG(ERROR) << "Board name not set"; 
+        return false; 
+      }
+
+      if( cameraName.empty() ) { LOG(ERROR) << "Camera name not set"; 
+        return false; 
+      }
+
+      if( calibType == DistortionModel::CALIBRATION_NONE ) { 
+        LOG(ERROR) << "Calibration type not specified"; 
+        return false; 
+      }
+
+   //   if( calibrationFile.empty() ) calibrationFile = cameraPath( mkCameraFileName() );
+
+   //   return true;
+   // }
 
   // The super will auto-fill calibrationFile if not set
   if( !calibrationDb.empty() ) calibrationFile.clear();
 
-  return true;
+  return validate();
 }
 
