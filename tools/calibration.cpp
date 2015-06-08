@@ -273,7 +273,7 @@ int main( int argc, char** argv )
   }
 
 
-  int flags =  opts.calibFlags;
+  int flags =  opts.calibFlags();
 
   DistortionModel *distModel = DistortionModel::MakeDistortionModel( opts.calibType );
 

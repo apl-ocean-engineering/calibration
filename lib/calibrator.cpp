@@ -26,7 +26,6 @@ namespace AplCam {
 
     int count = _detSet.imageObjectPoints( imagePoints, objectPoints );
 
-
     cout << "Using " << count << " points from " << imagePoints.size() << " images" << endl;
 
     if( imagePoints.size() < 3 ) {
@@ -43,7 +42,7 @@ namespace AplCam {
       return;
     }
 
-    int flags =  _opts.calibFlags;
+    int flags =  _opts.calibFlags();
 
     cout << "Flags: " << flags << endl;
     _distModel->calibrate( objectPoints, imagePoints, 

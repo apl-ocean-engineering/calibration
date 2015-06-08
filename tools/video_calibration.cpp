@@ -52,7 +52,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       detectionDb(),
       videoFile(),
       saveBoardPoses(), 
-      fixSkew( true ), overwriteDb( false ), doValidate( true )
+      overwriteDb( false ), doValidate( true )
   {;}
 
     string calibrationDb;
@@ -62,7 +62,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
     string saveBoardPoses;
 
-    bool fixSkew, overwriteDb, doValidate;
+    bool overwriteDb, doValidate;
 
     AplCam::CalibFrameSelectors::Type_t selector;
 
@@ -225,7 +225,6 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       return true;
     }
 
-
     virtual bool validate( string &msg )
     {
       if( !calibrationDb.empty() ) {
@@ -319,8 +318,12 @@ int main( int argc, char** argv )
 
   if( opts.doValidate ) {
     LOG(INFO) << "Validating detection set.";
+    size_t sizeBefore = detSet.size();
     detSet.validate();
-  }
+    size_t sizeAfter = detSet.size();
+
+  LOG(INFO) << "Detection set went from " << sizeBefore << " to " << sizeAfter << " during validation.";
+}
 
   Calibrator cal( opts, detSet, imageSize );
   cal.run();
