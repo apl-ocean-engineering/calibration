@@ -52,7 +52,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
       detectionDb(),
       videoFile(),
       saveBoardPoses(), 
-      fixSkew( true ), overwriteDb( false )
+      fixSkew( true ), overwriteDb( false ), doValidate( true )
   {;}
 
     string calibrationDb;
@@ -62,7 +62,7 @@ class CalibrationOpts : public AplCam::CalibrationOptsCommon {
 
     string saveBoardPoses;
 
-    bool fixSkew, overwriteDb;
+    bool fixSkew, overwriteDb, doValidate;
 
     AplCam::CalibFrameSelectors::Type_t selector;
 
@@ -315,6 +315,11 @@ int main( int argc, char** argv )
     default:
       LOG(ERROR) << "Unknown frame selector.";
       exit(-1);
+  }
+
+  if( opts.doValidate ) {
+    LOG(INFO) << "Validating detection set.";
+    detSet.validate();
   }
 
   Calibrator cal( opts, detSet, imageSize );
