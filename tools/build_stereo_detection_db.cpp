@@ -21,6 +21,8 @@
 #include "file_utils.h"
 #include "trendnet_time_code.h"
 
+#include "video_prefs.h"
+
 #include "composite_canvas.h"
 using namespace AplCam;
 
@@ -89,7 +91,7 @@ struct BuildDbOpts {
         doDisplay = doDisplayArg.getValue();
         doParallel = doParallelArg.getValue();
         doRewrite = doRewriteArg.getValue();
-        doAnnotate = doAnnotateArg.getValue();
+        doAnnotate = boost::filesystem::path( doAnnotateArg.getValue() ).replace_extension( VideoExtension ).string();
 
         boardName = boardNameArg.getValue();
 
@@ -303,7 +305,7 @@ class BuildDbMain
     {
       CompositeCanvas canvas;
 
-      VideoWriter writer( opts.doAnnotate, VideoWriter::fourcc('X','V','I','D'), 30, compVid.fullSize() );
+      VideoWriter writer( opts.doAnnotate, VideoCodec, 30, compVid.fullSize() );
 
 
       while( compVid.read( canvas ) ) {

@@ -33,6 +33,8 @@
 #include "synchronizer.h"
 #include "composite_canvas.h"
 
+#include "video_prefs.h"
+
 using namespace cv;
 using namespace std;
 
@@ -40,6 +42,7 @@ using AprilTags::TagDetection;
 
 using namespace AplCam;
 
+namespace fs = boost::filesystem;
 
 namespace TC = TimeCode_1920x1080;
 
@@ -322,13 +325,10 @@ class AlignStreamsMain {
     sync.nextCompositeFrame( composite );
 
     string outfile = outputPath.compositeVideo();
-    //VideoWriter writer( outfile, CV_FOURCC('X','2','6','4'), 
-    //VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
     double fps = std::min( video0.fps(), video1.fps() );
 
     cout << "Writing at " << fps << " fps" << endl;
-    VideoWriter writer( outfile, CV_FOURCC('M','J','P','G'),
-                       fps, composite.size(), true );
+    VideoWriter writer( outfile, VideoCodec, fps, composite.size(), true );
 
     if( !writer.isOpened() ) {
       cerr << "Couldn't open video writer for \"" << outfile << "\"" << endl;
@@ -580,7 +580,8 @@ class AlignStreamsMain {
 
       const string compositeVideo( void )
       {
-        return _root + "/composite.avi";
+        fs::path p(_root);
+        return (p /= "composite.foo").replace_extension( VideoExtension ).string();
       }
 
       // Todo.  Hardcoded.
