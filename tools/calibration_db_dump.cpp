@@ -362,12 +362,6 @@ class DumpMain {
         return -1;
       }
 
-      if( ! calibrations.isOpened() ) {
-        LOG(ERROR) << "Hmm, calibrations isn't open (flags = " << (int)calibrations.flags() << ")";
-        LOG(ERROR) << "HashDB Error: " << calibrations.error().name();
-      }
-
-
       DB::Cursor *cur = calibrations.cursor();
       cur->jump();
 
