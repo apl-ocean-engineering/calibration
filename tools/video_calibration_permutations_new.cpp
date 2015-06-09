@@ -98,7 +98,7 @@ class PermutationMain {
 
 //      Size imageSize = db.imageSize();
 
-      if( !calDb.open( opts.calibrationDb ) ) {
+      if( !calDb.open( opts.calibrationDb, true ) ) {
         cerr << "Error opening calibration db \"" << opts.calibrationDb << "\".  Error: " << endl;
         exit(-1);
       }
