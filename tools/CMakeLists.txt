@@ -48,8 +48,8 @@ add_executable( video_calibration_permutations
   video_calibration_permutations.cpp
   ${CALIBRATION_SRCS} )
 
-add_executable( video_calibration_random50_permutations 
-  video_calibration_random50_permutations.cpp 
+add_executable( video_calibration_permutations_new
+  video_calibration_permutations_new.cpp 
   ${CALIBRATION_SRCS} )
 
 

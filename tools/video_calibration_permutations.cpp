@@ -36,6 +36,8 @@ using namespace AplCam::CalibFrameSelectors;
 
 #include "calibration_opts.h"
 
+#include "permutation_helpers.h"
+
 using namespace cv;
 using namespace std;
 
