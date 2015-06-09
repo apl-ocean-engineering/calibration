@@ -134,10 +134,10 @@ class PermutationMain {
       calDb.findKeysStartingWith( "random", keys );
 
       const int minImages = 10;
+      int stopAt = std::min( opts.randomEnd, db.vidLength()-1 );
 
       // For simplicity, just configure in code.
-      for( int i = opts.randomStart; i < opts.randomEnd; i+= opts.randomStep ) {
-        LOG(INFO) << "Attempting " << opts.randomCount << " sets of " << i << " images";
+      for( int i = opts.randomStart; i <= stopAt; i+= opts.randomStep ) {
 
         int count = std::max( minImages, i );
         int maxSets = std::min( opts.randomCount, (db.vidLength()-count) );
@@ -151,7 +151,7 @@ class PermutationMain {
 
         if( todo == 0 ) continue;
 
-        for( size_t j = 0; detSets.size() < todo; ++j ) {
+        for( size_t j = 0; j < todo; ++j ) {
           DetectionSet *detSet = new DetectionSet;
           RandomFrameSelector( count ).generate( db, *detSet );
 
