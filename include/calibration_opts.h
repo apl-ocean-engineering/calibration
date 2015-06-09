@@ -21,13 +21,12 @@ class CalibrationOpts  {
     bool parseOpts( int argc, char **argv );
     
 
-    string calibrationDb;
+    string calibrationDb, calibrationFile;
     string detectionDb;
     string saveBoardPoses;
     string dataDir;
     string boardName;
     string cameraName;
-    string calibrationFile;
 
     DistortionModel::CalibrationType_t calibType;
 

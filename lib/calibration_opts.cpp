@@ -2,13 +2,13 @@
 #include "calibration_opts.h"
 
 CalibrationOpts::CalibrationOpts()
-: calibrationDb(),
+  : calibrationDb(),
+  calibrationFile(),
   detectionDb(),
   saveBoardPoses(),
   dataDir("../data"),
   boardName(), 
   cameraName(), 
-  calibrationFile(),
   calibType( DistortionModel::CALIBRATION_NONE ),
   overwriteDb( false ),
   huberLoss( false ),
@@ -32,6 +32,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
 {
 
   TCLAP::ValueArg< std::string > calibrationDbArg( "Z", "calibration-db", "Calibration Db", false, "", "db name", cmd );
+  TCLAP::ValueArg< std::string > calibrationFileArg( "z", "calibration-file", "Calibration Db", false, "", "db name", cmd );
   TCLAP::ValueArg< std::string > dataDirArg( "d", "data-dir", "Data dir", false, "data/", "dir", cmd );
   TCLAP::ValueArg< std::string > detectionDbArg( "D", "detection-db", "Detection Db", false, "", "db name", cmd );
   TCLAP::ValueArg< std::string > boardNameArg( "b", "board-name", "Board name", true, "", "board name", cmd );
@@ -45,6 +46,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
   cmd.parse( argc, argv );
 
   calibrationDb = calibrationDbArg.getValue();
+  calibrationFile = calibrationFileArg.getValue();
   dataDir = dataDirArg.getValue();
   detectionDb = detectionDbArg.getValue();
   boardName = boardNameArg.getValue();
@@ -134,28 +136,28 @@ bool CalibrationOpts::validateOpts( void )
     }
   }
 
-      if( boardName.empty() ) {
-      LOG(ERROR) << "Board name not set"; 
-        return false; 
-      }
+  if( boardName.empty() ) {
+    LOG(ERROR) << "Board name not set"; 
+    return false; 
+  }
 
-      if( cameraName.empty() ) { LOG(ERROR) << "Camera name not set"; 
-        return false; 
-      }
+  if( cameraName.empty() ) { LOG(ERROR) << "Camera name not set"; 
+    return false; 
+  }
 
-      if( calibType == DistortionModel::CALIBRATION_NONE ) { 
-        LOG(ERROR) << "Calibration type not specified"; 
-        return false; 
-      }
+  if( calibType == DistortionModel::CALIBRATION_NONE ) { 
+    LOG(ERROR) << "Calibration type not specified"; 
+    return false; 
+  }
 
-   //   if( calibrationFile.empty() ) calibrationFile = cameraPath( mkCameraFileName() );
+  //   if( calibrationFile.empty() ) calibrationFile = cameraPath( mkCameraFileName() );
 
-   //   return true;
-   // }
+  //   return true;
+  // }
 
   // The super will auto-fill calibrationFile if not set
-  if( !calibrationDb.empty() ) calibrationFile.clear();
+if( !calibrationDb.empty() ) calibrationFile.clear();
 
-  return validate();
+return validate();
 }
 

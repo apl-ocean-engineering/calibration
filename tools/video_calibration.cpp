@@ -12,6 +12,7 @@
 
 #include <iostream>
 
+#include <tclap/CmdLine.h>
 #include <glog/logging.h>
 
 #include "file_utils.h"
@@ -45,69 +46,48 @@ class VideoCalibrationOpts : public CalibrationOpts {
 
   public:
 
-    VideoCalibrationOpts()
-      : CalibrationOpts(),
-      videoFile()
+    VideoCalibrationOpts() :
+      CalibrationOpts(),
+      videoFile(),
+      selector( NULL )
   {;}
 
+    virtual ~VideoCalibrationOpts()
+    {
+      if( selector != NULL ) delete selector;
+    }
+
     string videoFile;
+    FrameSelector *selector;
 
-    AplCam::CalibFrameSelectors::Type_t selector;
 
-    IntervalSelectorOpts intervalSelectorOpts;
-    RandomSelectorOpts randomSelectorOpts;
-    KeyframeSelectorOpts keyframeSelectorOpts;
+    //    IntervalSelectorOpts intervalSelectorOpts;
+    //    RandomSelectorOpts randomSelectorOpts;
+    //    KeyframeSelectorOpts keyframeSelectorOpts;
 
   protected:
 
     virtual void doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
     {
-      TCLAP::UnlabeledValueArg< std::string > selectorArg( "selector", "Frame selector", true, "", "{all|interval|random}", cmd );
-      TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "Video file", cmd );
+      CalibFrameSelectorOpts selectorOpts( cmd );
 
-      // Options for selectors
-      TCLAP::ValueArg< int > randomCountArg( "c", "count", "Count", false, 1, "Count", cmd );
+      TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", false, "", "Video file", cmd );
 
       CalibrationOpts::doParseCmdLine( cmd, argc, argv );
 
       videoFile = videoFileArg.getValue();
-
-      string selector( selectorArg.getValue() );
-      if( selector.compare("random") == 0 ) {
-        selector = SPLIT_RANDOM;
-        randomSelectorOpts.count = randomCountArg.getValue();
-      } else {
-        LOG(ERROR) << "Don't understand the selector \"" << selector << "\"";
-      }
-
-      // Hm, need to restructure the verb parsing
-      // Next, expect a verb
-      //char *verb = argv[ optind++ ];
-      //bool success = false;
-      //if( !strcasecmp( verb, "all" ) ) {
-      //  selector = SPLIT_ALL;
-      //  success = true;
-      //} else if( !strcasecmp( verb, "random" ) ) {
-      //  selector = SPLIT_RANDOM;
-      //  success = randomSelectorOpts.parseOpts( argc, argv, msg );
-      //} else if( !strcasecmp( verb, "interval" ) ) {
-      //  selector = SPLIT_INTERVAL;
-      //  success = intervalSelectorOpts.parseOpts( argc, argv, msg );
-      //} else if( !strcasecmp( verb, "keyframe" ) ) {
-      //  selector = SPLIT_KEYFRAME;
-      //  success = keyframeSelectorOpts.parseOpts( argc, argv, msg );
-      //} else {
-      //  msgstrm << "Don't understand verb \"" << verb << "\"";
-      //  msg = msgstrm.str();
-      //  return false;
-      //}
-
+      selector = selectorOpts.construct();
     }
 
     virtual bool validate( void )
     {
 
-      if( !file_exists( videoFile ) ) {
+      if( selector == NULL ) {
+        LOG(ERROR) << "Could not create a selector.";
+        return false;
+      }
+
+      if( detectionDb.empty() && !file_exists( videoFile ) ) {
         LOG(ERROR) << "Can't open video file " << videoFile << endl;
         return false;
       }
@@ -177,23 +157,8 @@ int main( int argc, char** argv )
   Board *board = Board::load( opts.boardPath(), opts.boardName );
 
   DetectionSet detSet;
-  switch( opts.selector ) {
-    case CalibFrameSelectors::SPLIT_ALL:
-      AllFrameSelector().generate( db, detSet );
-      break;
-    case CalibFrameSelectors::SPLIT_RANDOM:
-      RandomFrameSelector( opts.randomSelectorOpts ).generate( db, detSet );
-      break;
-    case CalibFrameSelectors::SPLIT_INTERVAL:
-      IntervalFrameSelector( opts.intervalSelectorOpts ).generate( db, detSet );
-      break;
-    case CalibFrameSelectors::SPLIT_KEYFRAME:
-      KeyframeFrameSelector( *board, opts.keyframeSelectorOpts ).generate( db, detSet );
-      break;
-    default:
-      LOG(ERROR) << "Unknown frame selector.";
-      exit(-1);
-  }
+
+  opts.selector->generate( db, detSet );
 
   if( opts.doValidate ) {
     LOG(INFO) << "Validating detection set.";
