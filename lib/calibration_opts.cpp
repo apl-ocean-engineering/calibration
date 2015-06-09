@@ -23,6 +23,7 @@ bool CalibrationOpts::parseOpts( int argc, char **argv )
     doParseCmdLine( cmd, argc, argv );
   } catch( TCLAP::ArgException &e ) {
     LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
+    return false;
   }
 
   return validateOpts();
@@ -42,6 +43,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
   TCLAP::SwitchArg overWriteDbArg("y", "overwrite-db", "Overwriting existing entries in calibration db", cmd, false );
   TCLAP::SwitchArg saveBoardPosesArg("S", "save-board-poses", "Save board poses back to detection db", cmd, false );
   TCLAP::SwitchArg doValidateArg("V", "dont-validate", "Don't validate data", cmd, true );
+  TCLAP::SwitchArg huberLossArg("H", "huber-loss", "Use Huber loss function", cmd, false );
 
   cmd.parse( argc, argv );
 
@@ -54,6 +56,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
   overwriteDb = overWriteDbArg.getValue();
   saveBoardPoses = saveBoardPosesArg.getValue();
   doValidate = doValidateArg.getValue();
+  huberLoss  = huberLossArg.getValue();
 
   calibType = DistortionModel::ParseCalibrationType( calibTypeArg.getValue() );
 }

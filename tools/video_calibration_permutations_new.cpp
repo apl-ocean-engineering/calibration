@@ -151,12 +151,14 @@ class PermutationMain {
 
         if( todo == 0 ) continue;
 
-        for( size_t j = 0; j < todo; ++j ) {
+        size_t j = 0;
+        while( j < todo ) {
           DetectionSet *detSet = new DetectionSet;
           RandomFrameSelector( count ).generate( db, *detSet );
 
           if( calDb.has( detSet->name() ) ) continue;
 
+          ++j;
           pushDetSet( detSet );
         }
 

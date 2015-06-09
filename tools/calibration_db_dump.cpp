@@ -7,6 +7,9 @@
 
 #include <iostream>
 
+#include <tclap/CmdLine.h>
+#include <glog/logging.h>
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -32,60 +35,44 @@ class Options {
   public:
 
     Options( )
-      : resultsDb(), saveTo()
     {;}
 
-    string resultsDb, saveTo;
+    typedef enum { MODE_REDUCE, MODE_EACH } Mode_t;
 
-    //== Option parsing and help ==
-    string help( void )
+    string calibrationDb, outputFile;
+    Mode_t mode;
+
+    bool parseOpts( int argc, char **argv )
     {
-      stringstream strm;
+      try {
+        TCLAP::CmdLine cmd("calibration_db_dump", ' ', "0.1" );
 
-      return strm.str();
-    }
+        TCLAP::ValueArg< std::string > calibrationDbArg("c", "calibration-db", "CalibrationSet db", true, "", "CalibrationSet db file", cmd );
+        TCLAP::ValueArg< std::string > outputFileArg("o", "output-file", "Output file", false, "", "Output file", cmd );
 
+        TCLAP::ValueArg< std::string > modeArg("m", "mode", "Mode", true, "", "{reduce|each}", cmd );
 
-    bool parseOpts( int argc, char **argv, string &msg )
-    {
-      stringstream msgstrm;
+        cmd.parse( argc, argv );
 
-      static struct option long_options[] = {
-        { "results-db", required_argument, NULL, 'R' },
-        { "save-to", required_argument, NULL, 'S' },
-        { "help", false, NULL, '?' },
-        { 0, 0, 0, 0 }
-      };
+        calibrationDb = calibrationDbArg.getValue();
+        outputFile    = outputFileArg.getValue();
 
-
-      int indexPtr;
-      int optVal;
-      string c;
-
-      // The '+' option ensures it stops on the first non-conforming option. Required for the
-      //   cmd opt1 opt2 opt3 verb verb_opt1 files ...
-      // pattern I'm using
-      while( (optVal = getopt_long( argc, argv, "R:S:?", long_options, &indexPtr )) != -1 ) {
-        switch( optVal ) {
-          case 'R':
-            resultsDb = optarg;
-            break;
-          case 'S':
-            saveTo = optarg;
-            break;
-          case '?': 
-            cout << help() << endl;;
-            return false;
-            break;
-          default:
-            return false;
-
+        string modeStr( modeArg.getValue() );
+        if( modeStr.compare( "reduce" ) ) {
+          mode = MODE_REDUCE;
+        } else if( modeStr.compare( "each" ) ) {
+          mode = MODE_EACH;
+        } else {
+          LOG(ERROR) << "Don't understand mode \"" << modeStr << "\"";
+          throw TCLAP::ArgException("");
         }
+
+
+      } catch( TCLAP::ArgException &e ) {
+        LOG( ERROR ) << "error: " << e.error() << " for arg " << e.argId();
       }
 
-      if( !validate( msg ) ) return false;
-
-      return true;
+      return validateOpts();
     }
 
 
@@ -104,9 +91,12 @@ class Options {
       return true;
     }
 
-    virtual bool validate( string &msg )
+    virtual bool validateOpts( void  )
     {
-      if( !checkForDb( resultsDb, "results", msg ) ) return false;
+      if( !file_exists( calibrationDb ) ) {
+        LOG(ERROR) << "Can't find calibration db \"" << calibrationDb << "\"";
+        return false;
+      }
 
       return true;
     }
@@ -114,9 +104,39 @@ class Options {
 };
 
 
-class Datum {
+// Inefficient
+static double mean( const vector<double> &v ) 
+{
+  double total;
+  for( size_t i = 0;  i < v.size(); ++i ) total += v[i];
+
+  return total/v.size();
+}
+
+static double stdDev( const vector<double> &v, double mean )
+{
+  if( v.size() < 2 ) return 0.0;
+
+  double total;
+
+  for( size_t i = 0;  i < v.size(); ++i ) {
+    double d = (v[i] - mean);
+    total += d*d;
+  }
+
+  return sqrt( total/v.size() );
+}
+
+static double stdDev( const vector<double> &v )
+{ 
+  return stdDev( v, mean(v) );
+}
+
+
+
+class Calibrations {
   public:
-    Datum( void )
+    Calibrations( void )
       : _rms(), _totalTime(), _bad(0), _count(0)
     {;}
 
@@ -148,31 +168,6 @@ class Datum {
         strm << " " << mean( _totalTime ) << " " << stdDev( _totalTime );
       return strm.str();
     }
-
-    // Inefficient
-    double mean( const vector<double> &v ) const
-    {
-      double total;
-      for( size_t i = 0;  i < v.size(); ++i ) total += v[i];
-
-      return total/v.size();
-    }
-
-    double stdDev( const vector<double> &v ) const 
-    {
-      if( v.size() < 2 ) return 0.0;
-
-      double m = mean( v );
-      double total;
-
-      for( size_t i = 0;  i < v.size(); ++i ) {
-        double d = (v[i] - m);
-        total += d*d;
-      }
-
-      return sqrt( total/v.size() );
-    }
-
   protected:
     vector< double > _rms;
     vector< double > _totalTime;
@@ -181,20 +176,26 @@ class Datum {
 
 };
 
-class Calibration {
+
+
+
+class CalibrationSet {
   public:
-    Calibration()
+    CalibrationSet()
     {;}
 
+    virtual size_t size( void ) const = 0;
     virtual bool add( const string &key, const string &value ) = 0;
-    virtual void dump( ostream &strm ) = 0;
+    virtual void dumpReduced( ostream &strm ) = 0;
 };
 
-class AllCalibration : public Calibration {
+class AllCalibrationSet : public CalibrationSet {
   public:
-    AllCalibration()
+    AllCalibrationSet()
       : _datum(), _set( false )
     {;}
+
+    virtual size_t size( void ) const { return _set ? 1 : 0; }
 
     virtual bool add( const string &key, const string &value )
     {
@@ -210,23 +211,25 @@ class AllCalibration : public Calibration {
       return true;
     }
 
-    virtual void dump( ostream &strm ) 
+    virtual void dumpReduced( ostream &strm ) 
     {
       strm << "0 " << _datum.toString() << endl;
       strm << _numImages << " " << _datum.toString() << endl;
     }
 
   protected: 
-    Datum _datum;
+    Calibrations _datum;
     bool _set;
     int _numImages;
 };
 
-class RandomCalibration : public Calibration {
+class RandomCalibrationSet : public CalibrationSet {
   public:
-    RandomCalibration()
-      : Calibration(),_data()
+    RandomCalibrationSet()
+      : CalibrationSet(),_data()
     {;}
+
+    virtual size_t size( void ) const { return _data.size(); }
 
     virtual bool add( const string &key, const string &value )
     {
@@ -234,29 +237,29 @@ class RandomCalibration : public Calibration {
 
       unsigned int count;
       // Cheat
-      if( sscanf( key.c_str(), "random(%u)", &count ) == 1 ) {
+      if( scanf( key.c_str(), "random(%u)", &count ) == 1 ) {
         _data[count].add( value );
         return true;
       }
       return false;
     }
 
-    virtual void dump( ostream &strm ) 
+    virtual void dumpReduced( ostream &strm ) 
     {
-      for( map< unsigned int, Datum >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
+      for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
         strm << itr->first <<  " " << itr->second.toString() << endl;
       }
     }
 
   protected: 
-    map< unsigned int, Datum > _data;
+    map< unsigned int, Calibrations > _data;
 };
 
 
-class IntervalCalibration : public RandomCalibration {
+class IntervalCalibrationSet : public RandomCalibrationSet {
   public:
-    IntervalCalibration()
-      : RandomCalibration()
+    IntervalCalibrationSet()
+      : RandomCalibrationSet()
     {;}
 
     const int roundTo = 25;
@@ -267,7 +270,7 @@ class IntervalCalibration : public RandomCalibration {
 
       unsigned int interval, start, end;
       // Cheat
-      int c  = sscanf( key.c_str(), "interval(%u,%u,%u", &start, &interval, &end );
+      int c  = scanf( key.c_str(), "interval(%u,%u,%u", &start, &interval, &end );
       if( c == 3 ) {
         int count =  floor((end - start)/interval );
 
@@ -283,6 +286,111 @@ class IntervalCalibration : public RandomCalibration {
 };
 
 
+class DumpMain {
+  public:
+    DumpMain( Options &opt_ ) :
+      opts( opt_ )
+  {;}
+
+    int run( void )
+    {
+
+      if( !calibrations.open( opts.calibrationDb ) ) {
+        cerr << "Error opening calibrations db: " << calibrations.error().name() << endl;
+        exit(-1);
+      }
+
+      DB::Cursor *cur = calibrations.cursor();
+      cur->jump();
+
+      string key, value;
+      while( cur->get( &key, &value, true ) ) {
+
+        bool result;
+        if( key.compare( 0, 3, "all" ) == 0 )
+          result = allCals.add( key, value );
+        else if( key.compare( 0, 6, "random" ) == 0 )
+          result = randomCals.add( key, value );
+        else if( key.compare( 0, 8, "interval" ) == 0 )
+          result = intervalCals.add( key, value );
+
+        if( !result ) cerr << "Failed to add the calibration with key " << key << endl;
+
+      }
+
+      switch( opts.mode ) {
+        case Options::MODE_REDUCE: 
+          return doReduce();
+          break;
+        case Options::MODE_EACH:
+          return doEach();
+          break;
+      }
+
+      delete cur;
+
+      return 0;
+    }
+
+
+
+
+    int doReduce( void )
+    {
+
+
+      ofstream foo;
+      if( !opts.outputFile.empty() ) {
+        foo.open( opts.outputFile );
+        cout.rdbuf( foo.rdbuf() );
+      }
+
+      cout << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
+      cout << endl;
+      if( allCals.size() > 0 ) {
+        cout << "# all" << endl;
+        allCals.dumpReduced( cout );
+      }
+
+      if( randomCals.size() > 0 ) {
+        cout << endl;
+        cout << "# random" << endl;
+        randomCals.dumpReduced( cout );
+      }
+
+      if( intervalCals.size() > 0 ) {
+        cout << endl;
+        cout << "# interval" << endl;
+        intervalCals.dumpReduced( cout );
+      }
+
+      return 0;
+    }
+
+
+    int doEach( void )
+    {
+
+      return 0;
+    }
+
+
+
+  protected:
+
+    Options &opts;
+
+    kyotocabinet::HashDB calibrations;
+
+    AllCalibrationSet allCals;
+    RandomCalibrationSet randomCals;
+    IntervalCalibrationSet intervalCals;
+
+
+
+};
+
+
 
 
 
@@ -291,64 +399,9 @@ int main( int argc, char** argv )
 {
 
   Options opts;
+  if( !opts.parseOpts( argc, argv ) )  exit(-1);
 
-  string optsMsg;
-  if( !opts.parseOpts( argc, argv, optsMsg ) ) {
-    cout << optsMsg << endl;
-    exit(-1);
-  }
+  DumpMain main( opts );
 
-  kyotocabinet::HashDB results;
-  if( !results.open( opts.resultsDb ) ) {
-    cerr << "Error opening results db: " << results.error().name() << endl;
-    exit(-1);
-  }
-
-  DB::Cursor *cur = results.cursor();
-  cur->jump();
-
-
-  AllCalibration allCal;
-  RandomCalibration randomCal;
-  IntervalCalibration intervalCal;
-
-  string key, value;
-  while( cur->get( &key, &value, true ) ) {
-
-    bool result;
-    if( key.compare( 0, 3, "all" ) == 0 )
-      result = allCal.add( key, value );
-    else if( key.compare( 0, 6, "random" ) == 0 )
-      result = randomCal.add( key, value );
-    else if( key.compare( 0, 8, "interval" ) == 0 )
-      result = intervalCal.add( key, value );
-
-
-    if( !result ) cerr << "Failed to add the calibration with key " << key << endl;
-
-  }
-
-
-  ofstream foo;
-  if( !opts.saveTo.empty() ) {
-    foo.open( opts.saveTo );
-    cout.rdbuf( foo.rdbuf() );
-  }
-
-  cout << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
-  cout << endl;
-  cout << "# all" << endl;
-  allCal.dump( cout );
-
-  cout << endl;
-  cout << "# random" << endl;
-  randomCal.dump( cout );
-
-  cout << endl;
-  cout << "# interval" << endl;
-  intervalCal.dump( cout );
-
-  delete cur;
-
-  return 0;
+  return main.run();
 }
