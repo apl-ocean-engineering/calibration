@@ -58,9 +58,9 @@ class Options {
         outputFile    = outputFileArg.getValue();
 
         string modeStr( modeArg.getValue() );
-        if( modeStr.compare( "reduce" ) ) {
+        if( modeStr.compare( "reduce" ) == 0 ) {
           mode = MODE_REDUCE;
-        } else if( modeStr.compare( "each" ) ) {
+        } else if( modeStr.compare( "each" ) == 0 ) {
           mode = MODE_EACH;
         } else {
           LOG(ERROR) << "Don't understand mode \"" << modeStr << "\"";
@@ -134,11 +134,18 @@ static double stdDev( const vector<double> &v )
 
 
 
+// Technically speaking I should write a CalibrationResult unserializer
+// Rather than tracking rms and totaltime separately.
 class Calibrations {
   public:
     Calibrations( void )
       : _rms(), _totalTime(), _bad(0), _count(0)
     {;}
+
+    virtual ~Calibrations()
+    {
+      for( size_t i = 0; i < _cameras.size(); ++i ) delete _cameras[i];
+    }
 
     void add( const string &rec )
     {
@@ -152,14 +159,17 @@ class Calibrations {
       _count++;
 
       if( !fs["success"].empty() && ((int)fs["success"] == 1) ) {
+
         if( !fs["rms"].empty() ) _rms.push_back( fs["rms"] );
         if( !fs["totalTime"].empty() ) _totalTime.push_back( fs["totalTime"] );
+
+        _cameras.push_back( CameraFactory::Unserialize( fs ) );
       } else {
         ++_bad;
       }
     }
 
-    string toString( void )
+    string reduceString( void )
     {
       stringstream strm;
 
@@ -168,7 +178,30 @@ class Calibrations {
         strm << " " << mean( _totalTime ) << " " << stdDev( _totalTime );
       return strm.str();
     }
+
+
+    void eachString( ostream &strm )
+    {
+      for( size_t i = 0; i < _cameras.size(); ++i ) {
+
+        strm << i << " "
+             << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
+             << _cameras[i]->cx() << " " << _cameras[i]->cy();
+
+
+        Mat coeff = _cameras[i]->distortionCoeffs();
+        for( int j = 0; j < coeff.rows * coeff.cols; ++j ) {
+          double *ptr = coeff.ptr<double>();
+          strm << ptr[j] << " ";
+        }
+
+        strm << endl;
+
+      }
+    }
+
   protected:
+    vector< DistortionModel * > _cameras;
     vector< double > _rms;
     vector< double > _totalTime;
 
@@ -187,6 +220,8 @@ class CalibrationSet {
     virtual size_t size( void ) const = 0;
     virtual bool add( const string &key, const string &value ) = 0;
     virtual void dumpReduced( ostream &strm ) = 0;
+
+    virtual void dumpEach( ostream &strm ) = 0;
 };
 
 class AllCalibrationSet : public CalibrationSet {
@@ -213,8 +248,13 @@ class AllCalibrationSet : public CalibrationSet {
 
     virtual void dumpReduced( ostream &strm ) 
     {
-      strm << "0 " << _datum.toString() << endl;
-      strm << _numImages << " " << _datum.toString() << endl;
+      strm << "0 " << _datum.reduceString() << endl;
+      strm << _numImages << " " << _datum.reduceString() << endl;
+    }
+
+    virtual void dumpEach( ostream &strm )
+    {
+      if( _set ) _datum.eachString( strm );
     }
 
   protected: 
@@ -236,8 +276,8 @@ class RandomCalibrationSet : public CalibrationSet {
       if( key.compare(0,6,"random") != 0 ) return false;
 
       unsigned int count;
-      // Cheat
-      if( scanf( key.c_str(), "random(%u)", &count ) == 1 ) {
+
+      if( sscanf( key.c_str(), "random(%u)", &count ) == 1 ) {
         _data[count].add( value );
         return true;
       }
@@ -247,9 +287,20 @@ class RandomCalibrationSet : public CalibrationSet {
     virtual void dumpReduced( ostream &strm ) 
     {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-        strm << itr->first <<  " " << itr->second.toString() << endl;
+        strm << itr->first <<  " " << itr->second.reduceString() << endl;
       }
     }
+
+    virtual void dumpEach( ostream &strm )
+    {
+      for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
+        strm << "#" << endl;
+        strm << "# " << "random_" << itr->first << endl;
+        strm << "#" << endl;
+        itr->second.eachString( strm );
+      }
+    }
+
 
   protected: 
     map< unsigned int, Calibrations > _data;
@@ -283,6 +334,16 @@ class IntervalCalibrationSet : public RandomCalibrationSet {
       }
       return false;
     }
+
+    virtual void dumpEach( ostream &strm )
+    {
+      for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
+        strm << "#" << endl;
+        strm << "# " << "interavl_" << itr->first << endl;
+        strm << "#" << endl;
+        itr->second.eachString( strm );
+      }
+    }
 };
 
 
@@ -295,13 +356,22 @@ class DumpMain {
     int run( void )
     {
 
-      if( !calibrations.open( opts.calibrationDb ) ) {
-        cerr << "Error opening calibrations db: " << calibrations.error().name() << endl;
-        exit(-1);
+      LOG(INFO) << "Opening calibration db: " << opts.calibrationDb;
+      if( calibrations.open( opts.calibrationDb ) == false ) {
+        LOG(ERROR) << "Error opening calibrations db: " << calibrations.error().name();
+        return -1;
       }
+
+      if( ! calibrations.isOpened() ) {
+        LOG(ERROR) << "Hmm, calibrations isn't open (flags = " << (int)calibrations.flags() << ")";
+        LOG(ERROR) << "HashDB Error: " << calibrations.error().name();
+      }
+
 
       DB::Cursor *cur = calibrations.cursor();
       cur->jump();
+
+      LOG(INFO) << "Loading calibrations.";
 
       string key, value;
       while( cur->get( &key, &value, true ) ) {
@@ -314,16 +384,35 @@ class DumpMain {
         else if( key.compare( 0, 8, "interval" ) == 0 )
           result = intervalCals.add( key, value );
 
-        if( !result ) cerr << "Failed to add the calibration with key " << key << endl;
+        if( !result ) LOG(ERROR) << "Failed to add the calibration with key " << key;
 
       }
 
+
+      LOG(INFO) << "Have " << allCals.size() << " all calibrations.";
+      LOG(INFO) << "Have " << randomCals.size() << " random calibrations.";
+      LOG(INFO) << "Have " << intervalCals.size() << " interval calibrations.";
+
+      LOG(INFO) << "Preparing output.";
+
+std::streambuf *buf;
+      std::ofstream of;
+
+      if( opts.outputFile.empty() ) {
+            buf = std::cout.rdbuf();
+      } else {
+            of.open( opts.outputFile );
+                buf = of.rdbuf();
+      }
+
+      ostream out(buf);
+
       switch( opts.mode ) {
         case Options::MODE_REDUCE: 
-          return doReduce();
+          return doReduce( out );
           break;
         case Options::MODE_EACH:
-          return doEach();
+          return doEach( out );
           break;
       }
 
@@ -335,41 +424,38 @@ class DumpMain {
 
 
 
-    int doReduce( void )
+    int doReduce( ostream &out )
     {
+      
 
-
-      ofstream foo;
-      if( !opts.outputFile.empty() ) {
-        foo.open( opts.outputFile );
-        cout.rdbuf( foo.rdbuf() );
-      }
-
-      cout << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
-      cout << endl;
+      out << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
+      out << endl;
       if( allCals.size() > 0 ) {
-        cout << "# all" << endl;
-        allCals.dumpReduced( cout );
+        out << "# all" << endl;
+        allCals.dumpReduced( out );
       }
 
       if( randomCals.size() > 0 ) {
-        cout << endl;
-        cout << "# random" << endl;
-        randomCals.dumpReduced( cout );
+        out << endl;
+        out << "# random" << endl;
+        randomCals.dumpReduced( out );
       }
 
       if( intervalCals.size() > 0 ) {
-        cout << endl;
-        cout << "# interval" << endl;
-        intervalCals.dumpReduced( cout );
+        out << endl;
+        out << "# interval" << endl;
+        intervalCals.dumpReduced( out );
       }
 
       return 0;
     }
 
 
-    int doEach( void )
+    int doEach( ostream &out )
     {
+      allCals.dumpEach( out );
+      randomCals.dumpEach( out );
+      intervalCals.dumpEach( out );
 
       return 0;
     }
@@ -380,7 +466,7 @@ class DumpMain {
 
     Options &opts;
 
-    kyotocabinet::HashDB calibrations;
+    CalibrationDb calibrations;
 
     AllCalibrationSet allCals;
     RandomCalibrationSet randomCals;
@@ -397,6 +483,8 @@ class DumpMain {
 
 int main( int argc, char** argv )
 {
+  google::InitGoogleLogging("video_calibration_permutation");
+  FLAGS_logtostderr = 1;
 
   Options opts;
   if( !opts.parseOpts( argc, argv ) )  exit(-1);
