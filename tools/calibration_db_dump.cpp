@@ -186,7 +186,7 @@ class Calibrations {
 
         strm << i << " "
              << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
-             << _cameras[i]->cx() << " " << _cameras[i]->cy();
+             << _cameras[i]->cx() << " " << _cameras[i]->cy() << " ";
 
 
         Mat coeff = _cameras[i]->distortionCoeffs();
@@ -236,6 +236,7 @@ class AllCalibrationSet : public CalibrationSet {
     {
       if( key.compare("all") != 0 ) return false;
       if( _set ) return false;
+
 
       FileStorage fs( value, FileStorage::READ | FileStorage::MEMORY );
       fs["numImages"] >> _numImages;
@@ -369,6 +370,7 @@ class DumpMain {
 
       string key, value;
       while( cur->get( &key, &value, true ) ) {
+
 
         bool result;
         if( key.compare( 0, 3, "all" ) == 0 )
