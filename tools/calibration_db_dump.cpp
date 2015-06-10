@@ -39,7 +39,7 @@ class Options {
 
     typedef enum { MODE_REDUCE, MODE_EACH } Mode_t;
 
-    string calibrationDb, outputFile;
+    string calibrationDb, outputFile, statisticsFile;
     Mode_t mode;
 
     bool parseOpts( int argc, char **argv )
@@ -49,6 +49,7 @@ class Options {
 
         TCLAP::ValueArg< std::string > calibrationDbArg("c", "calibration-db", "CalibrationSet db", true, "", "CalibrationSet db file", cmd );
         TCLAP::ValueArg< std::string > outputFileArg("o", "output-file", "Output file", false, "", "Output file", cmd );
+        TCLAP::ValueArg< std::string > statisticsFileArg("", "statistics-file", "Statistics file", false, "", "statistics file", cmd );
 
         TCLAP::ValueArg< std::string > modeArg("m", "mode", "Mode", true, "", "{reduce|each}", cmd );
 
@@ -56,6 +57,7 @@ class Options {
 
         calibrationDb = calibrationDbArg.getValue();
         outputFile    = outputFileArg.getValue();
+        statisticsFile = statisticsFileArg.getValue();
 
         string modeStr( modeArg.getValue() );
         if( modeStr.compare( "reduce" ) == 0 ) {
@@ -107,7 +109,7 @@ class Options {
 // Inefficient
 static double mean( const vector<double> &v ) 
 {
-  double total;
+  double total = 0;
   for( size_t i = 0;  i < v.size(); ++i ) total += v[i];
 
   return total/v.size();
@@ -117,7 +119,7 @@ static double stdDev( const vector<double> &v, double mean )
 {
   if( v.size() < 2 ) return 0.0;
 
-  double total;
+  double total = 0;
 
   for( size_t i = 0;  i < v.size(); ++i ) {
     double d = (v[i] - mean);
@@ -198,6 +200,67 @@ class Calibrations {
         strm << endl;
 
       }
+    }
+
+    // Kindof a set of loose nuts right now
+    void outputStatistics( ostream &strm )
+    {
+      vector< double > fx[2], cx[2];
+      const size_t N = _cameras.size();
+      for( size_t n = 0; n < N; ++n ) {
+        fx[0].push_back( _cameras[n]->fx() );
+        fx[1].push_back( _cameras[n]->fy() );
+        cx[0].push_back( _cameras[n]->cx() );
+        cx[1].push_back( _cameras[n]->cy() );
+      }
+
+      // Estimate the bivariate distribution for focal length
+      Vec2d mean_fx( mean( fx[0] ), mean( fx[1] ) ),
+             mean_cx( mean( cx[0] ), mean( cx[1] ) );
+
+      Matx22d cov( 0, 0, 0, 0 );
+      for( size_t i = 0; i < 2; ++i ) {
+        for( size_t j = 0; j < 2; ++j ) {
+          for( size_t n = 0; n < N; ++n ) {
+            cov(i,j) += (fx[i][n] - mean_fx[i])*(fx[j][n] - mean_fx[j]); 
+          }
+
+          cov(i,j) /= (N-1);
+
+        }
+      }
+
+      cout << "FX mean: " << endl << mean_fx << endl;
+      cout << "FX cov: " << endl << cov << endl;
+
+      strm << "# focal_length" << endl;
+      // Draw contours
+      float k = 1; /// Confidence parameter TBD
+
+      cov *= k;
+
+      // Calculate the eigenvalues for the covariance matrix
+      Vec2d eval;
+      Matx22d evectors;
+      eigen( cov, eval, evectors );
+      evectors = evectors.t();
+
+      Matx22d evalues( sqrt(eval[0]), 0, 0, sqrt(eval[1]) );
+
+      const int num_pts = 40;
+      for( int i = 0; i < num_pts; ++i ) {
+        const float theta = 2*i*M_PI / num_pts;
+
+        Matx21d ang( cos( theta ), sin( theta ) );
+
+        Matx21d pt = evectors * evalues * ang + mean_fx;
+
+        strm << i << " " << pt(0,0) << " " << pt(1,0) << endl;
+
+      }
+
+      strm << endl << endl;
+
     }
 
   protected:
@@ -302,6 +365,18 @@ class RandomCalibrationSet : public CalibrationSet {
       }
     }
 
+    virtual void dumpStatistics( ostream &strm )
+    {
+      for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
+        strm << "#" << endl;
+        strm << "# " << "random_" << itr->first << endl;
+        strm << "#" << endl;
+        itr->second.outputStatistics( strm );
+      }
+    }
+
+
+
 
   protected: 
     map< unsigned int, Calibrations > _data;
@@ -391,24 +466,25 @@ class DumpMain {
 
       LOG(INFO) << "Preparing output.";
 
-std::streambuf *buf;
+      std::streambuf *buf;
       std::ofstream of;
 
       if( opts.outputFile.empty() ) {
-            buf = std::cout.rdbuf();
+        buf = std::cout.rdbuf();
       } else {
-            of.open( opts.outputFile );
-                buf = of.rdbuf();
+        of.open( opts.outputFile );
+        buf = of.rdbuf();
       }
 
       ostream out(buf);
 
       switch( opts.mode ) {
         case Options::MODE_REDUCE: 
-          return doReduce( out );
+          doReduce( out );
           break;
         case Options::MODE_EACH:
-          return doEach( out );
+          doEach( out );
+
           break;
       }
 
@@ -453,6 +529,11 @@ std::streambuf *buf;
       randomCals.dumpEach( out );
       intervalCals.dumpEach( out );
 
+      if( opts.statisticsFile.length() > 0 ) {
+        LOG(INFO) << "Dumping statistics to " << opts.statisticsFile << endl;
+        ofstream stats( opts.statisticsFile );
+        randomCals.dumpStatistics( stats );
+      }
       return 0;
     }
 
