@@ -187,8 +187,8 @@ class Calibrations {
       for( size_t i = 0; i < _cameras.size(); ++i ) {
 
         strm << i << " "
-             << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
-             << _cameras[i]->cx() << " " << _cameras[i]->cy() << " ";
+          << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
+          << _cameras[i]->cx() << " " << _cameras[i]->cy() << " ";
 
 
         Mat coeff = _cameras[i]->distortionCoeffs();
@@ -206,17 +206,23 @@ class Calibrations {
     void outputStatistics( ostream &strm )
     {
       vector< double > fx[2], cx[2];
-      const size_t N = _cameras.size();
-      for( size_t n = 0; n < N; ++n ) {
+      for( size_t n = 0; n < _cameras.size(); ++n ) {
         fx[0].push_back( _cameras[n]->fx() );
         fx[1].push_back( _cameras[n]->fy() );
         cx[0].push_back( _cameras[n]->cx() );
         cx[1].push_back( _cameras[n]->cy() );
       }
 
+      dump2dStats( fx, strm, "focal_length" );
+      dump2dStats( cx, strm, "image_center" );
+    }
+
+    void dump2dStats( vector<double> *fx, ostream &strm, const string &name )
+    {
+      const size_t N = fx[0].size();
+
       // Estimate the bivariate distribution for focal length
-      Vec2d mean_fx( mean( fx[0] ), mean( fx[1] ) ),
-             mean_cx( mean( cx[0] ), mean( cx[1] ) );
+      Vec2d mean_fx( mean( fx[0] ), mean( fx[1] ) );
 
       Matx22d cov( 0, 0, 0, 0 );
       for( size_t i = 0; i < 2; ++i ) {
@@ -230,10 +236,17 @@ class Calibrations {
         }
       }
 
-      cout << "FX mean: " << endl << mean_fx << endl;
-      cout << "FX cov: " << endl << cov << endl;
+      //        cout << "FX mean: " << endl << mean_fx << endl;
+      //        cout << "FX cov: " << endl << cov << endl;
 
-      strm << "# focal_length" << endl;
+
+      strm << "# " << name << "_stats" << endl;
+
+      strm << mean_fx[0] << " " << mean_fx[1] << " " << cov(0,0) << " " << cov(0,1) << " " << cov(1,0) << " " << cov(1,1) << endl;
+
+
+      strm << endl;
+      strm << "# " << name << "_ellipse" << endl;
       // Draw contours
       float k = 1; /// Confidence parameter TBD
 
@@ -260,7 +273,6 @@ class Calibrations {
       }
 
       strm << endl << endl;
-
     }
 
   protected:
@@ -498,7 +510,7 @@ class DumpMain {
 
     int doReduce( ostream &out )
     {
-      
+
 
       out << "# num_points num_reps num_good_reps rms_mean rms_stddev time_mean time_stddev" << endl;
       out << endl;
