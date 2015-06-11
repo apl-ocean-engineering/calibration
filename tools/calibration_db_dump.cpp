@@ -39,7 +39,8 @@ class Options {
 
     typedef enum { MODE_REDUCE, MODE_EACH } Mode_t;
 
-    string calibrationDb, outputFile, statisticsFile;
+    string calibrationDb, outputFile, statisticsFile, 
+           optimalCalFile;
     Mode_t mode;
 
     bool parseOpts( int argc, char **argv )
@@ -50,6 +51,8 @@ class Options {
         TCLAP::ValueArg< std::string > calibrationDbArg("c", "calibration-db", "CalibrationSet db", true, "", "CalibrationSet db file", cmd );
         TCLAP::ValueArg< std::string > outputFileArg("o", "output-file", "Output file", false, "", "Output file", cmd );
         TCLAP::ValueArg< std::string > statisticsFileArg("", "statistics-file", "Statistics file", false, "", "statistics file", cmd );
+        TCLAP::ValueArg< std::string > optimalCalFileArg("", "optimal-calibration", "Optimal calibration", false, "", "optimal cal file", cmd );
+
 
         TCLAP::ValueArg< std::string > modeArg("m", "mode", "Mode", true, "", "{reduce|each}", cmd );
 
@@ -58,6 +61,7 @@ class Options {
         calibrationDb = calibrationDbArg.getValue();
         outputFile    = outputFileArg.getValue();
         statisticsFile = statisticsFileArg.getValue();
+        optimalCalFile = optimalCalFileArg.getValue();
 
         string modeStr( modeArg.getValue() );
         if( modeStr.compare( "reduce" ) == 0 ) {
@@ -275,6 +279,8 @@ class Calibrations {
       strm << endl << endl;
     }
 
+    const vector< DistortionModel * > &cameras( void ) const  { return _cameras; }
+
   protected:
     vector< DistortionModel * > _cameras;
     vector< double > _rms;
@@ -388,6 +394,24 @@ class RandomCalibrationSet : public CalibrationSet {
     }
 
 
+    DistortionModel *optimalCal( void )
+    {
+      vector< DistortionModel * > cameras = allCameras();
+
+      return (cameras[0])->estimateMeanCamera( cameras );
+    }
+
+vector< DistortionModel * > allCameras( void )
+    {
+      vector< DistortionModel * > cameras;
+
+      for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
+        std::copy( itr->second.cameras().begin(), itr->second.cameras().end(),
+                  back_inserter( cameras ) );
+      }
+
+      return cameras;
+    }
 
 
   protected: 
@@ -500,6 +524,10 @@ class DumpMain {
           break;
       }
 
+      if( opts.optimalCalFile.length() > 0 ) {
+doOptimalCal();
+      }
+
       delete cur;
 
       return 0;
@@ -547,6 +575,15 @@ class DumpMain {
         randomCals.dumpStatistics( stats );
       }
       return 0;
+    }
+
+    int doOptimalCal()
+    {
+      DistortionModel *optimalCam = randomCals.optimalCal();
+
+      CalibrationSerializer serial;
+      serial.setCamera( optimalCam ).writeFile( opts.optimalCalFile );
+
     }
 
 

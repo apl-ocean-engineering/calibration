@@ -69,7 +69,6 @@ target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( stereo_calibration ${PCL_LIBRARIES} )
 
-
 add_executable( deinterlace deinterlace.cpp )
-target_include_directories( deinterlace 
-	PUBLIC ${tclap_INCLUDE_DIR} )
+
+add_executable( extract_background_image extract_background_image.cpp )
