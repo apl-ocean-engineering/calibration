@@ -260,7 +260,7 @@ class DbStereoCalibration {
         }
 
         bool dbOpened;
-        dbOpened = db_[i].open( opts_.detectionDbPath(i), true );
+        dbOpened = db_[i].open( opts_.detectionDbPath(i), false );
 
         if( !dbOpened ) {
           LOG(ERROR) << "Error opening database file " << opts_.detectionDbPath(i) << ": " << db_[i].error().name() << endl;
