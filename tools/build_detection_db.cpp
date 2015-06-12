@@ -57,7 +57,7 @@ struct BuildDbOpts {
 
   int seekTo, intervalFrames, waitKey;
   float intervalSeconds;
-  string boardFile, benchmarkFile, detectionDb;
+  string boardFile, benchmarkFile, detectionDb, backgroundImg;
   bool doBenchmark, doRewrite, doDisplay, yes, doClahe, noTbb;
 
   vector<string> inFiles;
@@ -79,6 +79,7 @@ struct BuildDbOpts {
 
       TCLAP::ValueArg<std::string> boardArg( "b", "board", "Board", true, "", "board name", cmd );
       TCLAP::ValueArg<std::string> detDbArg("D", "detection-db", "Detection db", true, "", "db name or directory", cmd );
+      TCLAP::ValueArg<std::string> bgImgArg("B", "background-image", "Background image", false, "", "image", cmd );
 
       TCLAP::ValueArg< int > waitKeyArg( "w", "wait-key", "Wait key", false, 0, "ms", cmd );
 
@@ -95,6 +96,7 @@ struct BuildDbOpts {
 
       boardFile = boardArg.getValue();
       detectionDb = detDbArg.getValue();
+      backgroundImg = bgImgArg.getValue();
 
       doClahe = doClaheArg.getValue();
       doDisplay = doDisplayArg.getValue();
@@ -176,6 +178,20 @@ struct BuildDbOpts {
       if( !board ) {
         LOG(ERROR) << "Couldn't open board from " << opts.boardFile;
         return -1;
+      }
+
+      if( opts.backgroundImg.length() > 0 ) {
+        if( !file_exists( opts.backgroundImg ) ) {
+          LOG(ERROR) << "Background image file " << opts.backgroundImg << " doesn't exist.";
+          return -1;
+        }
+
+        bgImg = imread( opts.backgroundImg );
+
+        if( bgImg.empty() ) {
+          LOG(ERROR) << "Couldn't load background image from " << opts.backgroundImg;
+          return -1;
+        }
       }
 
       for( vector<string>::iterator itr = opts.inFiles.begin(); itr != opts.inFiles.end(); ++itr ) {
@@ -307,8 +323,20 @@ struct BuildDbOpts {
     }
 
 
-    void prepFrame( Mat &frame )
+    void prepFrame( Mat &frame, Mat &mask )
     {
+      if( ! bgImg.empty() ) {
+        assert( frame.size() == bgImg.size() );
+        assert( frame.type() == bgImg.type() );
+
+        Mat norm( frame.size(), CV_32FC1 );
+
+        // Iterate over 
+        if( frame.isContinuous() and bgImg.isContinuous() ) {
+
+        }
+      }
+
 
       if( opts.doClahe ) {
 
@@ -344,7 +372,8 @@ struct BuildDbOpts {
 
     Detection *processFrame( Mat &frame, int currentFrame, DetectionDb &db )
     {
-      prepFrame( frame );
+      Mat mask = Mat::ones( frame.size(), CV_8UC1 );
+      prepFrame( frame, mask );
 
       Detection *detection = board->detectPattern( frame );
       db.save( currentFrame, *detection);
@@ -357,8 +386,11 @@ struct BuildDbOpts {
     {
       AprilTagDetectorFunctor f( frames, db, board );
 
-      for( FrameVec_t::iterator itr = frames.begin(); itr != frames.end(); ++itr ) 
-        prepFrame( itr->img );
+      for( FrameVec_t::iterator itr = frames.begin(); itr != frames.end(); ++itr )  {
+        LOG(INFO) << "bulk process frames doesn't handle masks yet";
+        Mat mask = Mat::ones( itr->img.size(), CV_8UC1 );
+        prepFrame( itr->img, mask );
+      }
 
 #ifdef USE_TBB
       if( !noTbb )
@@ -404,6 +436,8 @@ struct BuildDbOpts {
     BuildDbOpts opts;
 
     Board *board;
+
+    Mat bgImg;
 
     ofstream _benchmark;
 
