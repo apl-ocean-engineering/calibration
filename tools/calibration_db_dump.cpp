@@ -336,7 +336,10 @@ class AllCalibrationSet : public CalibrationSet {
 
     virtual void dumpEach( ostream &strm )
     {
-      if( _set ) _datum.eachString( strm );
+      if( _set ) {
+        strm << endl << "# all" << endl;
+        _datum.eachString( strm );
+      }
     }
 
   protected: 
@@ -376,9 +379,7 @@ class RandomCalibrationSet : public CalibrationSet {
     virtual void dumpEach( ostream &strm )
     {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-        strm << "#" << endl;
-        strm << "# " << "random_" << itr->first << endl;
-        strm << "#" << endl;
+        strm << endl << "# " << "random_" << itr->first << endl;
         itr->second.eachString( strm );
       }
     }
@@ -386,9 +387,7 @@ class RandomCalibrationSet : public CalibrationSet {
     virtual void dumpStatistics( ostream &strm )
     {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-        strm << "#" << endl;
-        strm << "# " << "random_" << itr->first << endl;
-        strm << "#" << endl;
+        strm << endl << "# " << "random_" << itr->first << endl;
         itr->second.outputStatistics( strm );
       }
     }
