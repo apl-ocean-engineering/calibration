@@ -9,6 +9,8 @@
 
 #include "glog/logging.h"
 
+#include <kchashdb.h>
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -41,8 +43,8 @@ class PermutationOpts : public CalibrationOpts {
       CalibrationOpts()
   {;}
 
-    int randomStart, randomEnd, randomStep, randomCount;
-    bool doAll;
+    int randomStart, randomEnd, randomStep, randomCount, minTags;
+    bool doAll, doRewrite;
 
   protected:
 
@@ -52,8 +54,10 @@ class PermutationOpts : public CalibrationOpts {
       TCLAP::ValueArg< int > randomEndArg("", "random-end", "Random end", false, INT_MAX, "Random end", cmd );
       TCLAP::ValueArg< int > randomStepArg("", "random-step", "Random step", false, 50, "Random step", cmd );
       TCLAP::ValueArg< int > randomCountArg("", "random-count", "Random count", false, 0, "Random count", cmd );
+      TCLAP::ValueArg< int > minTagsArg("", "min-tags", "Minimum tags", false, -1, "Minimum tags", cmd );
 
       TCLAP::SwitchArg doAllArg("", "do-all", "Do All", cmd, false );
+      TCLAP::SwitchArg doRewriteArg("", "do-rewrite", "Do rewrite", cmd, false );
 
       CalibrationOpts::doParseCmdLine( cmd, argc, argv );
 
@@ -62,7 +66,10 @@ class PermutationOpts : public CalibrationOpts {
       randomStep  = randomStepArg.getValue();
       randomCount = randomCountArg.getValue();
 
+      minTags     = minTagsArg.getValue();
+
       doAll       = doAllArg.getValue();
+      doRewrite   = doRewriteArg.getValue();
     }
 
     virtual bool validate( void )
@@ -98,6 +105,14 @@ class PermutationMain {
 
 //      Size imageSize = db.imageSize();
 
+      if( opts.doRewrite ) {
+        // Simplest thing to do is just truncate the existing file
+        kyotocabinet::HashDB h;
+        h.open( opts.calibrationDb, HashDB::OWRITER | HashDB::OTRUNCATE );
+        h.close();
+
+      }
+
       if( !calDb.open( opts.calibrationDb, true ) ) {
         cerr << "Error opening calibration db \"" << opts.calibrationDb << "\".  Error: " << endl;
         exit(-1);
@@ -120,9 +135,9 @@ class PermutationMain {
     {
       vector<string> keys;
       calDb.findKeysStartingWith( "all", keys );
-      if( keys.size() == 0 ) {
+      if( (keys.size() == 0) ) {
         DetectionSet *all = new DetectionSet;
-        AllFrameSelector().generate( db, *all );
+        AllFrameSelector( opts.minTags ).generate( db, *all );
         pushDetSet( all );
       }
     }
@@ -136,7 +151,6 @@ class PermutationMain {
       const int minImages = 10;
       int stopAt = std::min( opts.randomEnd, db.vidLength()-1 );
 
-      // For simplicity, just configure in code.
       for( int i = opts.randomStart; i <= stopAt; i+= opts.randomStep ) {
 
         int count = std::max( minImages, i );
@@ -154,7 +168,7 @@ class PermutationMain {
         size_t j = 0;
         while( j < todo ) {
           DetectionSet *detSet = new DetectionSet;
-          RandomFrameSelector( count ).generate( db, *detSet );
+          RandomFrameSelector( count, opts.minTags ).generate( db, *detSet );
 
           if( calDb.has( detSet->name() ) ) continue;
 
