@@ -5,6 +5,8 @@
 #include <time.h>
 #include <getopt.h>
 
+#include <gsl/gsl_cdf.h>
+
 #include <iostream>
 
 #include <tclap/CmdLine.h>
@@ -218,6 +220,7 @@ class Calibrations {
       }
 
       dump2dStats( fx, strm, "focal_length" );
+      strm << endl << endl;
       dump2dStats( cx, strm, "image_center" );
     }
 
@@ -249,10 +252,15 @@ class Calibrations {
       strm << mean_fx[0] << " " << mean_fx[1] << " " << cov(0,0) << " " << cov(0,1) << " " << cov(1,0) << " " << cov(1,1) << endl;
 
 
-      strm << endl;
+      strm << endl << endl;
       strm << "# " << name << "_ellipse" << endl;
-      // Draw contours
-      float k = 1; /// Confidence parameter TBD
+
+      // Draw 1-sigma contours
+      float sigma = 1;
+      float conf = 2*gsl_cdf_ugaussian_P( sigma ) - 1;
+      float k = gsl_cdf_chisq_Pinv( conf, 2 );
+
+//LOG(INFO) << "Sigma = " << sigma << " conf = " << conf << " k = " << k;
 
       cov *= k;
 
@@ -266,7 +274,7 @@ class Calibrations {
 
       const int num_pts = 40;
       for( int i = 0; i < num_pts; ++i ) {
-        const float theta = 2*i*M_PI / num_pts;
+        const float theta = 2*i*M_PI / (num_pts-1);
 
         Matx21d ang( cos( theta ), sin( theta ) );
 
@@ -339,6 +347,7 @@ class AllCalibrationSet : public CalibrationSet {
       if( _set ) {
         strm << endl << "# all" << endl;
         _datum.eachString( strm );
+        strm << endl << endl;
       }
     }
 
@@ -381,13 +390,14 @@ class RandomCalibrationSet : public CalibrationSet {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
         strm << endl << "# " << "random_" << itr->first << endl;
         itr->second.eachString( strm );
+        strm << endl << endl;
       }
     }
 
     virtual void dumpStatistics( ostream &strm )
     {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
-        strm << endl << "# " << "random_" << itr->first << endl;
+       // strm << endl << "# " << "random_" << itr->first << endl;
         itr->second.outputStatistics( strm );
       }
     }

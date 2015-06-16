@@ -9,6 +9,11 @@
 
 #include <glog/logging.h>
 
+#ifdef USE_TBB
+#include "tbb/tbb.h"
+using namespace tbb;
+#endif
+
 #include "file_utils.h"
 #include "board.h"
 #include "detection.h"
@@ -117,10 +122,17 @@ void setKeys( const vector< string > &k )
   kyotocabinet::HashDB &_results;
 
 
+#ifdef USE_TBB
+  void operator()( const tbb::blocked_range<size_t> &r ) const
+  {
+    size_t end = r.end();
+    for( size_t i = r.begin(); i != end; ++i ) {
+#else
   void operator()( void )
   {
     size_t end = _keys.size();
     for( size_t i = 0; i < end; ++i ) {
+#endif
       
       const string &key( _keys[i] );
       string value;
@@ -210,12 +222,21 @@ int main( int argc, char** argv )
 
     if( keys.size() >= chunk ) {
       func.setKeys( keys );
+#ifdef USE_TBB
+      tbb::parallel_for( tbb::blocked_range<size_t>(0, keys.size()), func );
+#else
       func();
+#endif
       keys.clear();
     }
   }
 
+  func.setKeys( keys );
+#ifdef USE_TBB
+  tbb::parallel_for( tbb::blocked_range<size_t>(0, keys.size()), func );
+#else
   func();
+#endif
 
   delete cur;
 

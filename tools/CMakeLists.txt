@@ -53,10 +53,13 @@ add_executable( video_calibration_permutations_new
   ${CALIBRATION_SRCS} )
 
 
-add_executable( calibration_reproject calibration_reproject.cpp ${CALIBRATION_SRCS} )
+add_executable( calibration_db_reproject calibration_db_reproject.cpp ${CALIBRATION_SRCS} )
 if( USE_TBB )
-  target_link_libraries( calibration_reproject tbb )
+  target_link_libraries( calibration_db_reproject tbb )
 endif()
+
+
+#add_executable( calibration_reproject calibration_reproject.cpp ${CALIBRATION_SRCS} )
 
 add_executable( calibration_db_dump calibration_db_dump.cpp )
 

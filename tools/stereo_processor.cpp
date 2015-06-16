@@ -36,11 +36,11 @@ using namespace AplCam;
 struct Options
 {
 
-  typedef enum { DENSE_STEREO, RECTIFY, VERB_NONE = -1 } Verb;
+  typedef enum { DENSE_STEREO, UNDISTORT, RECTIFY, VERB_NONE = -1 } Verb;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options()
-    : verb( VERB_NONE ), stereoCalibration(), videoFile(), doDisplay( false )
+      : verb( VERB_NONE ), stereoCalibration(), videoFile(), doDisplay( false )
 
   {;}
 
@@ -88,6 +88,8 @@ struct Options
       string v = verbArg.getValue();
       if( v == "rectify" ) {
         verb = RECTIFY;
+      } else if( v == "undistort" ) {
+        verb = UNDISTORT;
       } else if( v == "dense" || v == "dense_stereo" ) {
         verb = DENSE_STEREO;
       }
@@ -123,288 +125,331 @@ struct Options
 
 
 class StereoProcessorMain {
-  public:
-    StereoProcessorMain( Options &opt )
+ public:
+  StereoProcessorMain( Options &opt )
       : opts( opt ), video( opt.videoFile )
-    {;}
+  {;}
 
-    int go( void )
-    {
-      if( ! video.isOpened() ) {
-        LOG(ERROR) << "Could not open video file: " << opts.videoFile << endl;
+  int go( void )
+  {
+    if( ! video.isOpened() ) {
+      LOG(ERROR) << "Could not open video file: " << opts.videoFile << endl;
+      return -1;
+    }
+
+    //video.rewind();
+    //if( opts.seekTo > 0 ) video.seek( opts.seekTo );
+
+    if( loadCalibrationFiles() == false ) return -1;
+
+    if( opts.outputFileGiven() ) {
+      float fps = video.fps();
+      if( isnan( fps ) ) fps = 30.0;
+      LOG(INFO) << "Fps: " << fps;
+
+      Size outputSize( video.fullSize() );
+      //switch( opts.verb ) {
+      //  case Options::RECTIFY:
+      //    outputSize = video.fullSize();
+      //    break;
+      //  case Options::DENSE_STEREO:
+      //    outputSize = video.frameSize();
+      //    break;
+      //}
+
+      writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, outputSize );
+
+      if( !writer.isOpened() ) {
+        LOG(ERROR) << "Error creating writer for " << opts.outputFile;
         return -1;
       }
-
-      //video.rewind();
-      //if( opts.seekTo > 0 ) video.seek( opts.seekTo );
-
-      if( loadCalibrationFiles() == false ) return -1;
-
-      if( opts.outputFileGiven() ) {
-        float fps = video.fps();
-        if( isnan( fps ) ) fps = 30.0;
-        LOG(INFO) << "Fps: " << fps;
-
-        Size outputSize( video.fullSize() );
-        //switch( opts.verb ) {
-        //  case Options::RECTIFY:
-        //    outputSize = video.fullSize();
-        //    break;
-        //  case Options::DENSE_STEREO:
-        //    outputSize = video.frameSize();
-        //    break;
-        //}
-
-        writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, outputSize );
-
-        if( !writer.isOpened() ) {
-          LOG(ERROR) << "Error creating writer for " << opts.outputFile;
-          return -1;
-        }
-      }
-
-      switch( opts.verb ) {
-        case Options::RECTIFY:
-          return doRectify();
-          break;
-        case Options::DENSE_STEREO:
-          return doDenseStereo();
-          break;
-        case Options::VERB_NONE:
-        default:
-          LOG(ERROR) << "No verb selected, oh well." << endl;
-          return 0;
-      }
-
-      return 0;
     }
 
-  private:
-    Options &opts;
-    CompositeVideo video;
-
-    StereoCalibration sCal;
-    StereoRectification sRect;
-    Mat map[2][2];
-
-    DistortionModel *cameras[2];
-
-    VideoWriter writer;
-
-
-    void calculateRectification( void )
-    {
-      Mat R[2], P[2], disparity;
-      Rect validROI[2];
-      float alpha = -1;
-
-      Distortion::stereoRectify( *cameras[0], *cameras[1], video.frameSize(), sCal.R, sCal.t,
-          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
-          alpha, video.frameSize(), validROI[0], validROI[1] );
-
-      sRect.R[0] = R[0];
-      sRect.R[1] = R[1];
-      sRect.P[0] = P[0];
-      sRect.P[1] = P[1];
-
-      Size frameSize( video.frameSize() );
-      for( int k = 0; k < 2; ++k ) {
-        cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
-            frameSize, CV_32FC1, map[k][0], map[k][1] );
-      }
+    switch( opts.verb ) {
+      case Options::RECTIFY:
+        return doRectify();
+        break;
+      case Options::UNDISTORT:
+        return doUndistort();
+        break;
+      case Options::DENSE_STEREO:
+        return doDenseStereo();
+        break;
+      case Options::VERB_NONE:
+      default:
+        LOG(ERROR) << "No verb selected, oh well." << endl;
+        return 0;
     }
 
+    return 0;
+  }
 
-    int doRectify( void )
-    {
-      LOG(INFO) << "Fps: " << video.fps();
-      int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
-      int wait = wk;
+ private:
+  Options &opts;
+  CompositeVideo video;
 
-      int count = 0;
-      CompositeCanvas canvas;
-      while( video.read( canvas ) ) {
-        for( int k = 0; k < 2; ++k ) 
-          remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+  StereoCalibration sCal;
+  StereoRectification sRect;
+  Mat map[2][2];
 
-        if( writer.isOpened() ) {
-          if( count % 100 == 0 ) { LOG(INFO) << count; }
-          writer << canvas;
-        }
+  DistortionModel *cameras[2];
 
-        if( opts.doDisplay ) {
+  VideoWriter writer;
 
-          if( opts.scale  > 0.0 ) 
-            imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
-          else 
-            imshow( RectifyWindowName, canvas );
 
-          int ch;
-          ch = waitKey( wait );
-          if( ch == 'q' )
-            break;
-          else if(ch==' ') {
-            wait = (wait == 0) ? wk : 0;
-          }
-        }
+  void calculateRectification( void )
+  {
+    Mat R[2], P[2], disparity;
+    Rect validROI[2];
+    float alpha = -1;
 
-        ++count;
-      }
+    Distortion::stereoRectify( *cameras[0], *cameras[1], video.frameSize(), sCal.R, sCal.t,
+                              R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+                              alpha, video.frameSize(), validROI[0], validROI[1] );
 
-      return 0;
+    sRect.R[0] = R[0];
+    sRect.R[1] = R[1];
+    sRect.P[0] = P[0];
+    sRect.P[1] = P[1];
+
+    Size frameSize( video.frameSize() );
+    for( int k = 0; k < 2; ++k ) {
+      cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
+                                          frameSize, CV_32FC1, map[k][0], map[k][1] );
     }
+  }
 
 
+  int doRectify( void )
+  {
+    LOG(INFO) << "Fps: " << video.fps();
+    int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
+    int wait = wk;
 
-    bool doDenseStereo( void )
-    {
-      int numberOfDisparities = (video.frameSize().width / 8 + 15) & -16;
-      int SADWindowSize = 0;
-
-      Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
-      //     StereoSGBM sgbm;
-
-      bm->setMinDisparity( 0 );
-      bm->setSpeckleRange( 32 );
-      bm->setSpeckleWindowSize( 100 );
-
-      //     // bm.state->roi1 = roi1;
-      //     // bm.state->roi2 = roi2;
-      //     // bm.state->preFilterCap = 31;
-      //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
-      //bm.state->minDisparity = 0;
-      //bm.state->numberOfDisparities = numberOfDisparities;
-      //bm.state->textureThreshold = 10;
-      //bm.state->uniquenessRatio = 15;
-      //bm.state->speckleWindowSize = 100;
-      //bm.state->speckleRange = 32;
-      //bm.state->disp12MaxDiff = 1;
-
-      //     sgbm.preFilterCap = 63;
-      //     sgbm.SADWindowSize = 3;
-
-      //     //int cn = canvas.canvas.channels();
-
-      //     sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      //     sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      //     sgbm.minDisparity = 0;
-      //     sgbm.numberOfDisparities = numberOfDisparities;
-      //     sgbm.uniquenessRatio = 10;
-      //     //sgbm.speckleWindowSize = bm.state->speckleWindowSize;
-      //     //sgbm.speckleRange = bm.state->speckleRange;
-      //     sgbm.disp12MaxDiff = 1;
-      //     sgbm.fullDP = false;
-
-
-      int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
-      if( wk < 1 ) wk = 1;
-      cout << "wk: " << wk << endl;
-      int wait = wk;
-
-      int count = 0;
-      CompositeCanvas canvas;
-      while( video.read( canvas ) ) {
-
-        Mat scaled[2];
-        for( int k = 0; k < 2; ++k )  {
-          remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
-
-          if( opts.scale > 0 ) {
-            resize( canvas[k], scaled[k], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-            cvtColor( scaled[k], scaled[k], CV_BGR2GRAY );
-          } else {
-            cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
-          }
-
-        }
-
-        Mat disparity;
-        int64 t = getTickCount();
-        bm->compute( scaled[0], scaled[1], disparity );
-        //sgbm( scaled[0], scaled[1], disparity );
-        t = getTickCount() - t;
-        cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
-
-        Mat disp8;
-        disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
-          Mat colorDisparity( disp8.size(), CV_8UC3 );
-          cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
-
-        if( writer.isOpened() ) {
-          if( count % 100 == 0 ) { LOG(INFO) << count; }
-
-          CompositeCanvas c( canvas[0], colorDisparity );
-
-          writer << c;
-        }
-
-        if( opts.doDisplay ) {
-
-          imshow( DenseStereoWindowName, colorDisparity );
-          int ch;
-          ch = waitKey( wait );
-          if( ch == 'q' )
-            break;
-          else if(ch==' ') {
-            wait = (wait == 0) ? wk : 0;
-          }
-        }
-
-        ++count;
-
-      }
-
-
-      //     Mat disparity;
-      //     int64 t = getTickCount();
-      //     //bm( scaled[0], scaled[1], disparity );
-      //     sgbm( scaled[0], scaled[1], disparity );
-      //     t = getTickCount() - t;
-      //     cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
-
-      //     Mat disp8;
-      //     disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
-
-      //     imshow( "disparity", disp8 );
-
-      return true;
-    }
-
-    bool doUndistort( CompositeCanvas &canvas )
-    {
+    int count = 0;
+    CompositeCanvas canvas;
+    while( video.read( canvas ) ) {
       for( int k = 0; k < 2; ++k ) 
-        cameras[k]->undistortImage( canvas[k], canvas[k] );
+        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
 
-      return true;
-    }
+      if( writer.isOpened() ) {
+        if( count % 100 == 0 ) { LOG(INFO) << count; }
+        writer << canvas;
+      }
 
+      if( opts.doDisplay ) {
 
-    bool loadCalibrationFiles( void )
-    {
+        if( opts.scale  > 0.0 ) 
+          imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
+        else 
+          imshow( RectifyWindowName, canvas );
 
-      sCal.load( opts.stereoCalibration );
-
-      for( int k =0; k < 2; ++k ) {
-        cameras[k] = CameraFactory::LoadDistortionModel( opts.cameraCalibrations[k] );
-
-        if( cameras[k] == NULL) {
-          cerr << "Error loading calibration file " + opts.cameraCalibrations[k] << endl;
-          return false;
+        int ch;
+        ch = waitKey( wait );
+        if( ch == 'q' )
+          break;
+        else if(ch==' ') {
+          wait = (wait == 0) ? wk : 0;
         }
       }
 
-      calculateRectification();
+      ++count;
+    }
 
-      return true;
+    return 0;
+  }
+
+  int doUndistort( void )
+  {
+    LOG(INFO) << "Fps: " << video.fps();
+    int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
+    int wait = wk;
+
+    int count = 0;
+    CompositeCanvas canvas;
+    while( video.read( canvas ) ) {
+
+      undistortCanvas( canvas );
+
+      if( writer.isOpened() ) {
+        if( count % 100 == 0 ) { LOG(INFO) << count; }
+        writer << canvas;
+      }
+
+      if( opts.doDisplay ) {
+
+        if( opts.scale  > 0.0 ) 
+          imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
+        else 
+          imshow( RectifyWindowName, canvas );
+
+        int ch;
+        ch = waitKey( wait );
+        if( ch == 'q' )
+          break;
+        else if(ch==' ') {
+          wait = (wait == 0) ? wk : 0;
+        }
+      }
+
+      ++count;
+    }
+
+    return 0;
+  }
+
+
+
+
+  bool doDenseStereo( void )
+  {
+    int numberOfDisparities = (video.frameSize().width / 8 + 15) & -16;
+    int SADWindowSize = 0;
+
+    Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
+    //     StereoSGBM sgbm;
+
+    bm->setMinDisparity( 0 );
+    bm->setSpeckleRange( 32 );
+    bm->setSpeckleWindowSize( 100 );
+
+    //     // bm.state->roi1 = roi1;
+    //     // bm.state->roi2 = roi2;
+    //     // bm.state->preFilterCap = 31;
+    //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
+    //bm.state->minDisparity = 0;
+    //bm.state->numberOfDisparities = numberOfDisparities;
+    //bm.state->textureThreshold = 10;
+    //bm.state->uniquenessRatio = 15;
+    //bm.state->speckleWindowSize = 100;
+    //bm.state->speckleRange = 32;
+    //bm.state->disp12MaxDiff = 1;
+
+    //     sgbm.preFilterCap = 63;
+    //     sgbm.SADWindowSize = 3;
+
+    //     //int cn = canvas.canvas.channels();
+
+    //     sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
+    //     sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
+    //     sgbm.minDisparity = 0;
+    //     sgbm.numberOfDisparities = numberOfDisparities;
+    //     sgbm.uniquenessRatio = 10;
+    //     //sgbm.speckleWindowSize = bm.state->speckleWindowSize;
+    //     //sgbm.speckleRange = bm.state->speckleRange;
+    //     sgbm.disp12MaxDiff = 1;
+    //     sgbm.fullDP = false;
+
+
+    int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
+    if( wk < 1 ) wk = 1;
+    cout << "wk: " << wk << endl;
+    int wait = wk;
+
+    int count = 0;
+    CompositeCanvas canvas;
+    while( video.read( canvas ) ) {
+
+      Mat scaled[2];
+      for( int k = 0; k < 2; ++k )  {
+        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+
+        if( opts.scale > 0 ) {
+          resize( canvas[k], scaled[k], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+          cvtColor( scaled[k], scaled[k], CV_BGR2GRAY );
+        } else {
+          cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
+        }
+
+      }
+
+      Mat disparity;
+      int64 t = getTickCount();
+      bm->compute( scaled[0], scaled[1], disparity );
+      //sgbm( scaled[0], scaled[1], disparity );
+      t = getTickCount() - t;
+      cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+
+      Mat disp8;
+      disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+      Mat colorDisparity( disp8.size(), CV_8UC3 );
+      cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
+
+      if( writer.isOpened() ) {
+        if( count % 100 == 0 ) { LOG(INFO) << count; }
+
+        CompositeCanvas c( canvas[0], colorDisparity );
+
+        writer << c;
+      }
+
+      if( opts.doDisplay ) {
+
+        imshow( DenseStereoWindowName, colorDisparity );
+        int ch;
+        ch = waitKey( wait );
+        if( ch == 'q' )
+          break;
+        else if(ch==' ') {
+          wait = (wait == 0) ? wk : 0;
+        }
+      }
+
+      ++count;
+
     }
 
 
-    static const string RectifyWindowName, DenseStereoWindowName;
+    //     Mat disparity;
+    //     int64 t = getTickCount();
+    //     //bm( scaled[0], scaled[1], disparity );
+    //     sgbm( scaled[0], scaled[1], disparity );
+    //     t = getTickCount() - t;
+    //     cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+
+    //     Mat disp8;
+    //     disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+
+    //     imshow( "disparity", disp8 );
+
+    return true;
+  }
+
+  bool undistortCanvas( CompositeCanvas &canvas )
+  {
+    for( int k = 0; k < 2; ++k ) 
+      cameras[k]->undistortImage( canvas[k], canvas[k] );
+
+    return true;
+  }
+
+
+  bool loadCalibrationFiles( void )
+  {
+
+    sCal.load( opts.stereoCalibration );
+
+    for( int k =0; k < 2; ++k ) {
+      cameras[k] = CameraFactory::LoadDistortionModel( opts.cameraCalibrations[k] );
+
+      if( cameras[k] == NULL) {
+        cerr << "Error loading calibration file " + opts.cameraCalibrations[k] << endl;
+        return false;
+      }
+    }
+
+    calculateRectification();
+
+    return true;
+  }
+
+
+  static const string RectifyWindowName, DenseStereoWindowName;
 
 };
 
-const string StereoProcessorMain::RectifyWindowName = "Rectify";
-const string StereoProcessorMain::DenseStereoWindowName = "Dense Stereo";
+const string StereoProcessorMain::RectifyWindowName = "Rectify",
+      StereoProcessorMain::DenseStereoWindowName = "Dense Stereo";
 
 int main( int argc, char **argv )
 {
