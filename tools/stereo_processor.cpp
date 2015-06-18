@@ -36,7 +36,7 @@ using namespace AplCam;
 struct Options
 {
 
-  typedef enum { DENSE_STEREO, UNDISTORT, RECTIFY, VERB_NONE = -1 } Verb;
+  typedef enum { DENSE_STEREO, UNDISTORT, RECTIFY, SWAP, VERB_NONE = -1 } Verb;
 
   // n.b. the default window should be a non-round number so you don't get an ambiguous number of second transitions...
   Options()
@@ -60,8 +60,8 @@ struct Options
       TCLAP::SwitchArg doDisplayArg("X", "do-display", "display", cmd, false );
 
       TCLAP::ValueArg<std::string> stereoCalibrationArg( "s", "stereo-calibration", "Stereo calibration file", true, "", "YAML file", cmd );
-      TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
-      TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calLeftArg("0","camera-left", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calRightArg("1","camera-right", "Calibration file basename", true, "", "name", cmd );
       TCLAP::ValueArg<std::string> outputFileArg("o", "output-file", "Output file", false, "", "file name", cmd );
 
       TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, -1.0, "scale factor", cmd );
@@ -78,8 +78,8 @@ struct Options
 
       outputFile = outputFileArg.getValue();
       videoFile = videoFileArg.getValue();
-      cameraCalibrations[0] = cal0Arg.getValue();
-      cameraCalibrations[1] = cal1Arg.getValue();
+      cameraCalibrations[0] = calLeftArg.getValue();
+      cameraCalibrations[1] = calRightArg.getValue();
       scale = scaleArg.getValue();
       fastForward = ffArg.getValue();
 
@@ -92,6 +92,11 @@ struct Options
         verb = UNDISTORT;
       } else if( v == "dense" || v == "dense_stereo" ) {
         verb = DENSE_STEREO;
+      } else if( v == "swap" ) {
+        verb = SWAP;
+      } else {
+        LOG(ERROR) << "Didn't understand verb \"" << v << "\"";
+        return false;
       }
 
 
@@ -175,6 +180,9 @@ class StereoProcessorMain {
       case Options::DENSE_STEREO:
         return doDenseStereo();
         break;
+      case Options::SWAP:
+        return doSwap();
+        break;
       case Options::VERB_NONE:
       default:
         LOG(ERROR) << "No verb selected, oh well." << endl;
@@ -218,6 +226,29 @@ class StereoProcessorMain {
                                           frameSize, CV_32FC1, map[k][0], map[k][1] );
     }
   }
+
+  int doSwap( void )
+  {
+
+    int count = 0;
+    CompositeCanvas in;
+    while( video.read( in ) ) {
+
+      CompositeCanvas out( in.size(), CV_8UC3  );
+      in[0].copyTo(out[1]);
+      in[1].copyTo(out[0]);
+
+      if( writer.isOpened() ) {
+        if( count % 100 == 0 ) { LOG(INFO) << count; }
+        writer << out;
+      }
+
+      ++count;
+    }
+
+    return 0;
+  }
+
 
 
   int doRectify( void )
@@ -303,15 +334,20 @@ class StereoProcessorMain {
 
   bool doDenseStereo( void )
   {
-    int numberOfDisparities = (video.frameSize().width / 8 + 15) & -16;
-    int SADWindowSize = 0;
+    const int numDisparities = (video.frameSize().width / 8 + 15) & -16;
+    const int minDisparity = 0;
+    const int blockSize = 3;
 
-    Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
+    //int SADWindowSize = 0;
+
+    //Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
     //     StereoSGBM sgbm;
+    
+    Ptr<StereoMatcher> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize ) );
 
-    bm->setMinDisparity( 0 );
-    bm->setSpeckleRange( 32 );
-    bm->setSpeckleWindowSize( 100 );
+    ///bm->setMinDisparity( 0 );
+    ///bm->setSpeckleRange( 32 );
+    ///bm->setSpeckleWindowSize( 100 );
 
     //     // bm.state->roi1 = roi1;
     //     // bm.state->roi2 = roi2;
@@ -354,6 +390,7 @@ class StereoProcessorMain {
       for( int k = 0; k < 2; ++k )  {
         remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
 
+        // Apply scale before processing
         if( opts.scale > 0 ) {
           resize( canvas[k], scaled[k], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
           cvtColor( scaled[k], scaled[k], CV_BGR2GRAY );
@@ -366,12 +403,11 @@ class StereoProcessorMain {
       Mat disparity;
       int64 t = getTickCount();
       bm->compute( scaled[0], scaled[1], disparity );
-      //sgbm( scaled[0], scaled[1], disparity );
       t = getTickCount() - t;
       cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
       Mat disp8;
-      disparity.convertTo(disp8, CV_8U, 255/(numberOfDisparities*16.));
+      disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.));
       Mat colorDisparity( disp8.size(), CV_8UC3 );
       cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
 
@@ -387,7 +423,9 @@ class StereoProcessorMain {
 
         imshow( DenseStereoWindowName, colorDisparity );
         int ch;
-        ch = waitKey( wait );
+        int w = std::max( (int64)0, wait - t*1000 );
+        ch = waitKey( w );
+
         if( ch == 'q' )
           break;
         else if(ch==' ') {
