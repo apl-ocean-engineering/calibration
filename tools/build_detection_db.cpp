@@ -126,6 +126,11 @@ struct BuildDbOpts {
     //      return false;
     //    }
 
+    LOG(INFO) << "Infiles (" << inFiles.size() << ")";
+    for( size_t i = 0; i < inFiles.size(); ++i ) {
+      LOG(INFO) << "      " << inFiles[i];
+    }
+
     if( (inFiles.size() > 1 ) && (!fs::is_directory( detectionDb ) ) ) {
       LOG(ERROR) << "If multiple files are specified on command line, detection-db cannot be a file.";
       return false;
@@ -137,8 +142,12 @@ struct BuildDbOpts {
 
   string makeDetectionDb( const string &inFile )
   {
-    if( fs::path( detectionDb ).has_filename() && hasCalledMakeDetectionDb ) {
-      LOG(ERROR) << "detection-db is a file, but makeDetectionDb called multiple times!";
+    if( fs::path( detectionDb ).has_filename() ) {
+      if ( hasCalledMakeDetectionDb ) {
+        LOG(ERROR) << "detection-db is a file, but makeDetectionDb called multiple times!";
+      }
+
+      hasCalledMakeDetectionDb = true;
       return detectionDb;
     }
 
@@ -147,7 +156,6 @@ struct BuildDbOpts {
     p += fs::path( inFile ).filename();
     p.replace_extension(".kch");
 
-    hasCalledMakeDetectionDb = true;
 
     return p.string();
   }
