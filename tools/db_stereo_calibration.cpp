@@ -53,21 +53,21 @@ struct DbStereoCalibrationOpts {
       TCLAP::CmdLine cmd("db_stereo_calibration", ' ', "0.1");
 
       TCLAP::ValueArg<std::string> dataDirArg( "d", "data-dir", "Data directory", false, "data/", "dir", cmd );
-      TCLAP::ValueArg<std::string> detectionDb0Arg( "", "detection-db-zero", "Detection db directory", false, ".", "dir", cmd );
-      TCLAP::ValueArg<std::string> detectionDb1Arg( "", "detection-db-one", "Detection db directory", false, ".", "dir", cmd );
+      TCLAP::ValueArg<std::string> detectionDbLeftArg( "", "detection-db-left", "Detection db directory", false, ".", "dir", cmd );
+      TCLAP::ValueArg<std::string> detectionDbRightArg( "", "detection-db-right", "Detection db directory", false, ".", "dir", cmd );
       TCLAP::ValueArg<std::string> boardNameArg( "b", "board-name", "Board name", true, "", "dir", cmd );
-      TCLAP::ValueArg<std::string> cal0Arg("0","camera-zero", "Calibration file basename", true, "", "name", cmd );
-      TCLAP::ValueArg<std::string> cal1Arg("1","camera-one", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calLeftArg("0","camera-left", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calRightArg("1","camera-right", "Calibration file basename", true, "", "name", cmd );
       TCLAP::ValueArg<std::string> stereoCalArg( "o", "calibration-output", "Filename for resulting stereo calibration", true, "", "dir", cmd );
 
       cmd.parse( argc, argv );
 
       dataDir = dataDirArg.getValue();
-      detectionDb[0] = detectionDb0Arg.getValue();
-      detectionDb[1] = detectionDb1Arg.getValue();
+      detectionDb[0] = detectionDbLeftArg.getValue();
+      detectionDb[1] = detectionDbRightArg.getValue();
       boardName = boardNameArg.getValue();
-      cameraCalibrations[0] = cal0Arg.getValue();
-      cameraCalibrations[1] = cal1Arg.getValue();
+      cameraCalibrations[0] = calLeftArg.getValue();
+      cameraCalibrations[1] = calRightArg.getValue();
       stereoCalOutput = stereoCalArg.getValue();
 
     } catch( TCLAP::ArgException &e ) {
