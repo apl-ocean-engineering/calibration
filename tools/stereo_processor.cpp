@@ -25,8 +25,14 @@
 #include "distortion_stereo.h"
 #include "camera_factory.h"
 
+#include "video_prefs.h"
+
+#include <boost/filesystem.hpp>
+
 using namespace cv;
 using namespace std;
+
+using namespace boost::filesystem;
 
 //using AprilTags::TagDetection;
 
@@ -48,6 +54,7 @@ struct Options
   Verb verb;
   string stereoCalibration, cameraCalibrations[2], videoFile, outputFile;
   float scale, fastForward;
+  int seekTo;
   bool doDisplay;
 
   bool parseOpts( int argc, char **argv, stringstream &msg )
@@ -67,6 +74,8 @@ struct Options
       TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, -1.0, "scale factor", cmd );
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
 
+      TCLAP::ValueArg<int> seekToArg("", "seek-to", "Seek to a frame", false, 0, "seek to" ,cmd );
+
       //TCLAP::SwitchArg doAnnotateArg("N", "do-annotate", "Do annotate entries into a video", cmd, false );
 
       TCLAP::UnlabeledValueArg< std::string > verbArg( "verb", "Verb", true, "", "verb", cmd );
@@ -76,12 +85,14 @@ struct Options
 
       doDisplay = doDisplayArg.getValue();
 
-      outputFile = outputFileArg.getValue();
+      outputFile = path(outputFileArg.getValue()).replace_extension( VideoExtension ).string();
       videoFile = videoFileArg.getValue();
       cameraCalibrations[0] = calLeftArg.getValue();
       cameraCalibrations[1] = calRightArg.getValue();
       scale = scaleArg.getValue();
       fastForward = ffArg.getValue();
+
+      seekTo = seekToArg.getValue();
 
       stereoCalibration = stereoCalibrationArg.getValue();
 
@@ -142,8 +153,13 @@ class StereoProcessorMain {
       return -1;
     }
 
-    //video.rewind();
-    //if( opts.seekTo > 0 ) video.seek( opts.seekTo );
+    if( opts.seekTo > 0 ) 
+    {
+      LOG(INFO) << "Seeking to " << opts.seekTo;
+      if( video.seek( opts.seekTo ) == false ) {
+        LOG(ERROR) << "Video would not seek to " << opts.seekTo;
+      }
+    }
 
     if( loadCalibrationFiles() == false ) return -1;
 
@@ -162,7 +178,7 @@ class StereoProcessorMain {
       //    break;
       //}
 
-      writer.open( opts.outputFile, VideoWriter::fourcc('X','V','I','D'), fps, outputSize );
+      writer.open( opts.outputFile, VideoCodec, fps, outputSize );
 
       if( !writer.isOpened() ) {
         LOG(ERROR) << "Error creating writer for " << opts.outputFile;
@@ -336,14 +352,27 @@ class StereoProcessorMain {
   {
     const int numDisparities = (video.frameSize().width / 8 + 15) & -16;
     const int minDisparity = 0;
-    const int blockSize = 3;
+    const int blockSize = 13;
+
+    const int SADWindowSize  = 9;
+    const int p1 = 2 * SADWindowSize * SADWindowSize;
+    const int p2 = 4 * p1;
+    const int speckleWindowSize = 50;
+    const int speckleRange = 32;
+    const int uniquenessRatio = 15;
 
     //int SADWindowSize = 0;
 
     //Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
     //     StereoSGBM sgbm;
     
-    Ptr<StereoMatcher> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize ) );
+    Ptr<StereoSGBM> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize ) );
+
+    //bm->setSpeckleRange( speckleRange );
+    //bm->setSpeckleWindowSize( speckleWindowSize );
+    //bm->setUniquenessRatio( uniquenessRatio );
+    bm->setP1( p1 );
+    bm->setP2( p2 );
 
     ///bm->setMinDisparity( 0 );
     ///bm->setSpeckleRange( 32 );
@@ -386,14 +415,16 @@ class StereoProcessorMain {
     CompositeCanvas canvas;
     while( video.read( canvas ) ) {
 
-      Mat scaled[2];
+      CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
+                                     canvas.size().height * opts.scale), CV_8UC1 );
       for( int k = 0; k < 2; ++k )  {
         remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
 
         // Apply scale before processing
         if( opts.scale > 0 ) {
-          resize( canvas[k], scaled[k], Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-          cvtColor( scaled[k], scaled[k], CV_BGR2GRAY );
+          Mat resized;
+          resize( canvas[k], resized, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
+          cvtColor( resized, scaled[k], CV_BGR2GRAY );
         } else {
           cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
         }
@@ -404,7 +435,7 @@ class StereoProcessorMain {
       int64 t = getTickCount();
       bm->compute( scaled[0], scaled[1], disparity );
       t = getTickCount() - t;
-      cout << "Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+      LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
       Mat disp8;
       disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.));
@@ -421,10 +452,11 @@ class StereoProcessorMain {
 
       if( opts.doDisplay ) {
 
+          imshow( RectifyWindowName, scaled );
         imshow( DenseStereoWindowName, colorDisparity );
         int ch;
-        int w = std::max( (int64)0, wait - t*1000 );
-        ch = waitKey( w );
+//int w = std::max( (int64)10, wait - t*1000 );
+        ch = waitKey( wait );
 
         if( ch == 'q' )
           break;
