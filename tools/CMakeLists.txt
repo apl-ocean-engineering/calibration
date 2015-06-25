@@ -67,7 +67,7 @@ add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 
 add_executable( stereo_processor stereo_processor.cpp )
 
-add_executable( sonar_calibration.cpp sonar_calibration.cpp )
+add_executable( sonar_calibration sonar_calibration.cpp )
 
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
