@@ -54,8 +54,8 @@ struct SonarCalibrationError {
 };
 
 struct SonarCalibrationErrorFactory {
-  SonarCalibrationErrorFactory( Vector6f pose, ceres::LossFunction *lossF = NULL )
-      : _pose( pose.cast<double>() ), _lossFunc( lossF )
+  SonarCalibrationErrorFactory( Vector6d &pose, ceres::LossFunction *lossF = NULL )
+      : _pose( pose ), _lossFunc( lossF )
   {;}
 
   void add( ceres::Problem &problem, const Vector2f &vPoint, const Vector3f &sPoint )
@@ -66,7 +66,7 @@ struct SonarCalibrationErrorFactory {
     problem.AddResidualBlock( costFunction, _lossFunc, _pose.data() );
   }
 
-  Vector6d _pose;
+  Vector6d &_pose;
   ceres::LossFunction *_lossFunc;
 };
 
@@ -78,9 +78,9 @@ bool SonarCalibrationSolver::solve( const SonarCalData &data, Result &result )
   ceres::LossFunction *lossFunc = new ceres::HuberLoss( 4.0 );
     LOG(INFO) << "Using Huber loss function";
 
-    Vector6f pose;
+    result.pose = Vector6d::Zero();
 
-    SonarCalibrationErrorFactory factory(  pose, lossFunc );
+    SonarCalibrationErrorFactory factory(  result.pose, lossFunc );
 
   ceres::Problem problem;
 
@@ -100,7 +100,6 @@ bool SonarCalibrationSolver::solve( const SonarCalData &data, Result &result )
   ceres::Solve(options, &problem, &summary);
   std::cout << summary.FullReport() << "\n";
 
-  result.pose = pose;
 
 //  result.totalTime = summary.total_time_in_seconds;
 

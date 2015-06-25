@@ -11,7 +11,8 @@
 
 using Eigen::Vector2f;
 using Eigen::Vector3f;
-using Eigen::Vector6f;
+
+using Eigen::Vector6d;
 
 using std::string;
 using std::vector;
@@ -40,7 +41,7 @@ class SonarCalibrationSolver {
     Result( void )
     {;}
     
-    Vector6f pose;
+    Vector6d pose;
 
     bool good;
     float residual;
