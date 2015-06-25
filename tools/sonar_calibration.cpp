@@ -12,6 +12,8 @@
 
 #include "camera_factory.h"
 
+#include "sonar_calibration_solver.h"
+
 using namespace std;
 using namespace Eigen;
 
@@ -99,9 +101,9 @@ class SonarCalibration {
       }
 
       string fname( tokens[0] );
-      Vec3f  sPoint( atof( tokens[1].c_str() ), 
-                    atof( tokens[2].c_str() ),
-                    atof( tokens[3].c_str() ) );
+      Vector3f  sPoint( atof( tokens[1].c_str() ), 
+                       atof( tokens[2].c_str() ),
+                       atof( tokens[3].c_str() ) );
 
       // Rewind vid
       vid.seekg( 0 );
@@ -114,10 +116,10 @@ class SonarCalibration {
         if( tokens[0] == fname ) {
           LOG(INFO) << "Match: " << fname << " " << tokens[0];
 
-          Vec2f vPoint( atof( tokens[1].c_str() ),
-                       atof( tokens[2].c_str() ) );
+          Vector2f vPoint( atof( tokens[1].c_str() ),
+                          atof( tokens[2].c_str() ) );
 
-          data.push_back( SonarCalDatum( vPoint, sPoint, fname ) );
+          data.push_back( SonarCalibrationSolver::SonarCalDatum( vPoint, sPoint, fname ) );
           stop = true;
         }
       }
@@ -128,23 +130,16 @@ class SonarCalibration {
 
 
 
+    SonarCalibrationSolver solver;
+    solver.solve( data );
+
+
   }
 
 
  protected:
 
-  struct SonarCalDatum {
-    SonarCalDatum( const Vec2f _img, const Vec3f _sonar, const string &_name = "" )
-        : img( _img ), sonar( _sonar ), name( _name )
-    {;}
-
-    Vec2f img;
-    Vec3f sonar;
-    string name;
-  };
-
-  typedef vector<SonarCalDatum> SonarCalData;
-  SonarCalData data;
+  SonarCalibrationSolver::SonarCalData data;
 
   DistortionModel *camera;
   SonarCalibrationOpts &opts;
