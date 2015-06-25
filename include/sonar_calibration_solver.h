@@ -5,9 +5,13 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/StdVector>
+
+#include "sonar_types.h"
 
 using Eigen::Vector2f;
 using Eigen::Vector3f;
+using Eigen::Vector6f;
 
 using std::string;
 using std::vector;
@@ -16,7 +20,9 @@ class SonarCalibrationSolver {
  public:
 
   struct SonarCalDatum {
-    SonarCalDatum( const Vector2f _img, const Vector3f _sonar, const string &_name = "" )
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    SonarCalDatum( const Vector2f &_img, const Vector3f &_sonar, const string &_name = "" )
         : img( _img ), sonar( _sonar ), name( _name )
     {;}
 
@@ -25,13 +31,26 @@ class SonarCalibrationSolver {
     string name;
   };
 
-  typedef vector<SonarCalDatum> SonarCalData;
+  typedef vector<SonarCalDatum,
+          Eigen::aligned_allocator< SonarCalDatum > > SonarCalData;
+
+  struct Result {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    Result( void )
+    {;}
+    
+    Vector6f pose;
+
+    bool good;
+    float residual;
+  };
 
 
 
   SonarCalibrationSolver( void ) {;}
 
-  void solve( const SonarCalData & );
+  bool solve( const SonarCalData &, Result & );
 
 
  protected:

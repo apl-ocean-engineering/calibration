@@ -90,9 +90,14 @@ class SonarCalibration {
       return -1;
     }
 
-    vector<string> tokens;
     string sline, vline;
+    vector<string> vLines;
+    while( std::getline( vid, vline ) ) vLines.push_back( vline );
+
+    int sCount = 0;
+    vector<string> tokens;
     while( std::getline( son, sline ) ) {
+      sCount++;
       boost::split(tokens, sline, boost::is_any_of(","));
 
       if( tokens.size() < 4 ) {
@@ -108,31 +113,48 @@ class SonarCalibration {
       // Rewind vid
       vid.seekg( 0 );
       bool stop = false;
-      while( !stop and std::getline( vid, vline ) ) {
-        boost::split(tokens, vline, boost::is_any_of(","));
+      for( size_t i = 0; i < vLines.size() and !stop; ++i ) {
+        boost::split(tokens, vLines[i], boost::is_any_of(","));
 
         if( tokens.size() < 3 ) continue;
 
-        if( tokens[0] == fname ) {
+        if( tokens[0].compare( 0, 18, fname ) == 0 ) {
           LOG(INFO) << "Match: " << fname << " " << tokens[0];
 
-          Vector2f vPoint( atof( tokens[1].c_str() ),
+          ImagePoint vImage( atof( tokens[1].c_str() ),
                           atof( tokens[2].c_str() ) );
+          float radius( atof( tokens[3].c_str() ) );
 
-          data.push_back( SonarCalibrationSolver::SonarCalDatum( vPoint, sPoint, fname ) );
+          // Normalize and undistort vPoint
+          ImagePoint undistorted = camera->undistort( vImage, false );
+
+          Vector2f undVec( undistorted[0], undistorted[1] );
+
+          data.push_back( SonarCalibrationSolver::SonarCalDatum( undVec, sPoint, fname ) );
           stop = true;
         }
       }
 
     }
 
-    LOG(INFO) << "Loaded " << data.size() << " points";
+    LOG(INFO) << "Loaded " << data.size() << " points from " << sCount << " sonar points and " << vLines.size() << " video points";
+
+    const int minDataPoints = 3;
+    if( data.size() < minDataPoints ) {
+      LOG(ERROR) << "Insufficient points to solve.";
+      return -1;
+    }
 
 
 
     SonarCalibrationSolver solver;
-    solver.solve( data );
+    SonarCalibrationSolver::Result result;
+    solver.solve( data, result );
 
+    LOG(INFO) << "Solution is: " << (result.good ? "GOOD" : "BAD");
+    if( result.good ) {
+      LOG(INFO) << "Pose is: " << result.pose;
+    }
 
   }
 
