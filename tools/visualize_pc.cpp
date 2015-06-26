@@ -34,6 +34,7 @@ class VisualizerOpts {
     {;}
 
     string pcFile, imageOverlay, cameraFile, cameraSonarFile;
+    bool imageAxes;
 
     bool parseCmdLine( int argc, char **argv )
     {
@@ -45,6 +46,8 @@ class VisualizerOpts {
         TCLAP::ValueArg< string > cameraFileArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
         TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
 
+        TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
+
         TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
 
         cmd.parse( argc, argv );
@@ -54,6 +57,8 @@ class VisualizerOpts {
         imageOverlay = overlayImageArg.getValue();
         cameraFile   = cameraFileArg.getValue();
         cameraSonarFile = cameraSonarFileArg.getValue();
+
+        imageAxes = imgAxesArg.getValue();
 
 
       } catch (TCLAP::ArgException &e) {
@@ -125,7 +130,7 @@ class ImageOverlay : public ColorModel {
     DistortionModel *camera = CameraFactory::LoadDistortionModel( camFile );
     Mat img( imread( imgFile ) );
 
-return new ImageOverlay( img, camera );
+    return new ImageOverlay( img, camera );
   }
 
  protected:
@@ -150,6 +155,7 @@ int main (int argc, char** argv)
 
   ColorModel *model;
   if( opts.imageOverlay.length() > 0 ) {
+    LOG(INFO) << "Constructing ImageOverlay";
 model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.cameraSonarFile );
   } else {
     model = new ConstantColor( 150, 150, 150 );
@@ -176,8 +182,15 @@ model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.camera
 
     pcl::PointXYZRGB point;
     point.x = x;
-    point.y = y;
-    point.z = z;
+
+    if( opts.imageAxes ) {
+      point.y = -z;
+      point.z = y;
+    } else {
+      point.y = y;
+      point.z = z;
+    }
+
     point.rgb = model->color( x,y,z );
     basic_cloud_ptr->points.push_back( point );
 

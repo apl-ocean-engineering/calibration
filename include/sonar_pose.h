@@ -1,8 +1,6 @@
 #ifndef __SONAR_POSE_H__
 #define __SONAR_POSE_H__
 
-#include <iostream>
-
 #include <string>
 
 #include <opencv2/core.hpp>
@@ -10,10 +8,9 @@
 
 #include <Eigen/Core>
 
-#include "sonar_types.h"
+#include  <glog/logging.h>
 
-using std::cout;
-using std::endl;
+#include "sonar_types.h"
 
 using Eigen::Vector6d;
 
@@ -38,16 +35,12 @@ class SonarPose {
   }
   Vec3f euler( void ) const
   {
-    cv::Mat qx, qy, qz, Rq, Qq;
+    cv::Matx33f qx, qy, qz, Rq, Qq;
     cv::RQDecomp3x3( rotMat(), Rq, Qq, qx, qy, qz );
 
-    cout << qx << endl;
-    cout << qy << endl;
-    cout << qz << endl;
-
-    return Vec3f( acos(qx.at<double>(1,1)),
-                  acos(qy.at<double>(0,0)),
-                  acos(qz.at<double>(0,0)) );
+    return Vec3f( acos( qx(1,1) ),
+                  acos( qy(0,0) ),
+                  acos( qz(0,0) ) );
   }
 
 

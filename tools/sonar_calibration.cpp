@@ -28,6 +28,7 @@ class SonarCalibrationOpts {
   {;}
 
   string sonarFile, cameraFile, cameraCalibration, calOut;
+  bool imageAxes;
 
   bool parseOpts( int argc, char **argv )
   {
@@ -39,6 +40,8 @@ class SonarCalibrationOpts {
       TCLAP::ValueArg<std::string> cameraFileArg("", "camera-file", "Sphere db", true, "", "Sphere db", cmd );
       TCLAP::ValueArg<std::string> cameraCalArg("", "camera-calibration", "Camera cal", true, "", "Camera calibration file", cmd );
 
+        TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
+
       TCLAP::ValueArg<std::string> calOutArg("", "calibration-out", "Out", false, "", "Save calibration", cmd );
 
       cmd.parse( argc, argv );
@@ -47,6 +50,7 @@ class SonarCalibrationOpts {
       cameraFile = cameraFileArg.getValue();
       cameraCalibration = cameraCalArg.getValue();
       calOut = calOutArg.getValue();
+      imageAxes = imgAxesArg.getValue();
 
     } catch( TCLAP::ArgException &e ) {
       LOG(ERROR) << "Parsing error: " << e.error() << " for " << e.argId();
@@ -115,6 +119,11 @@ class SonarCalibration {
                        atof( tokens[2].c_str() ),
                        atof( tokens[3].c_str() ) );
 
+      if( opts.imageAxes ) {
+        std::swap( sPoint[1], sPoint[2] );
+        sPoint[1] *= -1;
+      }
+
       // Rewind vid
       vid.seekg( 0 );
       bool stop = false;
@@ -166,9 +175,9 @@ class SonarCalibration {
       for( int i = 0; i < 3; ++i )
         euler[i] *= 180.0/M_PI;
 
-      LOG(INFO) << "Euler angles: " << euler;
+      LOG(INFO) << "Euler angles (rotate point in sonar coords to camera frame): " << euler;
 
-      LOG(INFO) << "Translation vector: " << pose.trans();
+      LOG(INFO) << "Translation vector (sonar origin in camera coords): " << pose.trans();
 
       if( opts.calOut.size() > 0 ) pose.write( opts.calOut );
 
