@@ -40,7 +40,7 @@ class SonarCalibrationSolver {
 
     Result( void )
     {;}
-    
+
     Vector6d pose;
 
     bool good;
@@ -57,6 +57,8 @@ class SonarCalibrationSolver {
  protected:
 
 };
+
+
 
 
 #endif

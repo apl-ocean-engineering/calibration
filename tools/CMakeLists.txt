@@ -3,6 +3,10 @@ set( CALIBRATION_SRCS
   ../lib/calibrator.cpp
   ../lib/calibration_opts.cpp )
 
+set( SONAR_SRCS
+  ../lib/sonar_calibration_solver.cpp 
+  ../lib/sonar_pose.cpp )
+
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 include_directories( ${aplcam_INCLUDE_DIR} 
 	             ${tclap_INCLUDE_DIR} )
@@ -68,12 +72,20 @@ add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 add_executable( stereo_processor stereo_processor.cpp )
 
 add_executable( sonar_calibration sonar_calibration.cpp
-  ../lib/sonar_calibration_solver.cpp  )
+  ${SONAR_SRCS} )
 
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( stereo_calibration ${PCL_LIBRARIES} )
+
+add_executable( visualize_pc visualize_pc.cpp
+  ${SONAR_SRCS} )
+target_compile_definitions( visualize_pc PUBLIC ${PCL_DEFINITIONS})
+target_include_directories( visualize_pc PUBLIC ${PCL_INCLUDE_DIRS} )
+target_link_libraries( visualize_pc ${PCL_LIBRARIES} )
+
+
 
 add_executable( deinterlace deinterlace.cpp )
 

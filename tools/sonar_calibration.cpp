@@ -14,6 +14,8 @@
 
 #include "sonar_calibration_solver.h"
 
+#include "sonar_pose.h"
+
 using namespace std;
 using namespace Eigen;
 
@@ -25,7 +27,7 @@ class SonarCalibrationOpts {
   SonarCalibrationOpts( void )
   {;}
 
-  string sonarFile, cameraFile, cameraCalibration;
+  string sonarFile, cameraFile, cameraCalibration, calOut;
 
   bool parseOpts( int argc, char **argv )
   {
@@ -37,11 +39,14 @@ class SonarCalibrationOpts {
       TCLAP::ValueArg<std::string> cameraFileArg("", "camera-file", "Sphere db", true, "", "Sphere db", cmd );
       TCLAP::ValueArg<std::string> cameraCalArg("", "camera-calibration", "Camera cal", true, "", "Camera calibration file", cmd );
 
+      TCLAP::ValueArg<std::string> calOutArg("", "calibration-out", "Out", false, "", "Save calibration", cmd );
+
       cmd.parse( argc, argv );
 
       sonarFile = sonarFileArg.getValue();
       cameraFile = cameraFileArg.getValue();
       cameraCalibration = cameraCalArg.getValue();
+      calOut = calOutArg.getValue();
 
     } catch( TCLAP::ArgException &e ) {
       LOG(ERROR) << "Parsing error: " << e.error() << " for " << e.argId();
@@ -153,9 +158,24 @@ class SonarCalibration {
 
     LOG(INFO) << "Solution is: " << (result.good ? "GOOD" : "BAD");
     if( result.good ) {
-      LOG(INFO) << "Pose is: " << result.pose;
+      SonarPose pose( result.pose );
+
+      LOG(INFO) << "Rotation vector: " << pose.rot();
+      Vec3f euler( pose.euler() );
+      LOG(INFO) << euler;
+      for( int i = 0; i < 3; ++i )
+        euler[i] *= 180.0/M_PI;
+
+      LOG(INFO) << "Euler angles: " << euler;
+
+      LOG(INFO) << "Translation vector: " << pose.trans();
+
+      if( opts.calOut.size() > 0 ) pose.write( opts.calOut );
+
     }
 
+
+    return 0;
   }
 
 
