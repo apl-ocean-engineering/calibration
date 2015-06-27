@@ -43,6 +43,7 @@ class SonarPose {
                   acos( qz(0,0) ) );
   }
 
+  Vec3f sonarToImage( const Vec3f &pt );
 
 
   const Vec3f &trans( void ) const { return _trans; }

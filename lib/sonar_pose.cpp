@@ -16,6 +16,11 @@ SonarPose::SonarPose( const Vec3f &rot, const Vec3f &trans )
 {;}
 
 
+Vec3f SonarPose::sonarToImage( const Vec3f &pt )
+{
+return rotMat() * pt + _trans;
+}
+
 bool SonarPose::write( const string &filename )
 {
   FileStorage fs( filename, FileStorage::WRITE  );
@@ -28,16 +33,12 @@ SonarPose *SonarPose::Load( const string &filename )
 {
   FileStorage fs( filename, FileStorage::READ );
 
-  Mat rmat, tmat;
-  fs["rot"] >> rmat;
-  fs["trans"] >> tmat;
-
-
+  //Mat rmat, tmat;
   Vec3f rot, 
         trans;
 
-  rmat.convertTo( rot, CV_32F );
-  tmat.convertTo( trans, CV_32F );
+  fs["rot"] >> rot;
+  fs["trans"] >> trans;
 
   return new SonarPose( rot, trans );
 }

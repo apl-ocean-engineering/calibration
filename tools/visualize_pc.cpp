@@ -20,6 +20,7 @@
 #include <glog/logging.h>
 #include <tclap/CmdLine.h>
 
+#include "sonar_pose.h"
 #include "distortion_model.h"
 #include "camera_factory.h"
 
@@ -29,68 +30,68 @@ using namespace Distortion;
 
 
 class VisualizerOpts {
-  public:
-    VisualizerOpts( void )
-    {;}
+ public:
+  VisualizerOpts( void )
+  {;}
 
-    string pcFile, imageOverlay, cameraFile, cameraSonarFile;
-    bool imageAxes;
+  string pcFile, imageOverlay, cameraFile, cameraSonarFile;
+  bool imageAxes;
 
-    bool parseCmdLine( int argc, char **argv )
-    {
+  bool parseCmdLine( int argc, char **argv )
+  {
 
-      try {
-        TCLAP::CmdLine cmd("Visualizers", ' ', "0.1" );
+    try {
+      TCLAP::CmdLine cmd("Visualizers", ' ', "0.1" );
 
-        TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
-        TCLAP::ValueArg< string > cameraFileArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
-        TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
+      TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
+      TCLAP::ValueArg< string > cameraFileArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
+      TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
 
-        TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
+      TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
 
-        TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
+      TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
 
-        cmd.parse( argc, argv );
+      cmd.parse( argc, argv );
 
-        pcFile = pcFileArg.getValue();
+      pcFile = pcFileArg.getValue();
 
-        imageOverlay = overlayImageArg.getValue();
-        cameraFile   = cameraFileArg.getValue();
-        cameraSonarFile = cameraSonarFileArg.getValue();
+      imageOverlay = overlayImageArg.getValue();
+      cameraFile   = cameraFileArg.getValue();
+      cameraSonarFile = cameraSonarFileArg.getValue();
 
-        imageAxes = imgAxesArg.getValue();
+      imageAxes = imgAxesArg.getValue();
 
 
-      } catch (TCLAP::ArgException &e) {
-        LOG(ERROR) << "error: " << e.error() << " for arg " << e.argId();
-      }
-
-      return validate();
+    } catch (TCLAP::ArgException &e) {
+      LOG(ERROR) << "error: " << e.error() << " for arg " << e.argId();
     }
 
-    bool  validate( void )
-    {
-      bool overlay = imageOverlay.length() > 0,
-           cam     = cameraFile.length() > 0,
-           camson  = cameraSonarFile.length() > 0;
+    return validate();
+  }
 
-      if( overlay == false && cam == false && camson == false ) {
-      } else if( overlay == true && cam == true && camson == true ) {
-      } else {
-        LOG(ERROR) << "All three image-overlay, camera-calibration and camera-sonar must be specified if any one is specified";
-        return false;
-      }
+  bool  validate( void )
+  {
+    bool overlay = imageOverlay.length() > 0,
+         cam     = cameraFile.length() > 0,
+         camson  = cameraSonarFile.length() > 0;
 
-
-      return true;
+    if( overlay == false && cam == false && camson == false ) {
+    } else if( overlay == true && cam == true && camson == true ) {
+    } else {
+      LOG(ERROR) << "All three image-overlay, camera-calibration and camera-sonar must be specified if any one is specified";
+      return false;
     }
+
+
+    return true;
+  }
 
 };
 
 
 class ColorModel {
  public:
-  virtual float color( const float x, const float y, const float z ) = 0;
+  virtual uint32_t color( const float x, const float y, const float z ) = 0;
 };
 
 class ConstantColor : public ColorModel {
@@ -99,44 +100,73 @@ class ConstantColor : public ColorModel {
       : _r(r), _g(g), _b(b), _rgb( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) )
   {;}
 
-  virtual float color( const float x, const float y, const float z )
+  virtual uint32_t color( const float x, const float y, const float z )
   {
     return _rgb;
   }
 
  protected:
   int _r, _g, _b;
-  float _rgb;
+  uint32_t _rgb;
 };
 
 class ImageOverlay : public ColorModel {
  public:
-  ImageOverlay( const Mat &img, DistortionModel *cam )
-      : _img( img ), _cam( cam )
+  ImageOverlay( const Mat &img, DistortionModel *cam, SonarPose *pose )
+      : _img( img ), _cam( cam ), _pose( pose )
   {;}
 
   ~ImageOverlay()
   {
     delete _cam;
+    delete _pose;
   }
 
-  virtual float color( const float x, const float y, const float z )
+  virtual uint32_t color( const float x, const float y, const float z )
   {
-    return 0;
+    // Transform point to image frame
+    Vec3f inImgFrame( _pose->sonarToImage( Vec3f( x, y, z ) ) );
+
+    Vec2d inImgDist( _cam->distort( inImgFrame ) );
+    Vec2f inImg( inImgDist );
+
+    int r,g,b;
+
+    //LOG(INFO) << Vec3f(x,y,z) << " -> " << inImgFrame << " -> " << inImgDist << " -> " << inImg;
+
+    Vec2i intImg( round(inImg[0]), round(inImg[1]) );
+
+    if( intImg[0] < 0 || intImg[0] > _img.size().width ||
+       intImg[1] < 0 || intImg[1] > _img.size().height ) {
+      r = g = b = 100;
+    } else {
+      Vec3b p( _img.at< Vec3b >( intImg[1], intImg[0] ) );
+
+      //LOG(INFO) << p;
+
+      r = p[0];
+      g = p[1];
+      b = p[2];
+    }
+
+
+    return ( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) );
   }
 
   static ImageOverlay *Construct( const string &imgFile, const string &camFile, const string &camSonFile )
   {
     DistortionModel *camera = CameraFactory::LoadDistortionModel( camFile );
     Mat img( imread( imgFile ) );
+    SonarPose *pose = SonarPose::Load( camSonFile );
 
-    return new ImageOverlay( img, camera );
+    return new ImageOverlay( img, camera, pose );
   }
 
  protected:
 
   Mat _img;
   DistortionModel *_cam;
+  SonarPose *_pose;
 
 };
 
@@ -156,7 +186,7 @@ int main (int argc, char** argv)
   ColorModel *model;
   if( opts.imageOverlay.length() > 0 ) {
     LOG(INFO) << "Constructing ImageOverlay";
-model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.cameraSonarFile );
+    model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.cameraSonarFile );
   } else {
     model = new ConstantColor( 150, 150, 150 );
   }
@@ -191,7 +221,8 @@ model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.camera
       point.z = z;
     }
 
-    point.rgb = model->color( x,y,z );
+    uint32_t rgb = model->color( x,y,z );
+    point.rgb = *reinterpret_cast<float*>(&rgb);
     basic_cloud_ptr->points.push_back( point );
 
   }
@@ -264,8 +295,8 @@ model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.camera
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
 
   viewer->setBackgroundColor (0, 0, 0);
-  //  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
-  viewer->addPointCloud<pcl::PointXYZRGB> ( basic_cloud_ptr, "sample cloud");
+  pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(basic_cloud_ptr);
+  viewer->addPointCloud<pcl::PointXYZRGB> ( basic_cloud_ptr, rgb, "sample cloud");
   viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
   viewer->addCoordinateSystem (1.0);
   viewer->initCameraParameters ();
@@ -366,7 +397,7 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> shapesVis (pcl::PointCloud<
   //-----Add shapes at cloud points-----
   //------------------------------------
   viewer->addLine<pcl::PointXYZRGB> (cloud->points[0],
-      cloud->points[cloud->size() - 1], "line");
+                                     cloud->points[cloud->size() - 1], "line");
   viewer->addSphere (cloud->points[0], 0.2, 0.5, 0.5, 0.0, "sphere");
 
   //---------------------------------------
@@ -428,7 +459,7 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> viewportsVis (
 
 unsigned int text_id = 0;
 void keyboardEventOccurred (const pcl::visualization::KeyboardEvent &event,
-    void* viewer_void)
+                            void* viewer_void)
 {
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
   if (event.getKeySym () == "r" && event.keyDown ())
@@ -446,7 +477,7 @@ void keyboardEventOccurred (const pcl::visualization::KeyboardEvent &event,
 }
 
 void mouseEventOccurred (const pcl::visualization::MouseEvent &event,
-    void* viewer_void)
+                         void* viewer_void)
 {
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
   if (event.getButton () == pcl::visualization::MouseEvent::LeftButton &&
