@@ -16,6 +16,7 @@
 
 #include <opencv2/highgui.hpp>
 #include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 
 #include <glog/logging.h>
 #include <tclap/CmdLine.h>
@@ -34,7 +35,7 @@ class VisualizerOpts {
   VisualizerOpts( void )
   {;}
 
-  string pcFile, imageOverlay, cameraFile, cameraSonarFile;
+  string pcFile, imageOverlay, cameraFile, cameraSonarFile, annotatedImage;
   bool imageAxes;
 
   bool parseCmdLine( int argc, char **argv )
@@ -46,6 +47,7 @@ class VisualizerOpts {
       TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
       TCLAP::ValueArg< string > cameraFileArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
       TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
+      TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
 
       TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
 
@@ -58,6 +60,7 @@ class VisualizerOpts {
       imageOverlay = overlayImageArg.getValue();
       cameraFile   = cameraFileArg.getValue();
       cameraSonarFile = cameraSonarFileArg.getValue();
+      annotatedImage = annotatedImageArg.getValue();
 
       imageAxes = imgAxesArg.getValue();
 
@@ -86,12 +89,20 @@ class VisualizerOpts {
     return true;
   }
 
+  bool doAnnotate( void )
+  {
+    return annotatedImage.length() > 0 && imageOverlay.length() > 0;
+  }
+
 };
 
 
 class ColorModel {
  public:
   virtual uint32_t color( const float x, const float y, const float z ) = 0;
+
+  // A lot janky
+  virtual vector< Vec2i > imagePoints( void ) const { return vector<Vec2i>(); }
 };
 
 class ConstantColor : public ColorModel {
@@ -113,7 +124,7 @@ class ConstantColor : public ColorModel {
 class ImageOverlay : public ColorModel {
  public:
   ImageOverlay( const Mat &img, DistortionModel *cam, SonarPose *pose )
-      : _img( img ), _cam( cam ), _pose( pose )
+      : _img( img ), _cam( cam ), _pose( pose ), _imgPts()
   {;}
 
   ~ImageOverlay()
@@ -142,6 +153,8 @@ class ImageOverlay : public ColorModel {
     } else {
       Vec3b p( _img.at< Vec3b >( intImg[1], intImg[0] ) );
 
+      _imgPts.push_back( inImg );
+
       //LOG(INFO) << p;
 
       r = p[0];
@@ -162,11 +175,14 @@ class ImageOverlay : public ColorModel {
     return new ImageOverlay( img, camera, pose );
   }
 
+  virtual vector< Vec2i > imagePoints( void ) const { return _imgPts; }
+
  protected:
 
   Mat _img;
   DistortionModel *_cam;
   SonarPose *_pose;
+  vector< Vec2i > _imgPts;
 
 };
 
@@ -232,6 +248,17 @@ int main (int argc, char** argv)
   basic_cloud_ptr->width = (int) basic_cloud_ptr->points.size ();
   basic_cloud_ptr->height = 1;
 
+  if( opts.doAnnotate() ) {
+    Mat img = imread( opts.imageOverlay );
+    vector< Vec2i > pts = model->imagePoints();
+
+    LOG(INFO) << "Drawing annoated image with " << pts.size() << " points";
+    for( int i = 0 ; i < pts.size(); ++i ) {
+      circle( img, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 0,0,255 ), -1 );
+    }
+
+    imwrite( opts.annotatedImage, img );
+  }
 
 
   //  pcl::PointCloud<pcl::PointXYZRGB>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
