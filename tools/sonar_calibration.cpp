@@ -115,13 +115,14 @@ class SonarCalibration {
       }
 
       string fname( tokens[0] );
-      Vector3f  sPoint( atof( tokens[1].c_str() ), 
+      Vector3f  sPoint( atof( tokens[1].c_str() ),
                        atof( tokens[2].c_str() ),
                        atof( tokens[3].c_str() ) );
 
       if( opts.imageAxes ) {
-        std::swap( sPoint[1], sPoint[2] );
-        sPoint[1] *= -1;
+        float swap = sPoint[1];
+        sPoint[1] = -sPoint[2];
+        sPoint[2] = swap;
       }
 
       // Rewind vid
@@ -183,7 +184,6 @@ class SonarCalibration {
 
     }
 
-
     return 0;
   }
 
@@ -207,4 +207,3 @@ int main( int argc, char** argv )
   SonarCalibration cal( opts );
   return cal.run();
 }
-
