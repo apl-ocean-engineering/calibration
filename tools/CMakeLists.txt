@@ -4,11 +4,11 @@ set( CALIBRATION_SRCS
   ../lib/calibration_opts.cpp )
 
 set( SONAR_SRCS
-  ../lib/sonar_calibration_solver.cpp 
+  ../lib/sonar_calibration_solver.cpp
   ../lib/sonar_pose.cpp )
 
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
-include_directories( ${aplcam_INCLUDE_DIR} 
+include_directories( ${aplcam_INCLUDE_DIR}
 	             ${tclap_INCLUDE_DIR} )
 
 link_libraries(	${aplcam_LIBS}
@@ -48,12 +48,12 @@ add_executable( calibration calibration.cpp
 
 add_executable( video_calibration video_calibration.cpp  ${CALIBRATION_SRCS} )
 
-add_executable( video_calibration_permutations 
+add_executable( video_calibration_permutations
   video_calibration_permutations.cpp
   ${CALIBRATION_SRCS} )
 
 add_executable( video_calibration_permutations_new
-  video_calibration_permutations_new.cpp 
+  video_calibration_permutations_new.cpp
   ${CALIBRATION_SRCS} )
 
 
@@ -73,6 +73,8 @@ add_executable( stereo_processor stereo_processor.cpp )
 
 add_executable( sonar_calibration sonar_calibration.cpp
   ${SONAR_SRCS} )
+
+add_executable( annotate_sphere_locations annotate_sphere_locations.cpp )
 
 add_executable( stereo_calibration stereo_calibration.cpp )
 target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
