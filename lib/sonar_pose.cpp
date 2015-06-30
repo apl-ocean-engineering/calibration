@@ -8,7 +8,7 @@ using namespace cv;
 
 SonarPose::SonarPose( const Vector6d &p )
 : _rot( p[0], p[1], p[2] ),
-    _trans( p[3], p[4], p[5] )
+  _trans( p[3], p[4], p[5] )
 {;}
 
 SonarPose::SonarPose( const Vec3f &rot, const Vec3f &trans )
@@ -18,7 +18,7 @@ SonarPose::SonarPose( const Vec3f &rot, const Vec3f &trans )
 
 Vec3f SonarPose::sonarToImage( const Vec3f &pt )
 {
-return rotMat() * pt + _trans;
+  return rotMat() * pt + _trans;
 }
 
 bool SonarPose::write( const string &filename )
@@ -34,13 +34,10 @@ SonarPose *SonarPose::Load( const string &filename )
   FileStorage fs( filename, FileStorage::READ );
 
   //Mat rmat, tmat;
-  Vec3f rot, 
-        trans;
+  Vec3f rot, trans;
 
   fs["rot"] >> rot;
   fs["trans"] >> trans;
 
   return new SonarPose( rot, trans );
 }
-
-

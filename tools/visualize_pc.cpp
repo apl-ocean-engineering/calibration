@@ -21,9 +21,9 @@
 #include <glog/logging.h>
 #include <tclap/CmdLine.h>
 
-#include "sonar_pose.h"
-#include "distortion_model.h"
-#include "camera_factory.h"
+#include "sonar_image_warper.h"
+#include "sonar_detections.h"
+
 
 using namespace std;
 using namespace cv;
@@ -35,7 +35,8 @@ public:
   VisualizerOpts( void )
   {;}
 
-  string pcFile, imageOverlay, cameraFile, cameraSonarFile, annotatedImage;
+  string pcFile, imageOverlay, cameraCalibration, cameraSonarFile, annotatedImage;
+  string sonarFile, cameraFile;
   bool imageAxes, doVisualize;
 
   bool parseCmdLine( int argc, char **argv )
@@ -44,8 +45,10 @@ public:
     try {
       TCLAP::CmdLine cmd("Visualizers", ' ', "0.1" );
 
+      TCLAP::ValueArg< string > cameraFileArg("", "camera-detections", "Camera detection file", false, "", "Detections file", cmd );
+      TCLAP::ValueArg< string > sonarFileArg("", "sonar-detections", "sonar detection file", false, "", "Detections file", cmd );
       TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
-      TCLAP::ValueArg< string > cameraFileArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
+      TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
       TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
       TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
 
@@ -60,6 +63,8 @@ public:
 
       imageOverlay = overlayImageArg.getValue();
       cameraFile   = cameraFileArg.getValue();
+      sonarFile    = sonarFileArg.getValue();
+      cameraCalibration = cameraCalArg.getValue();
       cameraSonarFile = cameraSonarFileArg.getValue();
       annotatedImage = annotatedImageArg.getValue();
       doVisualize = (dontVisualizeArg.getValue() == false);
@@ -76,9 +81,10 @@ public:
 
   bool  validate( void )
   {
+
     bool overlay = imageOverlay.length() > 0,
-    cam     = cameraFile.length() > 0,
-    camson  = cameraSonarFile.length() > 0;
+         cam     = cameraCalibration.length() > 0,
+         camson  = cameraSonarFile.length() > 0;
 
     if( overlay == false && cam == false && camson == false ) {
     } else if( overlay == true && cam == true && camson == true ) {
@@ -101,6 +107,8 @@ public:
 
 class ColorModel {
 public:
+  virtual ~ColorModel() {;}
+
   virtual uint32_t color( const float x, const float y, const float z ) = 0;
 
   // A lot janky
@@ -125,24 +133,16 @@ protected:
 
 class ImageOverlay : public ColorModel {
 public:
-  ImageOverlay( const Mat &img, DistortionModel *cam, SonarPose *pose )
-  : _img( img ), _cam( cam ), _pose( pose ), _imgPts(), _haveOutput(0)
+  ImageOverlay( const Mat &img, SonarImageWarper *warper )
+  : _img( img ), _warper( warper ), _imgPts(), _haveOutput(0)
   {;}
 
   ~ImageOverlay()
-  {
-    delete _cam;
-    delete _pose;
-  }
+  {  }
 
   virtual uint32_t color( const float x, const float y, const float z )
   {
-    // Transform point to image frame
-    Vec3f inCamFrame( _pose->sonarToImage( Vec3f( x, y, z ) ) );
-    Vec2d inCamDist( _cam->distort( inCamFrame ) );
-    //Vec2d inImgDist( _cam->image( Vec2f(inImgFrame[0]/inImgFrame[2], inImgFrame[1]/inImgFrame[2] ) ) );
-    Vec2f inImg( _cam->image(inCamDist) );
-
+    Vec2f inImg( _warper->sonarToImage( x,y,z) );
     int r,g,b;
 
     Vec2i intImg( round(inImg[0]), round(inImg[1]) );
@@ -152,9 +152,9 @@ public:
       r = g = b = 100;
     } else {
 
-      if( ++_haveOutput < 10 ) {
-          LOG(INFO) << Vec3f(x,y,z) << " -> " << inCamFrame << " -> " << inCamDist << " -> " << inImg;
-      }
+      //  if( ++_haveOutput < 10 ) {
+      //LOG(INFO) << Vec3f(x,y,z) << " -> " << inCamFrame << " -> " << inCamDist << " -> " << inImg;
+      //  }
 
       Vec3b p( _img.at< Vec3b >( intImg[1], intImg[0] ) );
 
@@ -171,92 +171,121 @@ public:
     return ( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) );
   }
 
-  static ImageOverlay *Construct( const string &imgFile, const string &camFile, const string &camSonFile )
-  {
-    DistortionModel *camera = CameraFactory::LoadDistortionModel( camFile );
-    Mat img( imread( imgFile ) );
-    SonarPose *pose = SonarPose::Load( camSonFile );
-
-    return new ImageOverlay( img, camera, pose );
-  }
 
   virtual vector< Vec2i > imagePoints( void ) const { return _imgPts; }
 
 protected:
 
   Mat _img;
-  DistortionModel *_cam;
-  SonarPose *_pose;
+  SonarImageWarper *_warper;
   vector< Vec2i > _imgPts;
 
   int _haveOutput;
 
 };
 
+class PCVisualizer {
+public:
 
-// --------------
-// -----Main-----
-// --------------
-int main (int argc, char** argv)
-{
-  google::InitGoogleLogging( argv[0] );
-  FLAGS_logtostderr = 1;
+  PCVisualizer( VisualizerOpts &opts_ )
+  : opts(opts_), model( NULL ), warper( NULL ), cloud_ptr( NULL )
+  {;}
 
-
-  VisualizerOpts opts;
-  if( !opts.parseCmdLine( argc, argv ) ) exit(-1);
-
-  ColorModel *model;
-  if( opts.imageOverlay.length() > 0 ) {
-    LOG(INFO) << "Constructing ImageOverlay";
-    model = ImageOverlay::Construct( opts.imageOverlay, opts.cameraFile, opts.cameraSonarFile );
-  } else {
-    model = new ConstantColor( 150, 150, 150 );
+  ~PCVisualizer()
+  {
+    if( model != NULL ) delete model;
+    if( warper != NULL ) delete warper;
   }
 
-  // ------------------------------------
-  // -----Create example point cloud-----
-  // ------------------------------------
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr basic_cloud_ptr( new  pcl::PointCloud<pcl::PointXYZRGB> );
+  int run( void )
+  {
 
-  // Load XYZ file
-
-  ifstream infile( opts.pcFile );
-
-  if( !infile.is_open() ) {
-    LOG(ERROR) << "Error opening point cloud file \"" << opts.pcFile << "\"";
-    exit(-1);
-  }
-
-  while( !infile.eof() ) {
-    float x,y,z,r;
-
-    infile >> x >> y >> z >> r;
-
-    pcl::PointXYZRGB point;
-    point.x = x;
-
-    if( opts.imageAxes ) {
-      point.y = -z;
-      point.z = y;
+    if( opts.imageOverlay.length() > 0 ) {
+      LOG(INFO) << "Constructing ImageOverlay";
+      warper = new SonarImageWarper( opts.cameraCalibration, opts.cameraSonarFile );
+      model = new ImageOverlay( imread( opts.imageOverlay ), warper );
     } else {
-      point.y = y;
-      point.z = z;
+      model = new ConstantColor( 150, 150, 150 );
     }
 
-    uint32_t rgb = model->color( point.x, point.y, point.z );
-    point.rgb = *reinterpret_cast<float*>(&rgb);
+    if( model == NULL ) {
+      LOG(ERROR) << "Fatal error, color model not created.";
+      return -1;
+    }
 
-    basic_cloud_ptr->points.push_back( point );
+    //  This should satisfy boost::shared_ptr
+    cloud_ptr = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    // Load XYZ file
+
+    ifstream infile( opts.pcFile );
+
+    if( !infile.is_open() ) {
+      LOG(ERROR) << "Error opening point cloud file \"" << opts.pcFile << "\"";
+      exit(-1);
+    }
+
+    while( !infile.eof() ) {
+      float x,y,z,r;
+
+      infile >> x >> y >> z >> r;
+
+      pcl::PointXYZRGB point;
+      point.x = x;
+
+      if( opts.imageAxes ) {
+        point.y = -z;
+        point.z = y;
+      } else {
+        point.y = y;
+        point.z = z;
+      }
+
+      uint32_t rgb = model->color( point.x, point.y, point.z );
+      point.rgb = *reinterpret_cast<float*>(&rgb);
+
+      cloud_ptr->points.push_back( point );
+
+    }
+
+    infile.close();
+
+    cloud_ptr->width = (int) cloud_ptr->points.size ();
+    cloud_ptr->height = 1;
+
+    if( opts.doAnnotate() ) doAnnotate(  );
+
+
+
+    //  // ----------------------------------------------------------------
+    //  // -----Calculate surface normals with a search radius of 0.05-----
+    //  // ----------------------------------------------------------------
+    //  pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
+    //  ne.setInputCloud (point_cloud_ptr);
+    //  pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
+    //  ne.setSearchMethod (tree);
+    //  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals1 (new pcl::PointCloud<pcl::Normal>);
+    //  ne.setRadiusSearch (0.05);
+    //  ne.compute (*cloud_normals1);
+    //
+    //  // ---------------------------------------------------------------
+    //  // -----Calculate surface normals with a search radius of 0.1-----
+    //  // ---------------------------------------------------------------
+    //  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals2 (new pcl::PointCloud<pcl::Normal>);
+    //  ne.setRadiusSearch (0.1);
+    //  ne.compute (*cloud_normals2);
+
+    if( opts.doVisualize ) doVisualize();
+
+
+
+    return 0;
+
 
   }
 
-  infile.close();
-
-  basic_cloud_ptr->width = (int) basic_cloud_ptr->points.size ();
-  basic_cloud_ptr->height = 1;
-
-  if( opts.doAnnotate() ) {
+  int doAnnotate( void )
+  {
     Mat img = imread( opts.imageOverlay );
     vector< Vec2i > pts = model->imagePoints();
 
@@ -265,74 +294,35 @@ int main (int argc, char** argv)
       circle( img, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 0,0,255 ), -1 );
     }
 
+    if( (opts.sonarFile.length() > 0) and (warper != NULL) ) {
+      LOG(INFO) << "Drawing sonar sphere";
+      
+      SonarDetections dets;
+      dets.load( opts.sonarFile, opts.imageAxes );
+      SonarDetection *det = dets.find( timestamp() );
+
+      if( det != NULL ) {
+        ImageDetection *imageDet = det->projectToImage( warper );
+
+        imageDet->draw( img );
+        delete imageDet;
+
+      } else {
+        LOG(INFO) << "Couldn't find timestamp \"" << timestamp() << "\" in sonar file " << opts.sonarFile;
+      }
+    }
+
     imwrite( opts.annotatedImage, img );
+    LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
   }
 
-
-  //  pcl::PointCloud<pcl::PointXYZRGB>::Ptr point_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGB>);
-  //  std::cout << "Genarating example point clouds.\n\n";
-  //  // We're going to make an ellipse extruded along the z-axis. The colour for
-  //  // the XYZRGB cloud will gradually go from red to green to blue.
-  //  uint8_t r(255), g(15), b(15);
-  //  for (float z(-1.0); z <= 1.0; z += 0.05)
-  //  {
-  //    for (float angle(0.0); angle <= 360.0; angle += 5.0)
-  //    {
-  //      pcl::PointXYZ basic_point;
-  //      basic_point.x = 0.5 * cosf (pcl::deg2rad(angle));
-  //      basic_point.y = sinf (pcl::deg2rad(angle));
-  //      basic_point.z = z;
-  //      basic_cloud_ptr->points.push_back(basic_point);
-  //
-  //      pcl::PointXYZRGB point;
-  //      point.x = basic_point.x;
-  //      point.y = basic_point.y;
-  //      point.z = basic_point.z;
-  //      uint32_t rgb = (static_cast<uint32_t>(r) << 16 |
-  //          static_cast<uint32_t>(g) << 8 | static_cast<uint32_t>(b));
-  //      point.rgb = *reinterpret_cast<float*>(&rgb);
-  //      point_cloud_ptr->points.push_back (point);
-  //    }
-  //    if (z < 0.0)
-  //    {
-  //      r -= 12;
-  //      g += 12;
-  //    }
-  //    else
-  //    {
-  //      g -= 12;
-  //      b += 12;
-  //    }
-  //  }
-  //  basic_cloud_ptr->width = (int) basic_cloud_ptr->points.size ();
-  //  basic_cloud_ptr->height = 1;
-  //  point_cloud_ptr->width = (int) point_cloud_ptr->points.size ();
-  //  point_cloud_ptr->height = 1;
-  //
-  //  // ----------------------------------------------------------------
-  //  // -----Calculate surface normals with a search radius of 0.05-----
-  //  // ----------------------------------------------------------------
-  //  pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
-  //  ne.setInputCloud (point_cloud_ptr);
-  //  pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
-  //  ne.setSearchMethod (tree);
-  //  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals1 (new pcl::PointCloud<pcl::Normal>);
-  //  ne.setRadiusSearch (0.05);
-  //  ne.compute (*cloud_normals1);
-  //
-  //  // ---------------------------------------------------------------
-  //  // -----Calculate surface normals with a search radius of 0.1-----
-  //  // ---------------------------------------------------------------
-  //  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals2 (new pcl::PointCloud<pcl::Normal>);
-  //  ne.setRadiusSearch (0.1);
-  //  ne.compute (*cloud_normals2);
-
-  if( opts.doVisualize ) {
+  int doVisualize( void )
+  {
     boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
 
     viewer->setBackgroundColor (0, 0, 0);
-    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(basic_cloud_ptr);
-    viewer->addPointCloud<pcl::PointXYZRGB> ( basic_cloud_ptr, rgb, "sample cloud");
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_ptr);
+    viewer->addPointCloud<pcl::PointXYZRGB> ( cloud_ptr, rgb, "sample cloud");
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
     viewer->addCoordinateSystem (1.0);
     viewer->initCameraParameters ();
@@ -347,7 +337,39 @@ int main (int argc, char** argv)
     }
   }
 
-  return 0;
+  string timestamp()
+  {
+    if( opts.imageOverlay.length() > 0 ) {
+      return boost::filesystem::path( opts.imageOverlay).stem().string();
+    } else {
+      return string("");
+    }
+  }
+
+protected:
+
+  VisualizerOpts &opts;
+  ColorModel *model;
+  SonarImageWarper *warper;
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_ptr;
+};
+
+
+
+// --------------
+// -----Main-----
+// --------------
+int main (int argc, char** argv)
+{
+  google::InitGoogleLogging( argv[0] );
+  FLAGS_logtostderr = 1;
+
+
+  VisualizerOpts opts;
+  if( !opts.parseCmdLine( argc, argv ) ) exit(-1);
+
+  PCVisualizer viz( opts );
+  return viz.run();
 }
 
 

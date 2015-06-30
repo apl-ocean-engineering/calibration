@@ -26,7 +26,7 @@ class SonarPose {
   static SonarPose *Load( const std::string &filename );
 
   const Vec3f &rot( void ) const { return _rot; }
-  Matx33f rotMat( void ) const 
+  Matx33f rotMat( void ) const
   {
     Matx33f rotMatx;
 
