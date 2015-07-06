@@ -23,7 +23,7 @@ using namespace tbb;
 #include "detection_set.h"
 #include "image.h"
 
-#include "distortion_model.h"
+#include "distortion/distortion_model.h"
 using namespace Distortion;
 
 #include "calibration_db.h"

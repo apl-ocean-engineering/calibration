@@ -55,7 +55,7 @@ struct ExtractBgOpts {
       cmd.parse( argc, argv );
 
       // Extract arguments from TCLAP;
-      inFile = inFileArg.getValue(); 
+      inFile = inFileArg.getValue();
 
       outputImg = outputImgArg.getValue();
       outputMat = outputMatArg.getValue();
@@ -232,7 +232,7 @@ class ExtractBgMain {
 
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_logtostderr = true;
@@ -244,4 +244,3 @@ int main( int argc, char **argv )
 
   exit( main.run() );
 }
-

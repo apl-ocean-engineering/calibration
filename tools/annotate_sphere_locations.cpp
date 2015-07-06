@@ -13,7 +13,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include "camera_factory.h"
+#include "distortion/camera_factory.h"
 
 using namespace std;
 using namespace cv;

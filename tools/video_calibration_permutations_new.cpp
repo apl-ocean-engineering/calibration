@@ -17,7 +17,7 @@
 #include "detection_set.h"
 #include "image.h"
 
-#include "distortion_model.h"
+#include "distortion/distortion_model.h"
 using namespace Distortion;
 
 #include "calib_frame_selectors/calib_frame_selector_opts.h"
@@ -219,4 +219,3 @@ int main( int argc, char** argv )
   PermutationMain perm( opts );
   return perm.run();
 }
-

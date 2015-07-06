@@ -102,7 +102,7 @@ int main( int argc, char **argv )
   for(size_t i = 0; i < brds_num; ++i)
   {
     cout << "Board " << i << ": ";
-    namedWindow( mainWindow); 
+    namedWindow( mainWindow);
     imshow(mainWindow, boards[i].image);
     //waitKey(10);
 
@@ -140,8 +140,8 @@ int main( int argc, char **argv )
 
       cout << valid << endl;
 
-      for( int y = 0; y < valid.rows; ++y ) 
-        for( int x = 0; x < valid.cols; ++x  ) 
+      for( int y = 0; y < valid.rows; ++y )
+        for( int x = 0; x < valid.cols; ++x  )
           if( valid.at<uint8_t>(y,x) > 0 ) {
             Point3f world( positions.at<Point3f>(y,x) );
 
@@ -179,7 +179,7 @@ int main( int argc, char **argv )
       cout<< " not enough.";
     }
 
-    imshow(mainWindow, boards[i].image); 
+    imshow(mainWindow, boards[i].image);
     waitKey(0);
 
     cout << endl;
@@ -196,9 +196,9 @@ int main( int argc, char **argv )
 
   cout << "Calibrating...";
   int flags = CV_CALIB_USE_INTRINSIC_GUESS;
-  TermCriteria criteria( TermCriteria::COUNT+TermCriteria::EPS, 200, DBL_EPSILON ); 
+  TermCriteria criteria( TermCriteria::COUNT+TermCriteria::EPS, 200, DBL_EPSILON );
 
-  double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize, 
+  double rep_err = calibrateCamera(objectPoints, imagePoints, imgSize,
       camMat_est, distCoeffs_est, rvecs, tvecs, flags, criteria );
   cout << "Done" << endl;
 
@@ -212,7 +212,3 @@ int main( int argc, char **argv )
 
   return 0;
 }
-
-
-
-

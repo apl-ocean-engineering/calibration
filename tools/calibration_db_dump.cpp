@@ -18,8 +18,8 @@
 #include "detection_set.h"
 #include "image.h"
 
-#include "distortion_model.h"
-#include "camera_factory.h"
+#include "distortion/distortion_model.h"
+#include "distortion/camera_factory.h"
 using namespace Distortion;
 
 #include "calibration_db.h"
@@ -41,7 +41,7 @@ class Options {
 
     typedef enum { MODE_REDUCE, MODE_EACH } Mode_t;
 
-    string calibrationDb, outputFile, statisticsFile, 
+    string calibrationDb, outputFile, statisticsFile,
            optimalCalFile;
     Mode_t mode;
 
@@ -113,7 +113,7 @@ class Options {
 
 
 // Inefficient
-static double mean( const vector<double> &v ) 
+static double mean( const vector<double> &v )
 {
   double total = 0;
   for( size_t i = 0;  i < v.size(); ++i ) total += v[i];
@@ -136,7 +136,7 @@ static double stdDev( const vector<double> &v, double mean )
 }
 
 static double stdDev( const vector<double> &v )
-{ 
+{
   return stdDev( v, mean(v) );
 }
 
@@ -192,12 +192,14 @@ class Calibrations {
     {
       for( size_t i = 0; i < _cameras.size(); ++i ) {
 
-        strm << i << " "
-          << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
-          << _cameras[i]->cx() << " " << _cameras[i]->cy() << " ";
+        // strm << i << " "
+        //   << _cameras[i]->fx() << " " << _cameras[i]->fy() << " "
+        //   << _cameras[i]->cx() << " " << _cameras[i]->cy() << " ";
 
 
-        Mat coeff = _cameras[i]->distortionCoeffs();
+        // n.b. coefficientsMat includes _all_ of the coefficients (intrinsics
+        // and distortion coeffs.. )
+        Mat coeff = _cameras[i]->coefficientsMat();
         for( int j = 0; j < coeff.rows * coeff.cols; ++j ) {
           double *ptr = coeff.ptr<double>();
           strm << ptr[j] << " ";
@@ -235,7 +237,7 @@ class Calibrations {
       for( size_t i = 0; i < 2; ++i ) {
         for( size_t j = 0; j < 2; ++j ) {
           for( size_t n = 0; n < N; ++n ) {
-            cov(i,j) += (fx[i][n] - mean_fx[i])*(fx[j][n] - mean_fx[j]); 
+            cov(i,j) += (fx[i][n] - mean_fx[i])*(fx[j][n] - mean_fx[j]);
           }
 
           cov(i,j) /= (N-1);
@@ -336,7 +338,7 @@ class AllCalibrationSet : public CalibrationSet {
       return true;
     }
 
-    virtual void dumpReduced( ostream &strm ) 
+    virtual void dumpReduced( ostream &strm )
     {
       strm << "0 " << _datum.reduceString() << endl;
       strm << _numImages << " " << _datum.reduceString() << endl;
@@ -351,7 +353,7 @@ class AllCalibrationSet : public CalibrationSet {
       }
     }
 
-  protected: 
+  protected:
     Calibrations _datum;
     bool _set;
     int _numImages;
@@ -378,7 +380,7 @@ class RandomCalibrationSet : public CalibrationSet {
       return false;
     }
 
-    virtual void dumpReduced( ostream &strm ) 
+    virtual void dumpReduced( ostream &strm )
     {
       for( map< unsigned int, Calibrations >::iterator itr = _data.begin(); itr != _data.end(); ++itr ) {
         strm << itr->first <<  " " << itr->second.reduceString() << endl;
@@ -423,7 +425,7 @@ vector< DistortionModel * > allCameras( void )
     }
 
 
-  protected: 
+  protected:
     map< unsigned int, Calibrations > _data;
 };
 
@@ -524,7 +526,7 @@ class DumpMain {
       ostream out(buf);
 
       switch( opts.mode ) {
-        case Options::MODE_REDUCE: 
+        case Options::MODE_REDUCE:
           doReduce( out );
           break;
         case Options::MODE_EACH:

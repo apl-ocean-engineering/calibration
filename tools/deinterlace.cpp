@@ -24,11 +24,11 @@ namespace fs = boost::filesystem;
 struct DeinterlaceOpts {
   public:
     DeinterlaceOpts()
-      : inFile(""), 
+      : inFile(""),
       displayMode( NONE ),
       doDisplay( false ),
-      waitKey( 1 ), 
-      seekFrame( -1 ), 
+      waitKey( 1 ),
+      seekFrame( -1 ),
       seekSeconds( -1.0 )
   {;}
 
@@ -59,7 +59,7 @@ struct DeinterlaceOpts {
         cmd.parse( argc, argv );
 
         // Extract arguments from TCLAP;
-        inFile = inFileArg.getValue(); 
+        inFile = inFileArg.getValue();
         waitKey = waitKeyArg.getValue();
 
         doDisplay = doDisplayArg.isSet();
@@ -186,10 +186,10 @@ class DeinterlaceMain
            ch = waitKey( wait/2 );
 
           }
-        
+
           switch( ch ) {
             case 'q': doStop = true; break;
-            case ' ': 
+            case ' ':
                       if( wait == 0 ) wait = mspf;
                       else wait = 0;
                       break;
@@ -208,7 +208,7 @@ class DeinterlaceMain
 
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
 
   DeinterlaceOpts opts;
@@ -223,4 +223,3 @@ int main( int argc, char **argv )
   exit( main.run() );
 
 }
-

@@ -21,9 +21,11 @@
 #include "file_utils.h"
 #include "composite_canvas.h"
 #include "stereo_calibration.h"
-#include "distortion_model.h"
-#include "distortion_stereo.h"
-#include "camera_factory.h"
+
+#include "distortion/distortion_model.h"
+#include "distortion/distortion_stereo.h"
+#include "distortion/camera_factory.h"
+using namespace Distortion;
 
 #include "video_prefs.h"
 
@@ -36,7 +38,7 @@ using namespace boost::filesystem;
 
 //using AprilTags::TagDetection;
 
-using namespace Distortion;
+
 using namespace AplCam;
 
 struct Options
@@ -153,7 +155,7 @@ class StereoProcessorMain {
       return -1;
     }
 
-    if( opts.seekTo > 0 ) 
+    if( opts.seekTo > 0 )
     {
       LOG(INFO) << "Seeking to " << opts.seekTo;
       if( video.seek( opts.seekTo ) == false ) {
@@ -228,7 +230,7 @@ class StereoProcessorMain {
     float alpha = -1;
 
     Distortion::stereoRectify( *cameras[0], *cameras[1], video.frameSize(), sCal.R, sCal.t,
-                              R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+                              R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY,
                               alpha, video.frameSize(), validROI[0], validROI[1] );
 
     sRect.R[0] = R[0];
@@ -276,8 +278,8 @@ class StereoProcessorMain {
     int count = 0;
     CompositeCanvas canvas;
     while( video.read( canvas ) ) {
-      for( int k = 0; k < 2; ++k ) 
-        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+      for( int k = 0; k < 2; ++k )
+        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
 
       if( writer.isOpened() ) {
         if( count % 100 == 0 ) { LOG(INFO) << count; }
@@ -286,9 +288,9 @@ class StereoProcessorMain {
 
       if( opts.doDisplay ) {
 
-        if( opts.scale  > 0.0 ) 
+        if( opts.scale  > 0.0 )
           imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
-        else 
+        else
           imshow( RectifyWindowName, canvas );
 
         int ch;
@@ -325,9 +327,9 @@ class StereoProcessorMain {
 
       if( opts.doDisplay ) {
 
-        if( opts.scale  > 0.0 ) 
+        if( opts.scale  > 0.0 )
           imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
-        else 
+        else
           imshow( RectifyWindowName, canvas );
 
         int ch;
@@ -365,7 +367,7 @@ class StereoProcessorMain {
 
     //Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
     //     StereoSGBM sgbm;
-    
+
     Ptr<StereoSGBM> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize ) );
 
     //bm->setSpeckleRange( speckleRange );
@@ -418,7 +420,7 @@ class StereoProcessorMain {
       CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
                                      canvas.size().height * opts.scale), CV_8UC1 );
       for( int k = 0; k < 2; ++k )  {
-        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+        remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
 
         // Apply scale before processing
         if( opts.scale > 0 ) {
@@ -487,7 +489,7 @@ class StereoProcessorMain {
 
   bool undistortCanvas( CompositeCanvas &canvas )
   {
-    for( int k = 0; k < 2; ++k ) 
+    for( int k = 0; k < 2; ++k )
       cameras[k]->undistortImage( canvas[k], canvas[k] );
 
     return true;
@@ -537,5 +539,3 @@ int main( int argc, char **argv )
 
   exit( main.go() );
 }
-
-

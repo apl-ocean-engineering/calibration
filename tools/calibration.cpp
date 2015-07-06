@@ -13,9 +13,9 @@
 
 #include "my_undistort.h"
 
-#include "distortion_model.h"
-#include "distortion_angular_polynomial.h"
-#include "distortion_radial_polynomial.h"
+#include "distortion/distortion_model.h"
+#include "distortion/angular_polynomial.h"
+#include "distortion/radial_polynomial.h"
 using namespace Distortion;
 
 #include "file_utils.h"
@@ -158,7 +158,7 @@ class CalOpts : public CalibrationOpts {
 //          case 'r':
 //            retryUnregistered = true;
 //            break;
-//          case '?': 
+//          case '?':
 //            help();
 //            break;
 //          default:
@@ -264,7 +264,7 @@ int main( int argc, char** argv )
 
       detection = board->detectPattern( viewGray );
 
-      if( detection->found )  
+      if( detection->found )
         cout << "  Found calibration pattern." << endl;
 
       cout << "Writing to " << detectionCacheFile << endl;
@@ -313,7 +313,7 @@ int main( int argc, char** argv )
   }
 
   CalibrationResult result;
-  distModel->calibrate( objectPoints, imagePoints, 
+  distModel->calibrate( objectPoints, imagePoints,
       imageSize, result, flags );
 
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
@@ -465,7 +465,7 @@ int main( int argc, char** argv )
   //    }
   //
 
-  
+
   delete board;
 
   return 0;

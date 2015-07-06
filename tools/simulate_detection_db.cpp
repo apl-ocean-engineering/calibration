@@ -20,9 +20,9 @@
 #include "board.h"
 #include "detection.h"
 #include "detection_db.h"
-
-#include "camera_factory.h"
 using namespace AplCam;
+
+#include "distortion/camera_factory.h"
 using namespace Distortion;
 
 using namespace std;
@@ -37,7 +37,7 @@ struct SimulateDbOpts {
       : waitKey(33 ),
       duration(10),
       dataDir("data"),
-      boardName(), 
+      boardName(),
       cameraName(),
       outputFile(),
       imageSize(),
@@ -63,7 +63,7 @@ struct SimulateDbOpts {
 
     //== Option parsing and help ==
 
-    bool parseArgs( int argc, char **argv, stringstream &msg ) 
+    bool parseArgs( int argc, char **argv, stringstream &msg )
     {
 
       try{
@@ -100,9 +100,9 @@ struct SimulateDbOpts {
 
         imageSize = Size( width, height );
 
-      } 
+      }
       catch (TCLAP::ArgException &e)  // catch any exceptions
-      { 
+      {
         msg << "error: " << e.error() << " for arg " << e.argId() << std::endl;
         return false;
       }
@@ -139,7 +139,7 @@ struct SimulateDbOpts {
 
 
 
-class SimulateDbMain 
+class SimulateDbMain
 {
   public:
     SimulateDbMain( SimulateDbOpts &options )
@@ -228,7 +228,7 @@ class SimulateDbMain
         if( opts.doDisplay ) {
                   Mat img = Mat::zeros( opts.imageSize, CV_8UC3 );
 
-          for( ImagePointsVec::const_iterator itr = det.points.begin(); itr != det.points.end(); ++itr ) 
+          for( ImagePointsVec::const_iterator itr = det.points.begin(); itr != det.points.end(); ++itr )
             circle( img, Point((*itr)[0], (*itr)[1]), 3, Scalar(0,0,255), 1 );
 
 //  Draw the center of the board
@@ -258,7 +258,7 @@ class SimulateDbMain
 
       //      double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
       //
-      //      if( opts.intervalSeconds > 0 ) 
+      //      if( opts.intervalSeconds > 0 )
       //        opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
       //
       //      FrameVec_t frames;
@@ -276,9 +276,9 @@ class SimulateDbMain
       //        if( opts.intervalFrames > 1 ) {
       //          int destFrame = currentFrame + opts.intervalFrames - 1;
       //
-      //          if( destFrame < vidLength ) 
+      //          if( destFrame < vidLength )
       //            vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-      //          else 
+      //          else
       //            break;
       //        }
       //
@@ -333,7 +333,7 @@ class SimulateDbMain
 
       Vec3d tvec, rvec;
 
-      float xPeriod,  yPeriod,  zPeriod, 
+      float xPeriod,  yPeriod,  zPeriod,
             r0Period, r1Period, r2Period;
     };
 
@@ -350,7 +350,7 @@ class SimulateDbMain
 };
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
   srand( time( NULL ) );
 
@@ -369,5 +369,3 @@ int main( int argc, char **argv )
   exit( main.run() );
 
 }
-
-

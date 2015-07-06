@@ -3,13 +3,18 @@
 
 #include "opencv2/core.hpp"
 
-#include "distortion_model.h"
+#include "distortion/distortion_model.h"
+
 #include "sonar_pose.h"
 
+// Puts the relevant math in one place.
 class SonarImageWarper {
 public:
 
+  // Standard API, give it a camera model and a sonar pose
   SonarImageWarper( Distortion::DistortionModel *, SonarPose * );
+
+  // Load camera model and pose from files
   SonarImageWarper( const std::string &cameraCalFile, const std::string &sonarPoseFile );
 
   cv::Vec2f sonarToImage(  float x, float y, float z );

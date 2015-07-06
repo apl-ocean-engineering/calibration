@@ -41,7 +41,7 @@ struct BuildDbOpts {
  public:
 
   BuildDbOpts()
-      : seekTo(-1), intervalFrames(-1), waitKey( 1 ), 
+      : seekTo(-1), intervalFrames(-1), waitKey( 1 ),
       intervalSeconds( -1 ),
       boardFile(),
       benchmarkFile(),
@@ -160,7 +160,7 @@ struct BuildDbOpts {
     return p.string();
   }
 
-  // Just insert a test 
+  // Just insert a test
   bool hasCalledMakeDetectionDb;
 
   };
@@ -168,11 +168,11 @@ struct BuildDbOpts {
 
 
 
-  class BuildDbMain 
+  class BuildDbMain
   {
    public:
     BuildDbMain( BuildDbOpts &options )
-        : opts( options ), _benchmark() 
+        : opts( options ), _benchmark()
     {;}
 
     ~BuildDbMain( void )
@@ -265,13 +265,13 @@ struct BuildDbOpts {
 
       double vidLength = vid.get( CV_CAP_PROP_FRAME_COUNT );
 
-      db.setMeta( vidLength, 
+      db.setMeta( vidLength,
                  vid.get( CV_CAP_PROP_FRAME_WIDTH ),
                  vid.get( CV_CAP_PROP_FRAME_HEIGHT ),
                  vid.get( CV_CAP_PROP_FPS ) );
 
 
-      //      if( opts.intervalSeconds > 0 ) 
+      //      if( opts.intervalSeconds > 0 )
       //        opts.intervalFrames = opts.intervalSeconds * vid.get( CV_CAP_PROP_FPS );
       //
       //      if( opts.seekTo > 0 )
@@ -310,9 +310,9 @@ struct BuildDbOpts {
           //          if( opts.intervalFrames > 1 ) {
           //            int destFrame = currentFrame + opts.intervalFrames - 1;
           //
-          //            if( destFrame < vidLength ) 
+          //            if( destFrame < vidLength )
           //              vid.set( CV_CAP_PROP_POS_FRAMES, currentFrame + opts.intervalFrames - 1 );
-          //            else 
+          //            else
           //              break;
           //          }
 
@@ -339,7 +339,7 @@ struct BuildDbOpts {
 
         Mat norm( frame.size(), CV_32FC1 );
 
-        // Iterate over 
+        // Iterate over
         if( frame.isContinuous() and bgImg.isContinuous() ) {
 
         }
@@ -373,7 +373,7 @@ struct BuildDbOpts {
         cv::cvtColor(lab_image, frame, CV_Lab2BGR);
 
         //dst.copyTo( grey );
-      } 
+      }
 
       //cvtColor( frame, frame, CV_BGR2GRAY );
     }
@@ -440,7 +440,7 @@ struct BuildDbOpts {
     }
 
 
-   protected: 
+   protected:
     BuildDbOpts opts;
 
     Board *board;
@@ -455,7 +455,7 @@ struct BuildDbOpts {
 
 
 
-  int main( int argc, char **argv ) 
+  int main( int argc, char **argv )
   {
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = true;
@@ -472,5 +472,3 @@ struct BuildDbOpts {
     exit( retval );
 
   }
-
-

@@ -23,10 +23,10 @@ enum Mode { PRETRIGGER, ARMED, WAIT };
 struct ExtractOpts {
   public:
     ExtractOpts()
-      : seekTo(-1), intervalFrames(-1), waitKey( 1 ), 
+      : seekTo(-1), intervalFrames(-1), waitKey( 1 ),
       intervalSeconds( -1 ),
       dataDir("data"),
-      boardName(), 
+      boardName(),
       doDisplay( false ), yes( false ),
       verb( NONE )
   {;}
@@ -134,7 +134,7 @@ struct ExtractOpts {
           case 'y':
             yes = true;
             break;
-          case '?': 
+          case '?':
             msg = help();
             return false;
             break;
@@ -314,7 +314,7 @@ return doExtractInterval();
 
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
 
   ExtractOpts opts;
@@ -360,7 +360,7 @@ if( optind >= argc ) {
 
 // Currently static, should be read from file (?)
 const float consecutiveSec = 0.25, standoffSec = 1;
-enum Mode state = PRETRIGGER; 
+enum Mode state = PRETRIGGER;
 
 string videofile( argv[optind] );
 
@@ -404,7 +404,7 @@ while( capture.read( img ) ) {
 
     double norm = cv::norm( scaled, prev, NORM_L2 ); // * scaled.size().area();
 
-    cout << frame << " : " << state << "," << counter << " : " << 
+    cout << frame << " : " << state << "," << counter << " : " <<
       std::setw(10) << std::setprecision(1) << std::fixed << norm << endl;
 
     // Implement a kind of hysteresis..
@@ -432,7 +432,7 @@ while( capture.read( img ) ) {
       // No motion
 
       switch( state ) {
-        case PRETRIGGER: 
+        case PRETRIGGER:
           break;
         case ARMED:
           if( ++counter > consecutive ) {

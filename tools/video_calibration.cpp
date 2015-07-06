@@ -22,7 +22,7 @@
 #include "detection_set.h"
 #include "image.h"
 
-#include "distortion_model.h"
+#include "distortion/distortion_model.h"
 using namespace Distortion;
 
 #include "calibration_db.h"
@@ -174,14 +174,14 @@ int main( int argc, char** argv )
 
   if( cal.result.good ) {
 
-    if( !opts.calibrationDb.empty() ) 
+    if( !opts.calibrationDb.empty() )
       cal.saveDb( opts.calibrationDb, opts.overwriteDb );
-    else if( !opts.calibrationFile.empty() ) 
+    else if( !opts.calibrationFile.empty() )
       cal.saveFile( opts.calibrationFile );
 
 
     if( opts.saveBoardPoses.length() > 0 ) {
-      DetectionDb savedPoses( opts.saveBoardPoses, true ); 
+      DetectionDb savedPoses( opts.saveBoardPoses, true );
       cal.updateDetectionPoses( detSet );
       savedPoses.save( detSet );
     }

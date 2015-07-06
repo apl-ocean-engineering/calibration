@@ -10,19 +10,19 @@
 #include <glog/logging.h>
 
 #include "board.h"
-#include "distortion_model.h"
-
 #include "detection_db.h"
-#include "camera_factory.h"
+using namespace AplCam;
+
+#include "distortion/distortion_model.h"
+#include "distortion/camera_factory.h"
+#include "distortion/distortion_stereo.h"
+using namespace Distortion;
 
 #include "stereo_calibration.h"
-#include "distortion_stereo.h"
 
 using namespace cv;
 using namespace std;
 
-using namespace Distortion;
-using namespace AplCam;
 
 
 
@@ -215,7 +215,7 @@ class StereoCalibrationData {
       numPts_ += shared.worldPoints.size();
 
       //:ImagePointsVec undistortedPoints[2] = {
-      //:  ImagePointsVec( shared.imagePoints[0].size() ), 
+      //:  ImagePointsVec( shared.imagePoints[0].size() ),
       //:  ImagePointsVec( shared.imagePoints[1].size() )  };
 
       // Generate undistorted image points as well
@@ -347,7 +347,7 @@ class DbStereoCalibration {
     size_t sz = scales.size();
     for( size_t i = 0; i < sz; ++i ) { meanScale += scales[i]; }
     meanScale /= sz;
-    for( size_t i = 0; i < sz; ++i ) { 
+    for( size_t i = 0; i < sz; ++i ) {
       float f = scales[i] - meanScale;
       varScale += f*f;
     }
@@ -376,9 +376,9 @@ class DbStereoCalibration {
     // For what it's worth, cvDbStereoCalibrate appears to optimize for the translation and rotation
     // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
     // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
-    double reprojError = Distortion::stereoCalibrate( data.objectPoints_, data.imagePoints_[0], data.imagePoints_[1], 
+    double reprojError = Distortion::stereoCalibrate( data.objectPoints_, data.imagePoints_[0], data.imagePoints_[1],
                                                      *cameras_[0], *cameras_[1],
-                                                     imageSize, r, t, e, f, 
+                                                     imageSize, r, t, e, f,
                                                      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
                                                      flags );
 
@@ -441,7 +441,7 @@ class DbStereoCalibration {
 
     int count = 0;
     vector<bool> statusVec( status.size().area(), false );
-    for( int i = 0; i < status.size().area(); ++i ) 
+    for( int i = 0; i < status.size().area(); ++i )
       if( status.at<unsigned int>(i,0) > 0 ) {
         statusVec[i] = true;
         ++count;
@@ -486,11 +486,11 @@ class DbStereoCalibration {
       Mat X1 = Mx * Mat(x1),
           X2 = Mx * rcand.t() * Mat(x2);
 
-      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+      if( (X1.at<double>(2) * X2.at<double>(2)) < 0 )
         rcand = u * W.t() * vt;
-      else if (X1.at<double>(2) < 0) 
+      else if (X1.at<double>(2) < 0)
         tcand *= -1;
-      else 
+      else
         done = true;
     }
 
@@ -512,7 +512,7 @@ class DbStereoCalibration {
   }
 
 
-  double reprojectionError( FlatCalibrationData &data, Mat &e ) 
+  double reprojectionError( FlatCalibrationData &data, Mat &e )
   {
 
     // Calculate the mean reprojection error under this f
@@ -628,7 +628,7 @@ void saveDbStereoCalibration( const string &filename,
 
 
 
-for( int i = 0; i < 2; ++i ) 
+for( int i = 0; i < 2; ++i )
 if( !cameras[i] ) {
   cerr << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
   exit(-1);
@@ -691,7 +691,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
 
       detection[i] = board->detectPattern( viewGray, pointbuf );
 
-      if( detection[i]->found )  
+      if( detection[i]->found )
         cout << "  Found calibration pattern." << endl;
 
       detection[i]->writeCache( *board, opts.imageCache( compositeImage, suffix ) );
@@ -711,7 +711,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
       numPoints += shared.worldPoints.size();
 
       //:ImagePointsVec undistortedPoints[2] = {
-      //:  ImagePointsVec( shared.imagePoints[0].size() ), 
+      //:  ImagePointsVec( shared.imagePoints[0].size() ),
       //:  ImagePointsVec( shared.imagePoints[1].size() )  };
 
       // Generate undistorted image points as well
@@ -728,7 +728,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
       ImagePair &thisPair( pairs[i] );
       CompositeCanvas canvas( thisPair[0].img(), thisPair[1].img(), false );
 
-      for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) 
+      for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx )
         cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
 
       for( int j = 0; j < shared.worldPoints.size(); ++j ) {
@@ -740,7 +740,7 @@ for( int i = 0; i < opts.inFiles.size(); ++i ) {
         cv::circle( canvas[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
         cv::circle( canvas[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
-        cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
+        cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]),
                  canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
                  color, 1 );
       }
@@ -793,7 +793,7 @@ Rect validROI[2];
 float alpha = -1;
 
 Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, cal.R, cal.t,
-                          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+                          R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY,
                           alpha, imageSize, validROI[0], validROI[1] );
 
 DbStereoRectification rect;
@@ -845,7 +845,7 @@ cout << "p1: " << endl << P[1] << endl;
 
 
 Mat map[2][2];
-for( int k = 0; k < 2; ++k ) { 
+for( int k = 0; k < 2; ++k ) {
   //cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
   //    imageSize, CV_32FC1, map[k][0], map[k][1] );
   cameras[k]->initUndistortRectifyMap( R[k], P[k],
@@ -868,17 +868,17 @@ for( int i = 0; i < pairs.size(); ++i ) {
     remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
 
     Scalar roiBorder( 0,255,0 );
-    line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
-    line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-    line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-    line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
+    line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 );
+    line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 );
+    line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 );
+    line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 );
 
   }
 
 
   // Draw the standard red horizontal lines
   int spacing = 200;
-  for( int y = 0; y < canvas.size().height; y += spacing ) 
+  for( int y = 0; y < canvas.size().height; y += spacing )
     line( canvas, Point( 0, y ), Point( canvas.size().width, y ), Scalar( 0,0,255 ), 2 );
 
 
@@ -957,7 +957,7 @@ for( int i = 0; i < pairs.size(); ++i ) {
   for( int i = 0; i < pairs.size(); ++i ) {
     Mat worldPoints;
 
-    triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, 
+    triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1,
                       undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
     //cout << "World points: " << worldPoints << endl;
@@ -1037,6 +1037,3 @@ return 0;
 }
 
 #endif
-
-
-

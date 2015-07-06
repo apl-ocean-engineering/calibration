@@ -4,18 +4,21 @@
 #include <opencv2/core/core.hpp>
 
 #include "detection_set.h"
-#include "distortion_model.h"
+
 #include "calibration_db.h"
 #include "calibration_result.h"
 #include "board.h"
+using namespace AplCam;
+
+#include "distortion/distortion_model.h"
+using Distortion::DistortionModel;
+
 
 #include "calibration_opts.h"
 
-
 using cv::Size;
-using Distortion::DistortionModel;
 
-using namespace AplCam;
+
 
 class Calibrator {
   public:
@@ -35,7 +38,7 @@ class Calibrator {
     void saveDb( const string &dbFile, bool overwriteDb = false );
     void saveDb( CalibrationDb &dbFile, bool overwriteDb = false );
 
-    void saveFile( const string &file ); 
+    void saveFile( const string &file );
 
     // For this special case, get a non-const DetectionSet
     void updateDetectionPoses( DetectionSet &dets );
@@ -79,7 +82,7 @@ struct CalibrateFunctor {
 
         // If it's the "all" set, consider saving the board posees
         if( _opts.saveBoardPoses.length() > 0 && detSet.name().compare("all") == 0 ) {
-          DetectionDb savedPoses( _opts.saveBoardPoses, true ); 
+          DetectionDb savedPoses( _opts.saveBoardPoses, true );
           cal.updateDetectionPoses( detSet );
           savedPoses.save( detSet );
         }

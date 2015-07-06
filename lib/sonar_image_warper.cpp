@@ -1,7 +1,7 @@
 
 #include "sonar_image_warper.h"
 
-#include "camera_factory.h"
+#include "distortion/camera_factory.h"
 
 using namespace cv;
 using namespace std;

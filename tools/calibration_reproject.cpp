@@ -15,8 +15,8 @@
 #include "detection_set.h"
 #include "image.h"
 
-#include "distortion_model.h"
-#include "camera_factory.h"
+#include "distortion/distortion_model.h"
+#include "distortion/camera_factory.h"
 using namespace Distortion;
 
 #include "calibration_db.h"
@@ -39,8 +39,8 @@ class CalibrationReprojectOpts : public CalibrationOpts {
   public:
 
     CalibrationReprojectOpts()
-      : CalibrationOpts(), 
-      resultsDb(), 
+      : CalibrationOpts(),
+      resultsDb(),
       referenceDb()
   {;}
 
@@ -121,7 +121,7 @@ void setKeys( const vector< string > &k )
   {
     size_t end = _keys.size();
     for( size_t i = 0; i < end; ++i ) {
-      
+
       const string &key( _keys[i] );
       string value;
       _calDb.get( key, &value );
@@ -138,13 +138,13 @@ void setKeys( const vector< string > &k )
       }
 
 
-      result.rms = distModel->reprojectionError( _objectPoints, 
-          _rvecs, _tvecs, _imagePoints, 
+      result.rms = distModel->reprojectionError( _objectPoints,
+          _rvecs, _tvecs, _imagePoints,
           result.reprojErrors );
 
       // Hm, cant get this from anyhere
       result.numPoints = 0;
-      for( size_t i = 0; i < _objectPoints.size(); ++i ) 
+      for( size_t i = 0; i < _objectPoints.size(); ++i )
         result.numPoints += _objectPoints[i].size();
 
       result.numImages = _objectPoints.size();

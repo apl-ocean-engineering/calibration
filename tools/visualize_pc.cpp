@@ -296,7 +296,7 @@ public:
 
     if( (opts.sonarFile.length() > 0) and (warper != NULL) ) {
       LOG(INFO) << "Drawing sonar sphere";
-      
+
       SonarDetections dets;
       dets.load( opts.sonarFile, opts.imageAxes );
       SonarDetection *det = dets.find( timestamp() );
@@ -327,6 +327,10 @@ public:
     viewer->addCoordinateSystem (1.0);
     viewer->initCameraParameters ();
 
+    // If imageAxes, attempt to align camera so it's still "upright"
+    // that is, initial view, +X is to right, +Y is down, +Z is away
+     if( opts.imageAxes ) viewer->setCameraPosition( 0, 0, 0, 0, -1, 0 );
+
     //--------------------
     // -----Main loop-----
     //--------------------
@@ -334,6 +338,12 @@ public:
     {
       viewer->spinOnce (100);
       boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+
+      char c = cin.get();
+      switch(c) {
+        case 'q': viewer->close(); break;
+
+      }
     }
   }
 

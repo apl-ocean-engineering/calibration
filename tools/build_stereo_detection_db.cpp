@@ -36,7 +36,7 @@ using kyotocabinet::HashDB;
 struct BuildDbOpts {
   public:
     BuildDbOpts()
-      : boardName(), 
+      : boardName(),
       detectionDbDir(),
       doDisplay( false ),
       doParallel( false ),
@@ -60,7 +60,7 @@ struct BuildDbOpts {
     const string cachePath( const string &file = "" ) const
     { return dataDir + "/cache/" + file; }
 
-    const string detectionDbPath( const int i ) 
+    const string detectionDbPath( const int i )
     {
       return detectionDbDir + "/" + ( ( i == 0 ) ? "zero.kch" : "one.kch" );
     }
@@ -123,7 +123,7 @@ struct BuildDbOpts {
 
 
 
-class BuildDbMain 
+class BuildDbMain
 {
   public:
     BuildDbMain( BuildDbOpts &options )
@@ -178,7 +178,7 @@ class BuildDbMain
 
           compVid.rewind();
           doAnnotate( compVid );
-        }     
+        }
 
         return retval;
 
@@ -311,7 +311,7 @@ class BuildDbMain
       while( compVid.read( canvas ) ) {
         int currentFrame = compVid.get( CV_CAP_PROP_POS_FRAMES );
 
-        if( (currentFrame % 100) == 0 ) 
+        if( (currentFrame % 100) == 0 )
           LOG(INFO) << currentFrame;
 
         for( int i = 0; i < 2; ++i ) {
@@ -345,7 +345,7 @@ class BuildDbMain
 const string BuildDbMain::BuildDbWindowName = "BuildStereoDb";
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
   google::InitGoogleLogging( argv[0] );
   FLAGS_logtostderr = 1;
@@ -362,5 +362,3 @@ int main( int argc, char **argv )
   exit( main.run() );
 
 }
-
-

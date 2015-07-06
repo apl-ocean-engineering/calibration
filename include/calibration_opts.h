@@ -9,9 +9,10 @@
 
 #include "image.h"
 #include "calibration_db.h"
-#include "distortion_model.h"
 #include "file_utils.h"
 using namespace AplCam;
+
+#include "distortion/distortion_model.h"
 using namespace Distortion;
 
 class CalibrationOpts  {
@@ -19,7 +20,7 @@ class CalibrationOpts  {
     CalibrationOpts();
 
     bool parseOpts( int argc, char **argv );
-    
+
 
     string calibrationDb, calibrationFile;
     string detectionDb;
@@ -36,7 +37,7 @@ class CalibrationOpts  {
 
 
     // Functions left over from the old CalibrationOptsCommon
-        
+
       string mkCameraFileName( void ) const
     {
       char strtime[32], buffer[80];
@@ -87,7 +88,7 @@ class CalibrationOpts  {
     virtual bool validate(  void ) { return true; }
 
 
- 
+
 };
 
 
@@ -95,4 +96,3 @@ class CalibrationOpts  {
 
 
 #endif
-

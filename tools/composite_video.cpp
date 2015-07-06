@@ -38,8 +38,11 @@
 #include "synchronizer.h"
 #include "composite_canvas.h"
 #include "stereo_calibration.h"
-#include "distortion_model.h"
-#include "camera_factory.h"
+using namespace AplCam;
+
+#include "distortion/distortion_model.h"
+#include "distortion/camera_factory.h"
+using namespace Distortion;
 
 #include "feature_tracker.h"
 
@@ -47,9 +50,6 @@ using namespace cv;
 using namespace std;
 
 //using AprilTags::TagDetection;
-
-using namespace Distortion;
-using namespace AplCam;
 
 struct Options
 {
@@ -190,7 +190,7 @@ struct Options
 
   Features parseFeatures( const string &optarg )
   {
-    if( optarg.compare("fast") == 0 ) 
+    if( optarg.compare("fast") == 0 )
       return FAST;
 
 
@@ -285,7 +285,7 @@ bool DoFeatureTracker::processCompositeImage( CompositeCanvas &canvas )
 
     //vector<KeyPoint> scaledKeypoints;
     //std::transform( keypoints[k].begin(), keypoints[k].end(), back_inserter(scaledKeypoints), TxKeyPointScaler( scale ) );
-    //drawKeypoints( canvas[k], scaledKeypoints, canvas[k], Scalar(0,0,255), 
+    //drawKeypoints( canvas[k], scaledKeypoints, canvas[k], Scalar(0,0,255),
     //    cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
   }
 
@@ -350,20 +350,20 @@ class CompositeVideoMain {
         } else {
           if( opts.doRectify )  {
             for( int k = 0; k < 2; ++k ) {
-              // JIT construct the map because we need the imageSize, which isn't 
+              // JIT construct the map because we need the imageSize, which isn't
               // available until the first frame has been loaded.
               if( map[k][0].empty() || map[k][1].empty() )
                 cameras[k]->initUndistortRectifyMap( sRect.R[k], sRect.P[k],
                     canvas[k].size(), CV_32FC1, map[k][0], map[k][1] );
 
-              remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR ); 
+              remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
             }
 
             if( opts.doDenseStereo ) {
               doDenseStereo( canvas );
             }
           } else if( opts.doUndistort ) {
-            doUndistort( canvas ); 
+            doUndistort( canvas );
           }
 
           if( opts.features != Options::FEATURES_NONE ) {
@@ -465,7 +465,7 @@ class CompositeVideoMain {
 
     bool doUndistort( CompositeCanvas &canvas )
     {
-      for( int k = 0; k < 2; ++k ) 
+      for( int k = 0; k < 2; ++k )
         cameras[k]->undistortImage( canvas[k], canvas[k] );
 
       return true;
@@ -488,7 +488,7 @@ class CompositeVideoMain {
           std::remove_if( keypoints[k].begin(), keypoints[k].end(), TxKeyPointInTimecode() );
         }
 
-        drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255), 
+        drawKeypoints( canvas[k], keypoints[k], canvas[k], Scalar(0,0,255),
             cv::DrawMatchesFlags::DRAW_OVER_OUTIMG | cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
       }
 
@@ -549,5 +549,3 @@ int main( int argc, char **argv )
 
   exit( main.go() );
 }
-
-

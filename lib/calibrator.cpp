@@ -3,9 +3,9 @@
 
 #include "calibrator.h"
 
-#include "distortion_model.h"
-#include "distortion_angular_polynomial.h"
-#include "distortion_radial_polynomial.h"
+#include "distortion/distortion_model.h"
+#include "distortion/angular_polynomial.h"
+#include "distortion/radial_polynomial.h"
 using namespace Distortion;
 
 #include "calibration_serializer.h"
@@ -43,9 +43,9 @@ void Calibrator::run( void )
   int flags =  _opts.calibFlags();
 
   cout << "Flags: " << flags << endl;
-  _distModel->calibrate( objectPoints, imagePoints, 
+  _distModel->calibrate( objectPoints, imagePoints,
       _imageSize, result, flags,
-      cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 1000, DBL_EPSILON)  );  
+      cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 1000, DBL_EPSILON)  );
 
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
   cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
@@ -105,5 +105,3 @@ void Calibrator::updateDetectionPoses( DetectionSet &dets )
 
   }
 }
-
-

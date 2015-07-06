@@ -25,17 +25,19 @@
 #include "board.h"
 #include "detection.h"
 #include "image.h"
-#include "camera_factory.h"
-#include "distortion_stereo.h"
-#include "stereo_calibration.h"
+
+#include "distortion/camera_factory.h"
+#include "distortion/distortion_stereo.h"
+using namespace Distortion;
 
 #include "image_pair.h"
 #include "composite_canvas.h"
 
+#include "stereo_calibration.h"
+
 using namespace cv;
 using namespace std;
 
-using namespace Distortion;
 using namespace AplCam;
 
 namespace fs = boost::filesystem;
@@ -47,7 +49,7 @@ class StereoCalibrationOpts {
   public:
     StereoCalibrationOpts( int argc, char **argv )
       : dataDir("data"),
-      boardName(), 
+      boardName(),
       _pairName(),    // Private as it has a bespoke reader function
       inFiles(),
       ignoreCache( false )
@@ -65,7 +67,7 @@ class StereoCalibrationOpts {
       if( cameraName[0].empty() || cameraName[1].empty() ) { msg = "Camera name not set"; return false; }
 
       for( int i = 0; i < 2; ++i ) {
-        if( !fs::is_directory( cameraPath(i) ) ) { 
+        if( !fs::is_directory( cameraPath(i) ) ) {
           stringstream strm;
           strm << "Can't find camera directory " << cameraPath(i);
           msg = strm.str();
@@ -83,12 +85,12 @@ class StereoCalibrationOpts {
     vector< string > inFiles;
     bool ignoreCache, retryUnregistered;
 
-    const string pairName( void ) const 
+    const string pairName( void ) const
     {
-      if( _pairName.empty() ) 
+      if( _pairName.empty() )
       {
         return cameraName[0] + "--" + cameraName[1];
-      } 
+      }
 
       return _pairName;
     }
@@ -123,7 +125,7 @@ class StereoCalibrationOpts {
       string camDir(  dataDir + "/cameras/" + cameraName[which] + "/" );
 
       vector< string > filenames;
-      std::transform( fs::directory_iterator( camDir ), fs::directory_iterator(), 
+      std::transform( fs::directory_iterator( camDir ), fs::directory_iterator(),
           std::back_inserter( filenames ), SliceFilename );
       std::remove_if( filenames.begin(), filenames.end(), NotYaml );
       std::sort( filenames.begin(), filenames.end() );
@@ -225,7 +227,7 @@ class StereoCalibrationOpts {
           case 'r':
             retryUnregistered = true;
             break;
-          case '?': 
+          case '?':
             help();
             exit(0);
             break;
@@ -363,7 +365,7 @@ bool hartleyMethod( ImagePointsVec *undistortedImagePts,
   Mat e,f, status;
 
   for( int k = 0; k < 2; ++k )
-    std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(), 
+    std::transform(undistortedImagePts[k].begin(), undistortedImagePts[k].end(),
         back_inserter(normimgpt[k]), cameras[k]->makeNormalizer()  );
 
 
@@ -388,7 +390,7 @@ bool hartleyMethod( ImagePointsVec *undistortedImagePts,
 
 
   int count = 0;
-  for( int i = 0; i < status.size().area(); ++i ) 
+  for( int i = 0; i < status.size().area(); ++i )
     if( status.at<unsigned int>(i,0) > 0 ) ++count;
   cout << count << "/" << undistortedImagePts[0].size() << " points considered inlier." << endl;
 
@@ -445,11 +447,11 @@ bool hartleyMethod( ImagePointsVec *undistortedImagePts,
     Mat X1 = Mx * Mat(x1),
         X2 = Mx * rcand.t() * Mat(x2);
 
-    if( (X1.at<double>(2) * X2.at<double>(2)) < 0 ) 
+    if( (X1.at<double>(2) * X2.at<double>(2)) < 0 )
       rcand = u * W.t() * vt;
-    else if (X1.at<double>(2) < 0) 
+    else if (X1.at<double>(2) < 0)
       tcand *= -1;
-    else 
+    else
       done = true;
   }
 
@@ -506,7 +508,7 @@ int main( int argc, char** argv )
   DistortionModel *cameras[2] = { CameraFactory::LoadDistortionModel( cameraCalibrationFiles[0] ),
     CameraFactory::LoadDistortionModel( cameraCalibrationFiles[1] ) };
 
-  for( int i = 0; i < 2; ++i ) 
+  for( int i = 0; i < 2; ++i )
     if( !cameras[i] ) {
       LOG(ERROR)  << "Couldn't load calibration for camera \"" << opts.cameraName[i] << endl;
       exit(-1);
@@ -566,7 +568,7 @@ int main( int argc, char** argv )
 
         detection[i] = board->detectPattern( rois[i] );
 
-        if( detection[i]->found )  
+        if( detection[i]->found )
           cout << "  Found calibration pattern." << endl;
 
         detection[i]->writeCache( *board, opts.imageCache( compositeImage, suffix ) );
@@ -586,7 +588,7 @@ int main( int argc, char** argv )
         numPoints += shared.worldPoints.size();
 
         //:ImagePointsVec undistortedPoints[2] = {
-        //:  ImagePointsVec( shared.imagePoints[0].size() ), 
+        //:  ImagePointsVec( shared.imagePoints[0].size() ),
         //:  ImagePointsVec( shared.imagePoints[1].size() )  };
 
         // Generate undistorted image points as well
@@ -603,7 +605,7 @@ int main( int argc, char** argv )
         ImagePair &thisPair( pairs[i] );
         CompositeCanvas canvas( thisPair[0].img(), thisPair[1].img(), false );
 
-        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) 
+        for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx )
           cameras[imgIdx]->undistortImage( thisPair[imgIdx].img(), canvas.roi[imgIdx] );
 
         for( int j = 0; j < shared.worldPoints.size(); ++j ) {
@@ -615,7 +617,7 @@ int main( int argc, char** argv )
           cv::circle( canvas[0], Point(undistortedImagePoints[0].back()[j]), 5, color, -1 );
           cv::circle( canvas[1], Point(undistortedImagePoints[1].back()[j]), 5, color, -1 );
 
-          cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]), 
+          cv::line(  canvas, Point(undistortedImagePoints[0].back()[j]),
               canvas.origin(1) + Point(undistortedImagePoints[1].back()[j]),
               color, 1 );
         }
@@ -663,9 +665,9 @@ int main( int argc, char** argv )
     // For what it's worth, cvStereoCalibrate appears to optimize for the translation and rotation
     // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
     // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
-    reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1], 
+    reprojError = Distortion::stereoCalibrate( objectPoints, imagePoints[0], imagePoints[1],
         *cameras[0], *cameras[1],
-        imageSize, r, t, e, f, 
+        imageSize, r, t, e, f,
         TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
         flags );
 
@@ -697,7 +699,7 @@ int main( int argc, char** argv )
   float alpha = -1;
 
   Distortion::stereoRectify( *cameras[0], *cameras[1], imageSize, cal.R, cal.t,
-      R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY, 
+      R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY,
       alpha, imageSize, validROI[0], validROI[1] );
 
   StereoRectification rect;
@@ -749,7 +751,7 @@ int main( int argc, char** argv )
 
 
   Mat map[2][2];
-  for( int k = 0; k < 2; ++k ) { 
+  for( int k = 0; k < 2; ++k ) {
     //cameras[k]->initUndistortRectifyMap( H[k], cameras[k]->mat(), //P[k],
     //    imageSize, CV_32FC1, map[k][0], map[k][1] );
     cameras[k]->initUndistortRectifyMap( R[k], P[k],
@@ -772,17 +774,17 @@ int main( int argc, char** argv )
       remap( thisPair[idx].img(), canvas.roi[idx], map[idx][0], map[idx][1], INTER_LINEAR );
 
       Scalar roiBorder( 0,255,0 );
-      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 ); 
-      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 ); 
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), roiBorder, 1 );
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y), Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), roiBorder, 1 );
+      line( canvas.roi[idx], Point(validROI[idx].x+validROI[idx].width, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), roiBorder, 1 );
+      line( canvas.roi[idx], Point(validROI[idx].x, validROI[idx].y+validROI[idx].height), Point(validROI[idx].x, validROI[idx].y), roiBorder, 1 );
 
     }
 
 
     // Draw the standard red horizontal lines
     int spacing = 200;
-    for( int y = 0; y < canvas.size().height; y += spacing ) 
+    for( int y = 0; y < canvas.size().height; y += spacing )
       line( canvas, Point( 0, y ), Point( canvas.size().width, y ), Scalar( 0,0,255 ), 2 );
 
 
@@ -861,7 +863,7 @@ int main( int argc, char** argv )
     for( int i = 0; i < pairs.size(); ++i ) {
       Mat worldPoints;
 
-      triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1, 
+      triangulatePoints( cameras[0]->mat()*newP0, cameras[1]->mat()*newP1,
           undistortedImagePoints[0][i], undistortedImagePoints[1][i], worldPoints );
 
       //cout << "World points: " << worldPoints << endl;
@@ -939,6 +941,3 @@ if( cameras[1] ) delete cameras[1];
 
 return 0;
 }
-
-
-

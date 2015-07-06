@@ -43,7 +43,7 @@ int main( int argc, char **argv ) {
       // Sadly, a heuristic
       if( norm > 500 ) {
         Mat composite( Mat::zeros( imgTimeCode.size().height + 2 + prevTimeCode.size().height,
-            std::max( imgTimeCode.size().width, prevTimeCode.size().width ), 
+            std::max( imgTimeCode.size().width, prevTimeCode.size().width ),
             imgTimeCode.type() ) );
         Mat beforeROI( composite, Rect( Point2i(0,0), prevTimeCode.size() ) );
         prevTimeCode.copyTo( beforeROI );

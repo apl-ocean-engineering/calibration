@@ -15,7 +15,7 @@
 #include "detection.h"
 #include "detection_db.h"
 #include "file_utils.h"
-#include "camera_factory.h"
+#include "distortion/camera_factory.h"
 #include "trendnet_time_code.h"
 using namespace AplCam;
 
@@ -28,10 +28,10 @@ using namespace Distortion;
 struct CalcOpts {
   public:
     CalcOpts()
-      : seekTo(0), intervalFrames(-1), waitKey( 1 ), 
+      : seekTo(0), intervalFrames(-1), waitKey( 1 ),
       intervalSeconds( -1 ),
       dataDir("data"),
-      boardName(), 
+      boardName(),
       doDisplay( false )
   {;}
 
@@ -139,7 +139,7 @@ struct CalcOpts {
           case 'x':
             doDisplay = true;
             break;
-          case '?': 
+          case '?':
             msg = help();
             return false;
             break;
@@ -181,7 +181,7 @@ struct CalcOpts {
 
 
 
-class CalculateReprojectionMain 
+class CalculateReprojectionMain
 {
   public:
     CalculateReprojectionMain( CalcOpts &options )
@@ -210,7 +210,7 @@ class CalculateReprojectionMain
       }
 
       // Two modes of operation.  If intervalFrame == 0, uses all keys in db
-      // otherwise, starts at seekTo and iterated by intervalFrame until it 
+      // otherwise, starts at seekTo and iterated by intervalFrame until it
       // reaches the end
 
       string videoSource( opts.refVideo );
@@ -328,7 +328,7 @@ class CalculateReprojectionMain
 
 
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
 
   CalcOpts opts;
@@ -343,5 +343,3 @@ int main( int argc, char **argv )
   exit( main.run() );
 
 }
-
-

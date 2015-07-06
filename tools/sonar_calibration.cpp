@@ -10,7 +10,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include "camera_factory.h"
+#include "distortion/camera_factory.h"
+using namespace Distortion;
 
 #include "sonar_calibration_solver.h"
 
@@ -19,7 +20,7 @@
 using namespace std;
 using namespace Eigen;
 
-using namespace Distortion;
+
 
 
 class SonarCalibrationOpts {
@@ -141,7 +142,7 @@ class SonarCalibration {
           float radius( atof( tokens[3].c_str() ) );
 
           // Normalize and undistort vPoint
-          ImagePoint undistorted = camera->undistort( vImage, false );
+          ImagePoint undistorted = camera->normalizeUndistort( vImage );
 
           Vector2f undVec( undistorted[0], undistorted[1] );
 
