@@ -108,6 +108,11 @@ struct Options
       return false;
     }
 
+if( !is_regular_file( path( cameraCalibration))) {
+LOG(ERROR) << "Camera calibration file \"" << cameraCalibration << "\" doesn't exist.";
+return false;
+}
+
     return true;
   }
 
@@ -169,7 +174,9 @@ private:
     Mat img = imread( in );
     Mat undistorted;
 
-    camera->undistortImage( img, undistorted );
+    camera->undistortImage( img, undistorted, camera->mat(), img.size() );
+
+    imwrite( out, undistorted );
 
     return 0;
   }

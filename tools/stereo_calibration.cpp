@@ -596,7 +596,7 @@ int main( int argc, char** argv )
           imagePoints[imgIdx].push_back( shared.imagePoints[imgIdx] );
 
           // Technically this is normalize->undistort->reimage
-          ImagePointsVec undist = cameras[imgIdx]->undistort( shared.imagePoints[imgIdx] );
+          ImagePointsVec undist = cameras[imgIdx]->undistortVec( shared.imagePoints[imgIdx] );
 
           undistortedImagePoints[imgIdx].push_back( undist );
           std::copy( undist.begin(), undist.end(), back_inserter( undistortedImagePts[imgIdx] ) );
