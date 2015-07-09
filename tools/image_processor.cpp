@@ -121,7 +121,9 @@ return false;
     path outPath( outputFile );
 
     if( is_directory(outPath) ) {
-      return (outPath.append( path(inputFile).string())).string();
+      path out( outPath );
+      out += inputFile;
+      return out.string();
     }
 
     return outputFile;
