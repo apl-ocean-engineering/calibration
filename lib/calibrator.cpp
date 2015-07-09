@@ -28,7 +28,7 @@ void Calibrator::run( void )
 
   if( imagePoints.size() < 3 ) {
     cerr << "Not enough images.  Stopping." << endl;
-    exit(-1);
+    return;
   }
 
 
@@ -50,6 +50,8 @@ void Calibrator::run( void )
   //  ///*|CV_CALIB_FIX_K3*/|CV_CALIB_FIX_K4|CV_CALIB_FIX_K5);
   cout << "RMS error reported by calibrateCamera: " << result.rms << endl;
   cout << "Residual reported by calibrateCamera: " << result.residual << endl;
+
+  cout << "Total time reported by calibrateCamera: " << result.totalTime << endl;
 }
 
 
