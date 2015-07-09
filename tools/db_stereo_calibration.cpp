@@ -175,8 +175,8 @@ class StereoCalibrationData {
 
     for( size_t i = 0; i < objectPoints_.size(); ++i ) {
       ImagePointsVec undist[2] = {
-        cama.undistort( imagePoints_[0][i] ),
-        camb.undistort( imagePoints_[1][i] ) };
+        cama.undistortVec( imagePoints_[0][i] ),
+        camb.undistortVec( imagePoints_[1][i] ) };
 
       other.add( objectPoints_[i], undist[0], undist[1] );
     }

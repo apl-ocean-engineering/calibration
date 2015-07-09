@@ -71,6 +71,8 @@ add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 
 add_executable( stereo_processor stereo_processor.cpp )
 
+add_executable( image_processor image_processor.cpp )
+
 add_executable( sonar_calibration sonar_calibration.cpp
   ${SONAR_SRCS} )
 
