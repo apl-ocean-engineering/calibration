@@ -33,11 +33,14 @@ using namespace Distortion;
 class VisualizerOpts {
 public:
   VisualizerOpts( void )
+  : annotateMode( NONE )
   {;}
 
   string pcFile, imageOverlay, cameraCalibration, cameraSonarFile, annotatedImage;
   string sonarFile, cameraFile;
-  bool imageAxes, doVisualize;
+  bool imageAxes, doVisualize, dropNonImaged;
+
+  enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
   bool parseCmdLine( int argc, char **argv )
   {
@@ -50,9 +53,12 @@ public:
       TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
       TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
       TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
+
+      TCLAP::ValueArg< string > annotatedArg("", "annotate", "Annotation mode", false, "", "{}", cmd );
       TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
 
-      TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
+      TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
+      TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
       TCLAP::SwitchArg dontVisualizeArg( "", "dont-visualize", "Do visualize", cmd, false );
 
       TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
@@ -68,6 +74,17 @@ public:
       cameraSonarFile = cameraSonarFileArg.getValue();
       annotatedImage = annotatedImageArg.getValue();
       doVisualize = (dontVisualizeArg.getValue() == false);
+      dropNonImaged = dropNonImagedArg.getValue();
+
+      if( annotatedArg.isSet() ) {
+        string arg( annotatedArg.getValue() );
+        if( arg.compare( "overlay") == 0 )      annotateMode = OVERLAY;
+        else if( arg.compare("segment") == 0 )  annotateMode = SEGMENT;
+        else {
+          LOG(ERROR) << "Couldn't understant annotation mode \"" << arg << "\"";
+          return false;
+        }
+      }
 
       imageAxes = imgAxesArg.getValue();
 
@@ -83,8 +100,8 @@ public:
   {
 
     bool overlay = imageOverlay.length() > 0,
-         cam     = cameraCalibration.length() > 0,
-         camson  = cameraSonarFile.length() > 0;
+    cam     = cameraCalibration.length() > 0,
+    camson  = cameraSonarFile.length() > 0;
 
     if( overlay == false && cam == false && camson == false ) {
     } else if( overlay == true && cam == true && camson == true ) {
@@ -93,13 +110,19 @@ public:
       return false;
     }
 
+    if( annotateMode != NONE ) {
+      // Validate for annotation modes
+    } else if( annotatedImage.length() > 0) {
+      LOG(ERROR) << "Annotated image specified, but annotate mode not given.";
+      return false;
+    }
 
     return true;
   }
 
   bool doAnnotate( void )
   {
-    return annotatedImage.length() > 0 && imageOverlay.length() > 0;
+    return annotateMode != NONE;
   }
 
 };
@@ -109,7 +132,7 @@ class ColorModel {
 public:
   virtual ~ColorModel() {;}
 
-  virtual uint32_t color( const float x, const float y, const float z ) = 0;
+  virtual bool color( const float x, const float y, const float z, uint32_t &rgb ) = 0;
 
   // A lot janky
   virtual vector< Vec2i > imagePoints( void ) const { return vector<Vec2i>(); }
@@ -121,9 +144,10 @@ public:
   : _r(r), _g(g), _b(b), _rgb( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) )
   {;}
 
-  virtual uint32_t color( const float x, const float y, const float z )
+  virtual bool color( const float x, const float y, const float z, uint32_t &rgb )
   {
-    return _rgb;
+    rgb = _rgb;
+    return true;
   }
 
 protected:
@@ -140,10 +164,11 @@ public:
   ~ImageOverlay()
   {  }
 
-  virtual uint32_t color( const float x, const float y, const float z )
+  virtual bool color( const float x, const float y, const float z, uint32_t &rgb )
   {
     Vec2f inImg( _warper->sonarToImage( x,y,z) );
     int r,g,b;
+    bool visible = false;
 
     Vec2i intImg( round(inImg[0]), round(inImg[1]) );
 
@@ -165,10 +190,12 @@ public:
       r = p[0];
       g = p[1];
       b = p[2];
+      visible = true;
     }
 
 
-    return ( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) );
+    rgb = ( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) );
+    return visible;
   }
 
 
@@ -241,10 +268,12 @@ public:
         point.z = z;
       }
 
-      uint32_t rgb = model->color( point.x, point.y, point.z );
-      point.rgb = *reinterpret_cast<float*>(&rgb);
-
-      cloud_ptr->points.push_back( point );
+      uint32_t rgb;
+      bool visible = model->color( point.x, point.y, point.z, rgb );
+      if( visible or (opts.dropNonImaged == false) ) {
+        point.rgb = *reinterpret_cast<float*>(&rgb);
+        cloud_ptr->points.push_back( point );
+      }
 
     }
 
@@ -286,10 +315,24 @@ public:
 
   int doAnnotate( void )
   {
+    switch( opts.annotateMode ) {
+      case VisualizerOpts::OVERLAY:
+      return annotateOverlay();
+      break;
+      case VisualizerOpts::SEGMENT:
+      return annotateSegment();
+      break;
+      case VisualizerOpts::NONE:
+      default:
+      LOG(INFO) << "Hm, no annotation mode selected.";
+    }
+  }
+
+  int annotateOverlay() {
     Mat img = imread( opts.imageOverlay );
     vector< Vec2i > pts = model->imagePoints();
 
-    LOG(INFO) << "Drawing annoated image with " << pts.size() << " points";
+    LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
     for( int i = 0 ; i < pts.size(); ++i ) {
       circle( img, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 0,0,255 ), -1 );
     }
@@ -316,6 +359,24 @@ public:
     LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
   }
 
+  int annotateSegment() {
+    Mat overlay = imread( opts.imageOverlay ), mask( Mat::zeros(overlay.size(), CV_8UC1 ) );
+    vector< Vec2i > pts = model->imagePoints();
+
+    LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
+    for( int i = 0 ; i < pts.size(); ++i ) {
+      circle( mask, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 255 ), -1 );
+    }
+
+    Mat out( overlay.size(), overlay.type() );
+    overlay.copyTo( out, mask );
+
+    imwrite( opts.annotatedImage, out );
+    LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
+
+  }
+
+
   int doVisualize( void )
   {
     boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
@@ -329,7 +390,7 @@ public:
 
     // If imageAxes, attempt to align camera so it's still "upright"
     // that is, initial view, +X is to right, +Y is down, +Z is away
-     if( opts.imageAxes ) viewer->setCameraPosition( 0, 0, 0, 0, -1, 0 );
+    if( opts.imageAxes ) viewer->setCameraPosition( 0, 0, 0, 0, -1, 0 );
 
     //--------------------
     // -----Main loop-----
@@ -338,12 +399,12 @@ public:
     {
       viewer->spinOnce (100);
       boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-
-      char c = cin.get();
-      switch(c) {
-        case 'q': viewer->close(); break;
-
-      }
+      //
+      // char c = getchar();
+      // switch(c) {
+      //   case 'q': viewer->close(); break;
+      //
+      // }
     }
   }
 
