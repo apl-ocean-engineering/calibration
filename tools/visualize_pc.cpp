@@ -38,7 +38,7 @@ public:
 
   string pcFile, imageOverlay, cameraCalibration, cameraSonarFile, annotatedImage;
   string sonarFile, cameraFile;
-  bool imageAxes, doVisualize, dropNonImaged;
+  bool imageAxes, doDisplay, dropNonImaged;
 
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
@@ -59,7 +59,7 @@ public:
 
       TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
       TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
-      TCLAP::SwitchArg dontVisualizeArg( "", "dont-visualize", "Do visualize", cmd, false );
+      TCLAP::SwitchArg doDisplayArg( "", "do-display", "Do display", cmd, false );
 
       TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
 
@@ -73,7 +73,7 @@ public:
       cameraCalibration = cameraCalArg.getValue();
       cameraSonarFile = cameraSonarFileArg.getValue();
       annotatedImage = annotatedImageArg.getValue();
-      doVisualize = (dontVisualizeArg.getValue() == false);
+      doDisplay = doDisplayArg.getValue();
       dropNonImaged = dropNonImagedArg.getValue();
 
       if( annotatedArg.isSet() ) {
@@ -283,6 +283,7 @@ public:
     cloud_ptr->height = 1;
 
     if( opts.doAnnotate() ) doAnnotate(  );
+    else doVisualize();
 
 
 
@@ -304,7 +305,6 @@ public:
     //  ne.setRadiusSearch (0.1);
     //  ne.compute (*cloud_normals2);
 
-    if( opts.doVisualize ) doVisualize();
 
 
 
@@ -315,20 +315,32 @@ public:
 
   int doAnnotate( void )
   {
+    Mat out;
     switch( opts.annotateMode ) {
       case VisualizerOpts::OVERLAY:
-      return annotateOverlay();
+      out = annotateOverlay();
       break;
       case VisualizerOpts::SEGMENT:
-      return annotateSegment();
+      out =  annotateSegment();
       break;
       case VisualizerOpts::NONE:
       default:
       LOG(INFO) << "Hm, no annotation mode selected.";
     }
+
+    if( opts.annotatedImage.length() > 0 ) {
+      imwrite( opts.annotatedImage, out );
+      LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
+    }
+
+    if( opts.doDisplay ) {
+      imshow("visualize_pc", out );
+
+      char c = waitKey(0);
+    }
   }
 
-  int annotateOverlay() {
+  Mat annotateOverlay() {
     Mat img = imread( opts.imageOverlay );
     vector< Vec2i > pts = model->imagePoints();
 
@@ -355,11 +367,10 @@ public:
       }
     }
 
-    imwrite( opts.annotatedImage, img );
-    LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
+    return img;
   }
 
-  int annotateSegment() {
+  Mat annotateSegment() {
     Mat overlay = imread( opts.imageOverlay ), mask( Mat::zeros(overlay.size(), CV_8UC1 ) );
     vector< Vec2i > pts = model->imagePoints();
 
@@ -374,6 +385,7 @@ public:
     imwrite( opts.annotatedImage, out );
     LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
 
+    return out;
   }
 
 
