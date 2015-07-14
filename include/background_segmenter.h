@@ -3,6 +3,7 @@
 
 #include <string>
 #include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
 
 using std::string;
 using cv::Mat;
@@ -48,22 +49,7 @@ return true;
 
 protected:
 
-  void buildMask( void )
-  {
-    LOG(INFO) << _img.size() << " " << _bg.size();
-    assert( _img.size() == _bg.size() );
-    assert( !_img.empty() );
-    assert( !_bg.empty() );
-
-    _mask = Mat::zeros( _img.size(), CV_8UC1 );
-
-    Mat diff;  //( _img.size(), CV_32FC3 );
-cv::subtract( _img, _bg, diff, cv::noArray(), CV_32FC3 );
-    //diff = _img - _bg;
-
-    imshow( "background_segmenter", diff );
-
-  }
+  void buildMask( void );
 
   uint8_t maskAt( const Point2i &pt )
   {

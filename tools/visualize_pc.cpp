@@ -342,6 +342,8 @@ public:
 
       char c = waitKey(0);
     }
+
+    return 0;
   }
 
   Mat annotateOverlay( void ) {
@@ -443,6 +445,8 @@ public:
       //
       // }
     }
+
+    return 0;
   }
 
   string timestamp()
