@@ -9,6 +9,8 @@
 
 #include <glog/logging.h>
 
+#include "trendnet_time_code.h"
+
 using namespace cv;
 
 void BackgroundSegmenter::buildMask( void )
@@ -20,35 +22,50 @@ void BackgroundSegmenter::buildMask( void )
 
   _mask = Mat::zeros( _img.size(), CV_8UC1 );
 
+float spatialWindowRadius = 10,
+      colorWindowRadius = 10;
+
+Mat maskedImage(Mat::zeros( _img.size(), _img.type()));
+_img.copyTo( maskedImage, TimeCode_1920x1080::timeCodeUnmask() );
+
   Mat posterized;
-  pyrMeanShiftFiltering( _img, posterized, 10, 10, 2 );
+  pyrMeanShiftFiltering( maskedImage, posterized, spatialWindowRadius,
+                          colorWindowRadius, 2 );
 
   Mat imgGrey, imgGreyF, blurredF, laplacianF;
   cvtColor( posterized, imgGrey, cv::COLOR_BGR2GRAY );
   imgGrey.convertTo( imgGreyF, CV_32F );
 
+  // Unsharp operation
   cv::GaussianBlur( imgGreyF, blurredF, cv::Size(5,5), 0);
   cv::Laplacian(blurredF, laplacianF, CV_32F);
-  //blur( imgGrey, imgGrey, cv::Size(3,3) );
 
   float weight = 0.4, scale = 0.2;
   Mat_<float> sharpenedF = 1.5f * imgGreyF
                             - 0.5f * blurredF
-                          - weight * imgGreyF.mul(scale * laplacianF);
+                            - weight * imgGreyF.mul(scale * laplacianF);
 
   Mat sharpened;
   sharpenedF.convertTo( sharpened, CV_8U);
 
-
-
   Mat edges, normEdges;
   cv::Sobel( sharpened, edges, CV_32F, 1, 1, 3 );
+  edges = abs(edges);
+
   normalize( edges, normEdges, 1.0, 0.0, NORM_MINMAX );
+
+  Mat morphed;
+morphologyEx( normEdges, morphed,
+          MORPH_OPEN,
+          getStructuringElement( MORPH_RECT, Size( 5,5 )));
+
+_mask = morphed;
 
   imshow( "build_mask: posterized", posterized );
   imshow( "build_mask: imgGrey", imgGrey );
   imshow( "build_mask: sobel edges", edges );
   imshow( "build_mask: normalized sobel edges", normEdges );
+  imshow( "build_mask:  morphed", morphed );
 
 }
 
