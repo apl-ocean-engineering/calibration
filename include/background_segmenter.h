@@ -37,7 +37,6 @@ public:
     setBackground( cv::imread( bgFile ) );
   }
 
-
   bool isForeground( const Point2i &pt )
   {
     if( _bg.empty() ) return true;

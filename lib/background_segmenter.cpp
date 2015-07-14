@@ -22,14 +22,12 @@ void BackgroundSegmenter::buildMask( void )
 
   _mask = Mat::zeros( _img.size(), CV_8UC1 );
 
-float spatialWindowRadius = 10,
-      colorWindowRadius = 10;
-
-Mat maskedImage(Mat::zeros( _img.size(), _img.type()));
-_img.copyTo( maskedImage, TimeCode_1920x1080::timeCodeUnmask() );
+const float spatialWindowRadius = 10,
+      colorWindowRadius = 10,
+derivThreshold = 0.2;
 
   Mat posterized;
-  pyrMeanShiftFiltering( maskedImage, posterized, spatialWindowRadius,
+  pyrMeanShiftFiltering( _img, posterized, spatialWindowRadius,
                           colorWindowRadius, 2 );
 
   Mat imgGrey, imgGreyF, blurredF, laplacianF;
@@ -45,27 +43,43 @@ _img.copyTo( maskedImage, TimeCode_1920x1080::timeCodeUnmask() );
                             - 0.5f * blurredF
                             - weight * imgGreyF.mul(scale * laplacianF);
 
-  Mat sharpened;
-  sharpenedF.convertTo( sharpened, CV_8U);
+   Mat sharpened;
+   sharpenedF.convertTo( sharpened, CV_8U);
 
-  Mat edges, normEdges;
+  Mat edges, normEdges, thresholded;
   cv::Sobel( sharpened, edges, CV_32F, 1, 1, 3 );
   edges = abs(edges);
 
   normalize( edges, normEdges, 1.0, 0.0, NORM_MINMAX );
 
-  Mat morphed;
-morphologyEx( normEdges, morphed,
-          MORPH_OPEN,
-          getStructuringElement( MORPH_RECT, Size( 5,5 )));
+threshold( normEdges, thresholded, derivThreshold, 1.0, THRESH_BINARY );
 
-_mask = morphed;
+// Blank out any changes around the timecode...
+Mat timeCodeROI( thresholded, TimeCode_1920x1080::timeCodeOvermask );
+timeCodeROI.setTo( 0 );
+
+  Mat morphed;
+thresholded.copyTo( morphed );   // Extraneous, but preserves thresholded for debugging
+Mat elem = getStructuringElement( MORPH_RECT, Size( 3,3 ) );
+dilate(  morphed, morphed, elem, Point(-1,-1), 2 );
+erode(  morphed, morphed, elem, Point(-1,-1), 3 );
+
+elem = getStructuringElement( MORPH_RECT, Size( 11,11 ) );
+dilate( morphed, morphed, elem, Point(-1,-1), 1 );
+erode( morphed, morphed, elem, Point(-1,-1), 1 );
+
+dilate( morphed, morphed, elem, Point(-1,-1), 3 );
+
+
+morphed.convertTo( _mask, CV_8U, 255.0 );
 
   imshow( "build_mask: posterized", posterized );
   imshow( "build_mask: imgGrey", imgGrey );
   imshow( "build_mask: sobel edges", edges );
   imshow( "build_mask: normalized sobel edges", normEdges );
+  imshow( "build_mask: thresholded sobel edges", thresholded );
   imshow( "build_mask:  morphed", morphed );
+  imshow( "build_mask:  morphed", _mask );
 
 }
 
