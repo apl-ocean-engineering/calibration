@@ -24,6 +24,7 @@
 #include "sonar_image_warper.h"
 #include "sonar_detections.h"
 
+#include "background_segmenter.h"
 
 using namespace std;
 using namespace cv;
@@ -37,7 +38,7 @@ public:
   {;}
 
   string pcFile, imageOverlay, cameraCalibration, cameraSonarFile, annotatedImage;
-  string sonarFile, cameraFile;
+  string sonarFile, cameraFile, backgroundFile;
   bool imageAxes, doDisplay, dropNonImaged;
 
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
@@ -51,6 +52,7 @@ public:
       TCLAP::ValueArg< string > cameraFileArg("", "camera-detections", "Camera detection file", false, "", "Detections file", cmd );
       TCLAP::ValueArg< string > sonarFileArg("", "sonar-detections", "sonar detection file", false, "", "Detections file", cmd );
       TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
+TCLAP::ValueArg< string > backgroundImageArg("", "background-image", "Image for background", false, "", "Image for background", cmd );
       TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
       TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
 
@@ -73,6 +75,7 @@ public:
       cameraCalibration = cameraCalArg.getValue();
       cameraSonarFile = cameraSonarFileArg.getValue();
       annotatedImage = annotatedImageArg.getValue();
+backgroundFile = backgroundImageArg.getValue();
       doDisplay = doDisplayArg.getValue();
       dropNonImaged = dropNonImagedArg.getValue();
 
@@ -316,6 +319,7 @@ public:
   int doAnnotate( void )
   {
     Mat out;
+
     switch( opts.annotateMode ) {
       case VisualizerOpts::OVERLAY:
       out = annotateOverlay();
@@ -340,7 +344,7 @@ public:
     }
   }
 
-  Mat annotateOverlay() {
+  Mat annotateOverlay( void ) {
     Mat img = imread( opts.imageOverlay );
     vector< Vec2i > pts = model->imagePoints();
 
@@ -370,20 +374,41 @@ public:
     return img;
   }
 
-  Mat annotateSegment() {
+  Mat annotateSegment( void )
+  {
     Mat overlay = imread( opts.imageOverlay ), mask( Mat::zeros(overlay.size(), CV_8UC1 ) );
+
+    _bgSeg.setImage( overlay );
+
+    if( opts.backgroundFile.length() > 0 )  {
+      LOG(INFO) << "Loading background image \"" << opts.backgroundFile << "\"";
+      LOG(INFO) << "Performing background segmentation";
+      _bgSeg.loadBackground( opts.backgroundFile );
+    }
+
     vector< Vec2i > pts = model->imagePoints();
 
     LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
     for( int i = 0 ; i < pts.size(); ++i ) {
-      circle( mask, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 255 ), -1 );
+      Point2i imagePoint( pts[i][0], pts[i][1] );
+      // Find the points in the PointCloud
+
+      if( _bgSeg.isForeground( imagePoint ) ) {
+        // pcl::PointXYZRGB pc( cloud_ptr->points[i] );
+        // float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
+        //
+        // // Half a degree in Rad
+        // float radius = dist * sin(0.008726646259971648);
+        // LOG(INFO) << "Dist = " << dist << " ; radius = " << radius;
+
+        float radius = 3.0;
+
+        circle( mask, imagePoint, radius, Scalar( 255 ), -1 );
+      }
     }
 
     Mat out( overlay.size(), overlay.type() );
     overlay.copyTo( out, mask );
-
-    imwrite( opts.annotatedImage, out );
-    LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
 
     return out;
   }
@@ -432,6 +457,7 @@ public:
 protected:
 
   VisualizerOpts &opts;
+BackgroundSegmenter _bgSeg;
   ColorModel *model;
   SonarImageWarper *warper;
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_ptr;
