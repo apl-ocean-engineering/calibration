@@ -409,7 +409,7 @@ public:
       }
     }
 
-    Mat out( overlay.size(), overlay.type() );
+    Mat out( Mat::zeros(overlay.size(), overlay.type() ) );
     overlay.copyTo( out, mask );
 
     return out;

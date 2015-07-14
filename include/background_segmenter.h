@@ -40,10 +40,8 @@ public:
 
   bool isForeground( const Point2i &pt )
   {
-return true;
     if( _bg.empty() ) return true;
-
-    return maskAt( pt );
+    return (maskAt( pt ) > 0);
   }
 
 
