@@ -424,7 +424,7 @@ public:
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_ptr);
     viewer->addPointCloud<pcl::PointXYZRGB> ( cloud_ptr, rgb, "sample cloud");
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
-    viewer->addCoordinateSystem (1.0);
+    viewer->addCoordinateSystem (0.25, 0, 0, 0 );
     viewer->initCameraParameters ();
 
     // If imageAxes, attempt to align camera so it's still "upright"

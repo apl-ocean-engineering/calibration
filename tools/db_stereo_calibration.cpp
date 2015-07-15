@@ -43,7 +43,7 @@ struct DbStereoCalibrationOpts {
   { return dataDir + "/cache/" + file; }
 
   const string cameraCalibrationPath( const int i )
-  { return cameraCalibrations[i] + ".yml"; }
+  { return cameraCalibrations[i]; }
 
   bool parseOpts( int argc, char **argv )
   {
@@ -97,18 +97,18 @@ struct DbStereoCalibrationOpts {
 
 };
 
-struct TxRectifier {
-  TxRectifier( const Mat &r )
-      : _r( r) {;}
-  const Mat &_r;
-
-  ImagePoint operator()( const ImagePoint &pt )
-  {
-    Vec3d p( pt[0], pt[1], 1.0 );
-    Mat r = _r * Mat(p);
-    return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
-  }
-};
+// struct RectifierFunctor {
+//   RectifierFunctor( const Mat &r )
+//       : _r( r) {;}
+//   const Mat &_r;
+//
+//   ImagePoint operator()( const ImagePoint &pt )
+//   {
+//     Vec3d p( pt[0], pt[1], 1.0 );
+//     Mat r = _r * Mat(p);
+//     return ImagePoint( r.at<double>(0,0)/r.at<double>(2,0), r.at<double>(1,0)/r.at<double>(2,0) );
+//   }
+// };
 
 
 struct FlatCalibrationData {
@@ -123,26 +123,37 @@ struct FlatCalibrationData {
     imagePoints_[1].clear();
   }
 
-  void normalize( FlatCalibrationData &other, DistortionModel &cama, DistortionModel &camb )
+  void normalize( FlatCalibrationData &dest, DistortionModel &cama, DistortionModel &camb )
   {
-    other.clear();
-    other.objectPoints_ = objectPoints_;
+    dest.clear();
+    dest.objectPoints_ = objectPoints_;
     std::transform(imagePoints_[0].begin(), imagePoints_[0].end(),
-                   back_inserter(other.imagePoints_[0]), cama.makeNormalizer() );
+                   back_inserter(dest.imagePoints_[0]), cama.makeNormalizer() );
 
     std::transform(imagePoints_[1].begin(), imagePoints_[1].end(),
-                   back_inserter(other.imagePoints_[1]), camb.makeNormalizer() );
+                   back_inserter(dest.imagePoints_[1]), camb.makeNormalizer() );
+  }
+
+  void image( FlatCalibrationData &dest, DistortionModel &cama, DistortionModel &camb )
+  {
+    dest.clear();
+    dest.objectPoints_ = objectPoints_;
+    std::transform(imagePoints_[0].begin(), imagePoints_[0].end(),
+                   back_inserter(dest.imagePoints_[0]), cama.makeImager() );
+
+    std::transform(imagePoints_[1].begin(), imagePoints_[1].end(),
+                   back_inserter(dest.imagePoints_[1]), camb.makeImager() );
   }
 
 
-  void keepIf( FlatCalibrationData &other, vector<bool> &keep )
+  void keepIf( FlatCalibrationData &dest, vector<bool> &keep )
   {
-    other.clear();
+    dest.clear();
     for( size_t i = 0; i < objectPoints_.size(); ++i  ) {
       if( keep[i] ) {
-        other.objectPoints_.push_back( objectPoints_[i] );
-        other.imagePoints_[0].push_back( imagePoints_[0][i] );
-        other.imagePoints_[1].push_back( imagePoints_[1][i] );
+        dest.objectPoints_.push_back( objectPoints_[i] );
+        dest.imagePoints_[0].push_back( imagePoints_[0][i] );
+        dest.imagePoints_[1].push_back( imagePoints_[1][i] );
       }
     }
 
@@ -169,19 +180,6 @@ class StereoCalibrationData {
     imagePoints_[1].clear();
   }
 
-  void undistort( StereoCalibrationData &other, DistortionModel &cama, DistortionModel &camb )
-  {
-    other.clear();
-
-    for( size_t i = 0; i < objectPoints_.size(); ++i ) {
-      ImagePointsVec undist[2] = {
-        cama.undistortVec( imagePoints_[0][i] ),
-        camb.undistortVec( imagePoints_[1][i] ) };
-
-      other.add( objectPoints_[i], undist[0], undist[1] );
-    }
-  }
-
   void add( ObjectPointsVec &obj, ImagePointsVec &imga, ImagePointsVec &imgb )
   {
     objectPoints_.push_back( obj );
@@ -190,13 +188,39 @@ class StereoCalibrationData {
     numPts_ += obj.size();
   }
 
-  void flatten( FlatCalibrationData &other )
+  void undistort( StereoCalibrationData &dest, DistortionModel &cama, DistortionModel &camb )
+  {
+    dest.clear();
+
+    for( size_t i = 0; i < objectPoints_.size(); ++i ) {
+      ImagePointsVec undist[2] = {
+        cama.normalizeUndistort( imagePoints_[0][i] ),
+        camb.normalizeUndistort( imagePoints_[1][i] ) };
+
+      dest.add( objectPoints_[i], undist[0], undist[1] );
+    }
+  }
+
+  void image( StereoCalibrationData &dest, DistortionModel &cama, DistortionModel &camb )
+  {
+    dest.clear();
+
+    for( size_t i = 0; i < objectPoints_.size(); ++i ) {
+      ImagePointsVec undist[2] = {
+        cama.image( imagePoints_[0][i] ),
+        camb.image( imagePoints_[1][i] ) };
+
+      dest.add( objectPoints_[i], undist[0], undist[1] );
+    }
+  }
+
+  void flatten( FlatCalibrationData &dest )
   {
     for( size_t i = 0; i < objectPoints_.size(); ++i ) {
 
-      std::copy( objectPoints_[i].begin(), objectPoints_[i].end(), back_inserter(  other.objectPoints_ ) );
-      std::copy( imagePoints_[0][i].begin(), imagePoints_[0][i].end(), back_inserter(  other.imagePoints_[0] ) );
-      std::copy( imagePoints_[1][i].begin(), imagePoints_[1][i].end(), back_inserter(  other.imagePoints_[1] ) );
+      std::copy( objectPoints_[i].begin(), objectPoints_[i].end(), back_inserter(  dest.objectPoints_ ) );
+      std::copy( imagePoints_[0][i].begin(), imagePoints_[0][i].end(), back_inserter(  dest.imagePoints_[0] ) );
+      std::copy( imagePoints_[1][i].begin(), imagePoints_[1][i].end(), back_inserter(  dest.imagePoints_[1] ) );
     }
   }
 
@@ -214,18 +238,9 @@ class StereoCalibrationData {
       objectPoints_.push_back( shared.worldPoints );
       numPts_ += shared.worldPoints.size();
 
-      //:ImagePointsVec undistortedPoints[2] = {
-      //:  ImagePointsVec( shared.imagePoints[0].size() ),
-      //:  ImagePointsVec( shared.imagePoints[1].size() )  };
-
-      // Generate undistorted image points as well
       for( int imgIdx = 0; imgIdx < 2 ; ++imgIdx ) {
         imagePoints_[imgIdx].push_back( shared.imagePoints[imgIdx] );
 
-        // Technically this is normalize->undistort->reimage
-
-        //  undistortedImagePoints_[imgIdx].push_back( undist );
-        //  std::copy( undist.begin(), undist.end(), back_inserter( undistortedImagePts_[imgIdx] ) );
       }
     }
   }
@@ -276,9 +291,9 @@ class DbStereoCalibration {
   void doCalibrate( void )
   {
 
-    StereoCalibrationData calData, undistortData;
+    StereoCalibrationData calData, unData;
 
-    // Just implement a random selector for now.
+    // Use all data for now
     int vidLength = min( db_[0].vidLength(), db_[1].vidLength() );
 
     for( int frame = 0; frame < vidLength; ++frame ) {
@@ -292,15 +307,16 @@ class DbStereoCalibration {
 
     LOG(INFO) << "Have created set of " << calData.size() << " points." << endl;
 
-    calData.undistort( undistortData, *cameras_[0], *cameras_[1] );
+    // unData is Unidistorted and Normalized
+    calData.undistort( unData, *cameras_[0], *cameras_[1] );
 
-    FlatCalibrationData flatUndistortData;
-    undistortData.flatten( flatUndistortData );
+    FlatCalibrationData flatUNData;
+    unData.flatten( flatUNData );
 
     StereoCalibration cal;
 
     if( true ) {
-      hartleyMethod( flatUndistortData, cal );
+      hartleyMethod( flatUNData, cal );
     } else {
       //opencvMethod( calData, opencvCal );
     }
@@ -319,7 +335,7 @@ class DbStereoCalibration {
       if( objPts.size() < 2 ) continue;
 
       ObjectPointsVec tri;
-      Distortion::triangulate( *cameras_[0], *cameras_[1], cal, imgPts0, imgPts1, tri );
+      if( Distortion::triangulate( *cameras_[0], *cameras_[1], cal, imgPts0, imgPts1, tri ) == false ) continue;
 
       triangPts.push_back( tri );
 
@@ -334,9 +350,9 @@ class DbStereoCalibration {
         double scale = sqrt(delDet / delTri);
         scales.push_back( scale );
 
-        //LOG(INFO) << "dDet: " << dDet << "   delDet: " << delDet;
-        //LOG(INFO) << "dTri: " << dTri << "   delTri: " << delTri;
-        //LOG(INFO) << "Scale: " << scale;
+        // LOG(INFO) << "dDet: " << dDet << "   delDet: " << delDet;
+        // LOG(INFO) << "dTri: " << dTri << "   delTri: " << delTri;
+        // LOG(INFO) << "Scale: " << scale;
       }
 
     }
@@ -373,10 +389,13 @@ class DbStereoCalibration {
     int flags = CV_CALIB_FIX_INTRINSIC;
     Size imageSize( db_[0].imageSize() );
 
+StereoCalibrationData imagedData;
+data.image( imagedData, *cameras_[0], *cameras_[1] );
+
     // For what it's worth, cvDbStereoCalibrate appears to optimize for the translation and rotation
     // (and optionally the intrinsics) by minimizing the L2-norm reprojection error
     // Then computes E directly (as [T]_x R) then F = K^-T E F^-1
-    double reprojError = Distortion::stereoCalibrate( data.objectPoints_, data.imagePoints_[0], data.imagePoints_[1],
+    double reprojError = Distortion::stereoCalibrate( imagedData.objectPoints_, imagedData.imagePoints_[0], imagedData.imagePoints_[1],
                                                      *cameras_[0], *cameras_[1],
                                                      imageSize, r, t, e, f,
                                                      TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6),
@@ -400,10 +419,10 @@ class DbStereoCalibration {
   }
 
 
-  bool hartleyMethod( FlatCalibrationData &data,
+  bool hartleyMethod( FlatCalibrationData &normData,
                      StereoCalibration &cal )
   {
-    cout << "!!! Using Hartley !!!" << endl;
+    cout << "!!! Using Hartley method !!!" << endl;
 
     // Hartley method calculates F directly.  Then decomposes that into E and decomposes
     // that into T and R
@@ -417,16 +436,19 @@ class DbStereoCalibration {
 
     Mat e,f, status;
 
-
-    FlatCalibrationData normData;
-    data.normalize( normData, *cameras_[0], *cameras_[1] );
-
     //Mat status, estF;
     //estF = findFundamentalMat(Mat(undistortedImagePts[0]), Mat(undistortedImagePts[1]), FM_RANSAC, 3., 0.99, status);
     //cout << "Est F: " << endl << estF << endl;
 
     Mat estE;
-    estE = findFundamentalMat(Mat(normData.imagePoints_[0]), Mat(normData.imagePoints_[1]), FM_RANSAC, 3./1600, 0.99, status);
+    estE = findFundamentalMat(Mat(normData.imagePoints_[0]),
+                              Mat(normData.imagePoints_[1]),
+                              FM_RANSAC, 3./1600.0, 0.99, status);
+
+  if( estE.empty() ) {
+    LOG(ERROR) << "Could not calculate essential matrix.";
+    return -1;
+  }
 
     cout << "estimated e: " << endl << estE << endl;
     // Normalize e
@@ -446,11 +468,14 @@ class DbStereoCalibration {
         statusVec[i] = true;
         ++count;
       }
-    cout << count << "/" << data.size() << " points considered inlier." << endl;
+    cout << count << "/" << normData.size() << " points considered inlier." << endl;
 
-    FlatCalibrationData goodNorm, goodData;
-    data.keepIf( goodData, statusVec );
+    FlatCalibrationData imagedData;
+    normData.normalize( imagedData, *cameras_[0], *cameras_[1] );
+
+    FlatCalibrationData goodNorm, goodImaged;
     normData.keepIf( goodNorm, statusVec );
+    imagedData.keepIf( goodImaged, statusVec );
 
     double eError = reprojectionError( goodNorm, e );
     cout << "Mean E reproj error " << eError << endl;
@@ -460,7 +485,7 @@ class DbStereoCalibration {
     f /= (f.at<double>(2,2) == 0 ? 1.0 : f.at<double>(2,2) );
 
     // Calculate the mean reprojection error under this f
-    double fError = reprojectionError( goodData, f );
+    double fError = reprojectionError( goodImaged, f );
     cout << "Mean F reproj error " << fError << endl;
 
     // Disambiguate the four solutions by:
@@ -909,7 +934,7 @@ for( int i = 0; i < pairs.size(); ++i ) {
 //
 //      Mat cam( P[0], Rect(0,0,3,3) );
 //      std::transform( rectifiedPoints[j].begin(), rectifiedPoints[j].end(),
-//          rectifiedPoints[j].begin(), TxRectifier( cam*R[j] ) );
+//          rectifiedPoints[j].begin(), RectifierFunctor( cam*R[j] ) );
 //    }
 //
 //
