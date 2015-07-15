@@ -41,7 +41,7 @@ class SonarCalibrationOpts {
       TCLAP::ValueArg<std::string> cameraFileArg("", "camera-file", "Sphere db", true, "", "Sphere db", cmd );
       TCLAP::ValueArg<std::string> cameraCalArg("", "camera-calibration", "Camera cal", true, "", "Camera calibration file", cmd );
 
-        TCLAP::SwitchArg imgAxesArg( "", "image-axes", "Image axes", cmd, false );
+        TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
 
       TCLAP::ValueArg<std::string> calOutArg("", "calibration-out", "Out", false, "", "Save calibration", cmd );
 
