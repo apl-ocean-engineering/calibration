@@ -96,28 +96,22 @@ public:
     int ret = loadCalibrations();
     if( ret != 0 ) return ret;
 
+    // This is the rigid body transform from sonar frame to right from to left frame
+    Matx33f stereoR;
+    Vec3f   stereot;
+
+    _stereo.R.convertTo( stereoR, CV_32F );
+    _stereo.t.convertTo( stereot, CV_32F );
+
+    LOG(INFO) << "-----  stereo ----";
+    LOG(INFO) << "Rot: " << euler( stereoR );
+    LOG(INFO) << "Trans: " << stereot;
+  LOG(INFO) << endl;
+
     LOG(INFO) << "---- Left pose ---- ";
 // This is the rigid body transform from sonar frame to left cam frame
 LOG(INFO) << "Rot: " << euler(_leftCS->rotMat());
 LOG(INFO) << "Trans: " << _leftCS->trans();
-
-LOG(INFO) << "---- Right pose ---- ";
-// This is the rigid body transform from sonar frame to left cam frame
-LOG(INFO) << "Rot: " << euler(_rightCS->rotMat());
-LOG(INFO) << "Trans: " << _rightCS->trans();
-
-// This is the rigid body transform from sonar frame to right from to left frame
-Matx33f stereoR;
-Vec3f   stereot;
-
-_stereo.R.convertTo( stereoR, CV_32F );
-_stereo.t.convertTo( stereot, CV_32F );
-
-LOG(INFO) << "-----  stereo ----";
-LOG(INFO) << "Rot: " << euler( stereoR );
-LOG(INFO) << "Trans: " << stereot;
-
-
 
 Matx33f txRot = stereoR.t() * _rightCS->rotMat();
 Vec3f   txTrans = stereoR.t() * (_rightCS->trans() - stereot );
@@ -126,6 +120,35 @@ LOG(INFO) << "----- Right + stereo ----";
 LOG(INFO) << "Rot: " << euler( txRot );
 LOG(INFO) << "Trans: " << txTrans;
 
+Vec3f terror = _leftCS->trans() - txTrans;
+LOG(INFO) << endl;
+LOG(INFO) << "Left to right+stereo Trans error: " << terror;
+LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
+LOG(INFO) << endl;
+
+
+
+
+LOG(INFO) << "---- Right pose ---- ";
+// This is the rigid body transform from sonar frame to left cam frame
+LOG(INFO) << "Rot: " << euler(_rightCS->rotMat());
+LOG(INFO) << "Trans: " << _rightCS->trans();
+
+txRot = stereoR * _leftCS->rotMat();
+txTrans = stereoR * (_leftCS->trans() + stereot);
+
+LOG(INFO) << "----- Left + stereo ----";
+LOG(INFO) << "Rot: " << euler( txRot );
+LOG(INFO) << "Trans: " << txTrans;
+
+terror = _rightCS->trans() - txTrans;
+LOG(INFO) << endl;
+LOG(INFO) << "Left to right+stereo Trans error: " << terror;
+LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
+LOG(INFO) << endl;
+
+
+return 0;
 
   }
 
