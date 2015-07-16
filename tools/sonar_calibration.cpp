@@ -29,6 +29,7 @@ class SonarCalibrationOpts {
   {;}
 
   string sonarFile, cameraFile, cameraCalibration, calOut;
+float sonarScale;
   bool imageAxes;
 
   bool parseOpts( int argc, char **argv )
@@ -40,6 +41,7 @@ class SonarCalibrationOpts {
       TCLAP::ValueArg<std::string> sonarFileArg("", "sonar-file", "Sonar file", true, "", "Sonar file", cmd );
       TCLAP::ValueArg<std::string> cameraFileArg("", "camera-file", "Sphere db", true, "", "Sphere db", cmd );
       TCLAP::ValueArg<std::string> cameraCalArg("", "camera-calibration", "Camera cal", true, "", "Camera calibration file", cmd );
+TCLAP::ValueArg<float> sonarScaleArg("", "sonar-scale", "Sonar scale", false, 1000, "Sonar point cloud scalar", cmd);
 
         TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
 
@@ -52,6 +54,7 @@ class SonarCalibrationOpts {
       cameraCalibration = cameraCalArg.getValue();
       calOut = calOutArg.getValue();
       imageAxes = imgAxesArg.getValue();
+sonarScale = sonarScaleArg.getValue();
 
     } catch( TCLAP::ArgException &e ) {
       LOG(ERROR) << "Parsing error: " << e.error() << " for " << e.argId();
@@ -116,9 +119,10 @@ class SonarCalibration {
       }
 
       string fname( tokens[0] );
-      Vector3f  sPoint( atof( tokens[1].c_str() ),
-                       atof( tokens[2].c_str() ),
-                       atof( tokens[3].c_str() ) );
+      Vector3f  sPoint( atof( tokens[1].c_str() ) * opts.sonarScale,
+                       atof( tokens[2].c_str() ) * opts.sonarScale,
+                       atof( tokens[3].c_str() ) * opts.sonarScale );
+      float sonRadius = atof( tokens[4].c_str() ) * opts.sonarScale;
 
       if( opts.imageAxes ) {
         float swap = sPoint[1];
@@ -139,14 +143,13 @@ class SonarCalibration {
 
           ImagePoint vImage( atof( tokens[1].c_str() ),
                           atof( tokens[2].c_str() ) );
-          float radius( atof( tokens[3].c_str() ) );
+          float imgRadius( atof( tokens[3].c_str() ) );
 
           // Normalize and undistort vPoint
           ImagePoint undistorted = camera->normalizeUndistort( vImage );
 
-          Vector2f undVec( undistorted[0], undistorted[1] );
-
-          data.push_back( SonarCalibrationSolver::SonarCalDatum( undVec, sPoint, fname ) );
+          data.push_back( SonarCalibrationSolver::SonarCalDatum( Vector2f( undistorted[0], undistorted[1] ), imgRadius / camera->favg(),
+                                                                  sPoint, sonRadius, fname ) );
           stop = true;
         }
       }
@@ -180,8 +183,12 @@ class SonarCalibration {
       LOG(INFO) << "Euler angles (rotate point in sonar coords to camera frame): " << euler;
 
       LOG(INFO) << "Translation vector (sonar origin in camera coords): " << pose.trans();
+      LOG(INFO) << "Translation vector length: " << pose.tLength();
 
-      if( opts.calOut.size() > 0 ) pose.write( opts.calOut );
+      if( opts.calOut.size() > 0 ) {
+          pose.write( opts.calOut );
+          LOG(INFO) << "Write sonar pose to " << opts.calOut;
+      }
 
     }
 

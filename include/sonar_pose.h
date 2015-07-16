@@ -45,8 +45,10 @@ class SonarPose {
 
   Vec3f sonarToImage( const Vec3f &pt );
 
+void scale( float scale ) { _trans *= scale; }
 
   const Vec3f &trans( void ) const { return _trans; }
+  float tLength( void ) const { return sqrt( _trans.dot(_trans)); }
 
 
  protected:

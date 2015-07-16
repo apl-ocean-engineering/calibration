@@ -23,12 +23,15 @@ class SonarCalibrationSolver {
   struct SonarCalDatum {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    SonarCalDatum( const Vector2f &_img, const Vector3f &_sonar, const string &_name = "" )
-        : img( _img ), sonar( _sonar ), name( _name )
+    SonarCalDatum( const Vector2f &_img, float _imgRad, const Vector3f &_sonar, float _sonRad, const string &_name = "" )
+        : img( _img ), imgRadius( _imgRad), sonar( _sonar ), sonarRadius( _sonRad ), name( _name )
     {;}
 
     Vector2f img;
+    float imgRadius;
     Vector3f sonar;
+    float sonarRadius;
+
     string name;
   };
 
@@ -40,8 +43,15 @@ class SonarCalibrationSolver {
 
     Result( void )
     {;}
-
+    
     Vector6d pose;
+
+    void scale( float scale )
+    {
+      pose[3] *= scale;
+      pose[4] *= scale;
+      pose[5] *= scale;
+    }
 
     bool good;
     float residual;
