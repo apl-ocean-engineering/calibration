@@ -53,6 +53,8 @@ public:
       leftCameraSonar = leftCameraSonarArg.getValue();
       rightCameraSonar = rightCameraSonarArg.getValue();
 
+stereoCal = stereoCalArg.getValue();
+
       cameraDetections   = cameraFileArg.getValue();
       sonarDetections    = sonarFileArg.getValue();
 
@@ -96,10 +98,14 @@ public:
 
     LOG(INFO) << "---- Left pose ---- ";
 // This is the rigid body transform from sonar frame to left cam frame
-LOG(INFO) << "Rot: " << endl <<  _leftCS->rotMat();
+LOG(INFO) << "Rot: " << euler(_leftCS->rotMat());
 LOG(INFO) << "Trans: " << _leftCS->trans();
 
-LOG(INFO) << "----- Right + stereo ----";
+LOG(INFO) << "---- Right pose ---- ";
+// This is the rigid body transform from sonar frame to left cam frame
+LOG(INFO) << "Rot: " << euler(_rightCS->rotMat());
+LOG(INFO) << "Trans: " << _rightCS->trans();
+
 // This is the rigid body transform from sonar frame to right from to left frame
 Matx33f stereoR;
 Vec3f   stereot;
@@ -107,10 +113,17 @@ Vec3f   stereot;
 _stereo.R.convertTo( stereoR, CV_32F );
 _stereo.t.convertTo( stereot, CV_32F );
 
+LOG(INFO) << "-----  stereo ----";
+LOG(INFO) << "Rot: " << euler( stereoR );
+LOG(INFO) << "Trans: " << stereot;
+
+
+
 Matx33f txRot = stereoR.t() * _rightCS->rotMat();
 Vec3f   txTrans = stereoR.t() * (_rightCS->trans() - stereot );
 
-LOG(INFO) << "Rot: " << endl <<  txRot;
+LOG(INFO) << "----- Right + stereo ----";
+LOG(INFO) << "Rot: " << euler( txRot );
 LOG(INFO) << "Trans: " << txTrans;
 
 
@@ -142,9 +155,22 @@ LOG(INFO) << "Trans: " << txTrans;
       return -1;
     }
 
-    _stereo.load( opts.stereoCal );
+    if( _stereo.load( opts.stereoCal ) == false ) {
+LOG(ERROR) << "Couldn't load stereo calibration from " << opts.stereoCal;
+return -1;
+};
 
     return 0;
+  }
+
+  Vec3f euler( const Matx33f &rot ) const
+  {
+    cv::Matx33f qx, qy, qz, Rq, Qq;
+    cv::RQDecomp3x3( rot, Rq, Qq, qx, qy, qz );
+
+    return Vec3f( acos( qx(1,1) ) * 180.0/M_PI,
+                  acos( qy(0,0) ) * 180.0/M_PI,
+                  acos( qz(0,0) ) * 180.0/M_PI);
   }
 
 protected:
