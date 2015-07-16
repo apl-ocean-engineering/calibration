@@ -53,7 +53,7 @@ public:
       leftCameraSonar = leftCameraSonarArg.getValue();
       rightCameraSonar = rightCameraSonarArg.getValue();
 
-stereoCal = stereoCalArg.getValue();
+      stereoCal = stereoCalArg.getValue();
 
       cameraDetections   = cameraFileArg.getValue();
       sonarDetections    = sonarFileArg.getValue();
@@ -96,6 +96,9 @@ public:
     int ret = loadCalibrations();
     if( ret != 0 ) return ret;
 
+// Ground truths
+float leftCalcLength = 865.570874084302, rightCalcLength = 862.4962716725214, stereoBaseline = 743.74375;
+
     // This is the rigid body transform from sonar frame to right from to left frame
     Matx33f stereoR;
     Vec3f   stereot;
@@ -106,49 +109,77 @@ public:
     LOG(INFO) << "-----  stereo ----";
     LOG(INFO) << "Rot: " << euler( stereoR );
     LOG(INFO) << "Trans: " << stereot;
-  LOG(INFO) << endl;
+float sb = sqrt( stereot.dot( stereot ));
+    LOG(INFO) << "Baseline length: " << sb;
+LOG(INFO) << "Ground truth baseline: " << stereoBaseline;
+LOG(INFO) << "Baseline error: " << (fabs(sb-stereoBaseline)/stereoBaseline) * 100 << " pct";
+    LOG(INFO) << endl;
 
     LOG(INFO) << "---- Left pose ---- ";
-// This is the rigid body transform from sonar frame to left cam frame
-LOG(INFO) << "Rot: " << euler(_leftCS->rotMat());
-LOG(INFO) << "Trans: " << _leftCS->trans();
+    // This is the rigid body transform from sonar frame to left cam frame
+    LOG(INFO) << "Rot: " << euler(_leftCS->rotMat());
+    LOG(INFO) << "Trans: " << _leftCS->trans();
+    LOG(INFO) << "Trans length: " << _leftCS->tLength();
+LOG(INFO) << "Ground truth length: " << leftCalcLength;
 
-Matx33f txRot = stereoR.t() * _rightCS->rotMat();
-Vec3f   txTrans = stereoR.t() * (_rightCS->trans() - stereot );
+LOG(INFO) << "Error : " << (fabs(_leftCS->tLength() - leftCalcLength)/leftCalcLength) * 100 << " pct";
 
-LOG(INFO) << "----- Right + stereo ----";
-LOG(INFO) << "Rot: " << euler( txRot );
-LOG(INFO) << "Trans: " << txTrans;
+    Matx33f txRot = stereoR.t() * _rightCS->rotMat();
+    Vec3f   txTrans = stereoR.t() * (_rightCS->trans() - stereot );
 
-Vec3f terror = _leftCS->trans() - txTrans;
-LOG(INFO) << endl;
-LOG(INFO) << "Left to right+stereo Trans error: " << terror;
-LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
-LOG(INFO) << endl;
+    LOG(INFO) << "----- Right + stereo ----";
+    LOG(INFO) << "Rot: " << euler( txRot );
+    LOG(INFO) << "Trans: " << txTrans;
+float rightStLength = sqrt( txTrans.dot(txTrans ));
+    LOG(INFO) << "Trans length: " << rightStLength;
+LOG(INFO) << "Error : " << (fabs(_leftCS->tLength() - rightStLength)/_leftCS->tLength()) * 100 << " pct";
+
+    Vec3f terror = _leftCS->trans() - txTrans;
+    LOG(INFO) << endl;
+    LOG(INFO) << "Left to right+stereo Trans error: " << terror;
+    LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
+
+Vec3f crossProd( _leftCS->trans().cross( txTrans ) );
+float cross = sqrt( crossProd.dot(crossProd ));
+float dot = _leftCS->trans().dot( txTrans );
+    float leftErrAngle = atan2( cross, dot );
+    LOG(INFO) << "Included angle: " << 180.0 / M_PI * leftErrAngle;
+    LOG(INFO) << endl;
+
+    LOG(INFO) << "---- Right pose ---- ";
+    // This is the rigid body transform from sonar frame to left cam frame
+    LOG(INFO) << "Rot: " << euler(_rightCS->rotMat());
+    LOG(INFO) << "Trans: " << _rightCS->trans();
+    LOG(INFO) << "Trans length: " << _rightCS->tLength();
+    LOG(INFO) << "Ground truth length: " << rightCalcLength;
+
+LOG(INFO) << "Error: " << (fabs(_rightCS->tLength() - rightCalcLength)/rightCalcLength) * 100 << " pct";
+
+    txRot = stereoR * _leftCS->rotMat();
+    txTrans = stereoR * (_leftCS->trans() + stereot);
+
+    LOG(INFO) << "----- Left + stereo ----";
+    LOG(INFO) << "Rot: " << euler( txRot );
+    LOG(INFO) << "Trans: " << txTrans;
+    float leftStLength = sqrt( txTrans.dot(txTrans ));
+        LOG(INFO) << "Trans length: " << leftStLength;
+    LOG(INFO) << "Error : " << (fabs(_rightCS->tLength() - leftStLength)/_rightCS->tLength()) * 100 << " pct";
+
+    terror = _rightCS->trans() - txTrans;
+    LOG(INFO) << endl;
+    LOG(INFO) << "Left to right+stereo Trans error: " << terror;
+    LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
+
+     crossProd = _rightCS->trans().cross( txTrans );
+     cross = sqrt( crossProd.dot(crossProd ));
+     dot = _rightCS->trans().dot( txTrans );
+        float rightErrAngle = atan2( cross, dot );
+    LOG(INFO) << "Included angle: " << 180.0 / M_PI * rightErrAngle;
+
+    LOG(INFO) << endl;
 
 
-
-
-LOG(INFO) << "---- Right pose ---- ";
-// This is the rigid body transform from sonar frame to left cam frame
-LOG(INFO) << "Rot: " << euler(_rightCS->rotMat());
-LOG(INFO) << "Trans: " << _rightCS->trans();
-
-txRot = stereoR * _leftCS->rotMat();
-txTrans = stereoR * (_leftCS->trans() + stereot);
-
-LOG(INFO) << "----- Left + stereo ----";
-LOG(INFO) << "Rot: " << euler( txRot );
-LOG(INFO) << "Trans: " << txTrans;
-
-terror = _rightCS->trans() - txTrans;
-LOG(INFO) << endl;
-LOG(INFO) << "Left to right+stereo Trans error: " << terror;
-LOG(INFO) << "   trans error length: " << sqrt( terror.dot(terror));
-LOG(INFO) << endl;
-
-
-return 0;
+    return 0;
 
   }
 
@@ -179,9 +210,9 @@ return 0;
     }
 
     if( _stereo.load( opts.stereoCal ) == false ) {
-LOG(ERROR) << "Couldn't load stereo calibration from " << opts.stereoCal;
-return -1;
-};
+      LOG(ERROR) << "Couldn't load stereo calibration from " << opts.stereoCal;
+      return -1;
+    };
 
     return 0;
   }
@@ -192,8 +223,8 @@ return -1;
     cv::RQDecomp3x3( rot, Rq, Qq, qx, qy, qz );
 
     return Vec3f( acos( qx(1,1) ) * 180.0/M_PI,
-                  acos( qy(0,0) ) * 180.0/M_PI,
-                  acos( qz(0,0) ) * 180.0/M_PI);
+    acos( qy(0,0) ) * 180.0/M_PI,
+    acos( qz(0,0) ) * 180.0/M_PI);
   }
 
 protected:

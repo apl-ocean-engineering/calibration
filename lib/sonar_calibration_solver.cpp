@@ -137,7 +137,9 @@ return true;
       for( size_t j = 0; j < scales.size(); ++j ) sonAvg += scales[j];
       sonAvg /= scales.size();
 
-      result.scale( sonAvg );
+LOG(INFO) << "Average scale: " << sonAvg;
+
+      //result.scale( sonAvg );
 
 
       //  result.totalTime = summary.total_time_in_seconds;
