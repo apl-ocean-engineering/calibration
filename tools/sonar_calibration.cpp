@@ -172,7 +172,7 @@ class SonarCalibration {
 
     LOG(INFO) << "Solution is: " << (result.good ? "GOOD" : "BAD");
     if( result.good ) {
-      SonarPose pose( result.pose );
+      SonarPose pose( result.pose, opts.sonarScale );
 
       LOG(INFO) << "Rotation vector: " << pose.rot();
       Vec3f euler( pose.euler() );

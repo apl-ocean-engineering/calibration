@@ -37,5 +37,7 @@ Vec2f SonarImageWarper::sonarToImage( const Vec3f &s )
   //Vec2d inImgDist( _cam->image( Vec2f(inImgFrame[0]/inImgFrame[2], inImgFrame[1]/inImgFrame[2] ) ) );
   Vec2f inImg( _cam->image(inCamDist) );
 
+//LOG(INFO) << "sonar: " << s << " in cam frame: " << inCamFrame << " distorted: " << inCamDist << " imaged: " << inImg;
+
   return inImg;
 }

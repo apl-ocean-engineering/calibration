@@ -118,26 +118,26 @@ return true;
       std::cout << summary.FullReport() << "\n";
 
       // Now attempt to find scale using radii.
-      vector<float> scales;
-
-      for( size_t i = 0; i < data.size(); ++i ) {
-        Vector3f son( data[i].sonar );
-        float radial = sqrt( son.dot( son ));
-
-        float sonScale = data[i].sonarRadius / radial;
-
-        float scale = data[i].imgRadius / sonScale;
-
-        LOG(INFO) << "Son radius: " << data[i].sonarRadius << " radial = " << radial << " sonScale = " << sonScale << " imgRadius = " << data[i].imgRadius << " scale = " << scale;
-
-        scales.push_back( scale );
-      }
-
-      float sonAvg = 0;
-      for( size_t j = 0; j < scales.size(); ++j ) sonAvg += scales[j];
-      sonAvg /= scales.size();
-
-LOG(INFO) << "Average scale: " << sonAvg;
+//       vector<float> scales;
+//
+//       for( size_t i = 0; i < data.size(); ++i ) {
+//         Vector3f son( data[i].sonar );
+//         float radial = sqrt( son.dot( son ));
+// 
+//         float sonScale = data[i].sonarRadius / radial;
+//
+//         float scale = data[i].imgRadius / sonScale;
+//
+//         LOG(INFO) << "Son radius: " << data[i].sonarRadius << " radial = " << radial << " sonScale = " << sonScale << " imgRadius = " << data[i].imgRadius << " scale = " << scale;
+//
+//         scales.push_back( scale );
+//       }
+//
+//       float sonAvg = 0;
+//       for( size_t j = 0; j < scales.size(); ++j ) sonAvg += scales[j];
+//       sonAvg /= scales.size();
+//
+// LOG(INFO) << "Average scale: " << sonAvg;
 
       //result.scale( sonAvg );
 

@@ -19,8 +19,8 @@ using cv::Matx33f;
 
 class SonarPose {
  public:
-  SonarPose( const Vector6d &p );
-  SonarPose( const Vec3f &rot, const Vec3f &trans );
+  SonarPose( const Vector6d &p, float scale = 1.0 );
+  SonarPose( const Vec3f &rot, const Vec3f &trans, float scale = 1.0 );
 
   bool write( const std::string &filename );
   static SonarPose *Load( const std::string &filename );
@@ -45,7 +45,7 @@ class SonarPose {
 
   Vec3f sonarToImage( const Vec3f &pt );
 
-void scale( float scale ) { _trans *= scale; }
+  void setSonarScale( float s ) { _scale = s; }
 
   const Vec3f &trans( void ) const { return _trans; }
   float tLength( void ) const { return sqrt( _trans.dot(_trans)); }
@@ -53,6 +53,7 @@ void scale( float scale ) { _trans *= scale; }
 
  protected:
   Vec3f _rot, _trans;
+float _scale;
 
 };
 

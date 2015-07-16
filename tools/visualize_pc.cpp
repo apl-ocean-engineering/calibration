@@ -175,20 +175,18 @@ public:
 
     Vec2i intImg( round(inImg[0]), round(inImg[1]) );
 
-    if( intImg[0] < 0 || intImg[0] > _img.size().width ||
-    intImg[1] < 0 || intImg[1] > _img.size().height ) {
+  //   if( ++_haveOutput < 10 ) {
+  // LOG(INFO) << Vec3f(x,y,z) << " -> " << inImg;
+  //   }
+
+    if( intImg[0] < 0 || intImg[0] >= _img.size().width ||
+    intImg[1] < 0 || intImg[1] >= _img.size().height ) {
       r = g = b = 100;
     } else {
-
-      //  if( ++_haveOutput < 10 ) {
-      //LOG(INFO) << Vec3f(x,y,z) << " -> " << inCamFrame << " -> " << inCamDist << " -> " << inImg;
-      //  }
 
       Vec3b p( _img.at< Vec3b >( intImg[1], intImg[0] ) );
 
       _imgPts.push_back( inImg );
-
-      //LOG(INFO) << p;
 
       r = p[0];
       g = p[1];
@@ -273,6 +271,7 @@ public:
 
       uint32_t rgb;
       bool visible = model->color( point.x, point.y, point.z, rgb );
+
       if( visible or (opts.dropNonImaged == false) ) {
         point.rgb = *reinterpret_cast<float*>(&rgb);
         cloud_ptr->points.push_back( point );
@@ -395,7 +394,7 @@ public:
       Point2i imagePoint( pts[i][0], pts[i][1] );
       // Find the points in the PointCloud
 
-      if( _bgSeg.isForeground( imagePoint ) ) {
+      //if( _bgSeg.isForeground( imagePoint ) ) {
         // pcl::PointXYZRGB pc( cloud_ptr->points[i] );
         // float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
         //
@@ -406,7 +405,7 @@ public:
         float radius = 3.0;
 
         circle( mask, imagePoint, radius, Scalar( 255 ), -1 );
-      }
+      //}
     }
 
     Mat out( Mat::zeros(overlay.size(), overlay.type() ) );

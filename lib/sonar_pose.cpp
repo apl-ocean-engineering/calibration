@@ -6,19 +6,20 @@ using namespace Eigen;
 using namespace cv;
 
 
-SonarPose::SonarPose( const Vector6d &p )
+SonarPose::SonarPose( const Vector6d &p, float scale )
 : _rot( p[0], p[1], p[2] ),
-  _trans( p[3], p[4], p[5] )
+  _trans( p[3], p[4], p[5] ),
+  _scale( scale )
 {;}
 
-SonarPose::SonarPose( const Vec3f &rot, const Vec3f &trans )
-: _rot( rot ), _trans( trans )
+SonarPose::SonarPose( const Vec3f &rot, const Vec3f &trans, float scale )
+: _rot( rot ), _trans( trans ), _scale( scale )
 {;}
 
 
 Vec3f SonarPose::sonarToImage( const Vec3f &pt )
 {
-  return rotMat() * pt + _trans;
+  return rotMat() * (pt * _scale) + _trans;
 }
 
 bool SonarPose::write( const string &filename )
@@ -27,6 +28,7 @@ bool SonarPose::write( const string &filename )
 
   fs << "rot" << _rot;
   fs << "trans" << _trans;
+  fs << "scale" << _scale;
 }
 
 SonarPose *SonarPose::Load( const string &filename )
@@ -35,9 +37,11 @@ SonarPose *SonarPose::Load( const string &filename )
 
   //Mat rmat, tmat;
   Vec3f rot, trans;
+float scale;
 
   fs["rot"] >> rot;
   fs["trans"] >> trans;
+  fs["scale"] >> scale;
 
-  return new SonarPose( rot, trans );
+  return new SonarPose( rot, trans, scale );
 }
