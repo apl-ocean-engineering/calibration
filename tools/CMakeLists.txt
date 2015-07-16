@@ -83,6 +83,11 @@ target_compile_definitions( stereo_calibration PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( stereo_calibration PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( stereo_calibration ${PCL_LIBRARIES} )
 
+add_executable( validate_sonar validate_sonar.cpp
+  ${SONAR_SRCS}
+  ../lib/sonar_image_warper.cpp
+  ../lib/sonar_detections.cpp )
+
 add_executable( visualize_pc visualize_pc.cpp
   ${SONAR_SRCS}
   ../lib/sonar_image_warper.cpp
