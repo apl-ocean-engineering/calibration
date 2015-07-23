@@ -42,10 +42,10 @@ public:
 
   string pcFile, imageOverlay, cameraCalibration, cameraSonarFile;
   string sonarFile, cameraFile, backgroundFile;
-  bool imageAxes, doDisplay, dropNonImaged, dropSmallClusters;
+  bool imageAxes, doDisplay, dropSmallClusters, showOutliers;
 
-float smallClusterRadius;
-int smallClusterNeighbors;
+  float smallClusterRadius;
+  int smallClusterNeighbors;
 
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
@@ -77,13 +77,14 @@ int smallClusterNeighbors;
     TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
     TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
 
-// Small cluster filtering
-    TCLAP::SwitchArg dropSmallClustersArg( "", "drop-small-clusters", "", cmd, false );
-TCLAP::ValueArg< float > smallClusterRadiusArg("", "small-cluster-radius", "Radius", false, 2.0, "Radius", cmd );
-TCLAP::ValueArg< int > smallClusterNeighborsArg("", "small-cluster-neighbors", "Num neighbors", false, 5, "Neighbors", cmd );
+    // Small cluster filtering
+    TCLAP::SwitchArg dropSmallClustersArg( "", "filter-small-clusters", "", cmd, false );
+    TCLAP::ValueArg< float > smallClusterRadiusArg("", "small-cluster-radius", "Radius", false, 2.0, "Radius", cmd );
+    TCLAP::ValueArg< int > smallClusterNeighborsArg("", "small-cluster-neighbors", "Num neighbors", false, 5, "Neighbors", cmd );
 
     TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
-    TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
+    //TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
+    TCLAP::SwitchArg showOutliersArg("", "show-outliers", "", cmd, false );
 
     TCLAP::SwitchArg doDisplayArg( "", "do-display", "Do display", cmd, false );
 
@@ -101,31 +102,32 @@ TCLAP::ValueArg< int > smallClusterNeighborsArg("", "small-cluster-neighbors", "
     backgroundFile = backgroundImageArg.getValue();
     doDisplay = doDisplayArg.getValue();
 
-    dropNonImaged = dropNonImagedArg.getValue();
+    //dropNonImaged = dropNonImagedArg.getValue();
+    showOutliers = showOutliersArg.getValue();
 
     dropSmallClusters = dropSmallClustersArg.getValue();
-smallClusterRadius = smallClusterRadiusArg.getValue();
-smallClusterNeighbors = smallClusterNeighborsArg.getValue();
+    smallClusterRadius = smallClusterRadiusArg.getValue();
+    smallClusterNeighbors = smallClusterNeighborsArg.getValue();
 
     imageAxes = imgAxesArg.getValue();
-}
-
-bool validate( void )
-{
-
-  bool overlay = imageOverlay.length() > 0,
-  cam     = cameraCalibration.length() > 0,
-  camson  = cameraSonarFile.length() > 0;
-
-  if( overlay == false && cam == false && camson == false ) {
-  } else if( overlay == true && cam == true && camson == true ) {
-  } else {
-    LOG(ERROR) << "All three image-overlay, camera-calibration and camera-sonar must be specified if any one is specified";
-    return false;
   }
 
-  return true;
-}
+  bool validate( void )
+  {
+
+    bool overlay = imageOverlay.length() > 0,
+    cam     = cameraCalibration.length() > 0,
+    camson  = cameraSonarFile.length() > 0;
+
+    if( overlay == false && cam == false && camson == false ) {
+    } else if( overlay == true && cam == true && camson == true ) {
+    } else {
+      LOG(ERROR) << "All three image-overlay, camera-calibration and camera-sonar must be specified if any one is specified";
+      return false;
+    }
+
+    return true;
+  }
 
 };
 
@@ -199,7 +201,7 @@ public:
   }
 
 
-  virtual vector< Vec2i > imagePoints( void ) const { return _imgPts; }
+  virtual vector< Vec2i > imgPoints( void ) const { return _imgPts; }
 
 protected:
 
@@ -214,8 +216,10 @@ protected:
 class VisualizerCommon {
 public:
 
+  typedef pcl::PointXYZRGB PCPointType;
+
   VisualizerCommon( VisualizerOpts &opts_ )
-  : opts(opts_), model( NULL ), warper( NULL ), cloud_ptr( NULL )
+  : opts(opts_), model( NULL ), warper( NULL ), inliers( NULL ), outliers( NULL )
   {;}
 
   virtual ~VisualizerCommon()
@@ -225,8 +229,6 @@ public:
   }
 
   virtual int run( void ) = 0;
-
-typedef pcl::PointXYZRGB PCPointType;
 
   int loadModels( void )
   {
@@ -245,7 +247,8 @@ typedef pcl::PointXYZRGB PCPointType;
     }
 
     //  This should satisfy boost::shared_ptr
-    cloud_ptr = pcl::PointCloud<PCPointType>::Ptr(new pcl::PointCloud<PCPointType>);
+    inliers = pcl::PointCloud<PCPointType>::Ptr(new pcl::PointCloud<PCPointType>);
+outliers = pcl::PointCloud<PCPointType>::Ptr(new pcl::PointCloud<PCPointType>);
 
     // Load XYZ file
 
@@ -275,24 +278,25 @@ typedef pcl::PointXYZRGB PCPointType;
       uint32_t rgb;
       bool visible = model->color( point.x, point.y, point.z, rgb );
 
-      if( visible or (opts.dropNonImaged == false) ) {
-        point.rgb = *reinterpret_cast<float*>(&rgb);
-        cloud_ptr->points.push_back( point );
-      }
+      point.rgb = *reinterpret_cast<float*>(&rgb);
+
+      if( visible ) inliers->points.push_back( point );
+      else          outliers->points.push_back( point );
+
 
     }
     infile.close();
 
-    cloud_ptr->width = (int) cloud_ptr->points.size ();
-    cloud_ptr->height = 1;
+    inliers->width = (int) inliers->points.size ();
+    inliers->height = 1;
 
-if( opts.dropSmallClusters == true ) filterSmallClusters();
+    if( opts.dropSmallClusters == true ) filterSmallClusters();
 
     return 0;
 
   }
 
-void filterSmallClusters( void );
+  void filterSmallClusters( void );
 
   string timestamp()
   {
@@ -309,7 +313,7 @@ protected:
   BackgroundSegmenter _bgSeg;
   ColorModel *model;
   SonarImageWarper *warper;
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_ptr;
+  boost::shared_ptr< pcl::PointCloud<pcl::PointXYZRGB> > inliers, outliers;
 };
 
 #endif

@@ -99,7 +99,7 @@ set( VISUALIZE_SRCS
 ../lib/background_segmenter.cpp
 )
 
-add_executable( visualize_pc visualize_pc.cpp
+add_executable( visualize_pc MACOSX_BUNDLE visualize_pc.cpp
   ${SONAR_SRCS}
   ${VISUALIZE_SRCS}
  )

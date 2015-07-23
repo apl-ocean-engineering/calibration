@@ -140,6 +140,7 @@ public:
   Mat annotateSegment( void )
   {
     Mat overlay = imread( opts.imageOverlay ), mask( Mat::zeros(overlay.size(), CV_8UC1 ) );
+    Mat out( Mat::zeros(overlay.size(), overlay.type() ) );
 
     _bgSeg.setImage( overlay );
 
@@ -149,36 +150,41 @@ public:
       _bgSeg.loadBackground( opts.backgroundFile );
     }
 
-    vector< Vec2i > pts = model->imagePoints();
+    if( warper ) {
 
-    LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
-    for( int i = 0 ; i < pts.size(); ++i ) {
-      Point2i imagePoint( pts[i][0], pts[i][1] );
-      // Find the points in the PointCloud
+      if( opts.showOutliers ) {
+        LOG(INFO) << "Drawing annotated image with " << outliers->size() << " outlier points";
+        for( int i = 0; i < outliers->size(); ++i ) {
+          const Scalar outlierColor( 20, 20, 20 );
 
-      //if( _bgSeg.isForeground( imagePoint ) ) {
+          pcl::PointXYZRGB pt( outliers->points[i] );
+          cv::Point imagePoint( warper->sonarToImage( pt.x, pt.y, pt.z ) );
+          circle( out, imagePoint, 3, outlierColor, -1 );
+        }
+      }
 
-      float imgRadius = 10;
 
-      if( warper ) {
-        //pcl::PointXYZRGB pc( cloud_ptr->points[i] );
+      LOG(INFO) << "Drawing annotated image with " << inliers->size() << " inlier points";
+      for( int i = 0 ; i < inliers->size(); ++i ) {
+        //if( _bgSeg.isForeground( imagePoint ) ) {
+
+        pcl::PointXYZRGB pt( inliers->points[i] );
+        cv::Point imagePoint( warper->sonarToImage( pt.x, pt.y, pt.z ) );
+
         //float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
         //
         // Half a degree in Rad
         //float radius = dist * sin(0.008726646259971648);
         float radius = tan(0.008726646259971648);
-        imgRadius = radius * warper->cam()->favg();
+        float imgRadius = radius * warper->cam()->favg();
 
         //LOG(INFO) << "Dist = " << dist << " ; radius = " << radius << " ; imgRadius " << imgRadius;
 
+        circle( mask, imagePoint, imgRadius, Scalar( 255 ), -1 );
+        //}
       }
-      //float radius = 3.0;
-
-      circle( mask, imagePoint, imgRadius, Scalar( 255 ), -1 );
-      //}
     }
 
-    Mat out( Mat::zeros(overlay.size(), overlay.type() ) );
     overlay.copyTo( out, mask );
 
     return out;

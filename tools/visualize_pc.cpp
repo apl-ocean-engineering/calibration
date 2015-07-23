@@ -37,9 +37,9 @@ static void keyboardEventOccurred (const pcl::visualization::KeyboardEvent &even
 {
   boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
 
-LOG(INFO) << "Keypress: " << event.getKeySym();
+  LOG(INFO) << "Keypress: " << event.getKeySym();
 
-if (event.getKeySym () == "q" && event.keyDown ()) {
+  if (event.getKeySym () == "q" && event.keyDown ()) {
     viewer->close();
   }
 }
@@ -109,8 +109,13 @@ public:
 
     viewer->setBackgroundColor (0, 0, 0);
 
-    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_ptr);
-    viewer->addPointCloud<pcl::PointXYZRGB> ( cloud_ptr, rgb, "sample cloud");
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(inliers);
+    viewer->addPointCloud<pcl::PointXYZRGB> ( inliers, rgb, "inlier cloud");
+
+    if( opts.showOutliers ) {
+      pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgbOutliers(outliers);
+      viewer->addPointCloud<pcl::PointXYZRGB> ( outliers, rgbOutliers, "outlier cloud");
+    }
 
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
     viewer->addCoordinateSystem (0.25, 0, 0, 0 );
