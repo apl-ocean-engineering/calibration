@@ -1,125 +1,28 @@
-// Blatantly ``borrowed'' from  PCL visualization demo
-//
-/* \author Geoffrey Biggs */
 
-
-#include <iostream>
-#include <fstream>
-#include <string>
-
-#include <boost/thread/thread.hpp>
-#include <pcl/common/common_headers.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/visualization/pcl_visualizer.h>
-#include <pcl/console/parse.h>
-
-#include <opencv2/highgui.hpp>
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
 
 #include <glog/logging.h>
-#include <tclap/CmdLine.h>
 
-#include "sonar_image_warper.h"
-#include "sonar_detections.h"
 
-#include "background_segmenter.h"
+#include "visualize_app_common.h"
 
 using namespace std;
 using namespace cv;
 using namespace Distortion;
 
 
-class VisualizerOpts {
+class PCVisualizerOpts : public VisualizerOpts {
 public:
-  VisualizerOpts( void )
-  : annotateMode( NONE )
+  PCVisualizerOpts( void )
   {;}
 
-  string pcFile, imageOverlay, cameraCalibration, cameraSonarFile, annotatedImage;
-  string sonarFile, cameraFile, backgroundFile;
-  bool imageAxes, doDisplay, dropNonImaged;
 
-  enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
-
-  bool parseCmdLine( int argc, char **argv )
+  virtual void doParseCmdLine( TCLAP::CmdLine &cmd )
   {
-
-    try {
-      TCLAP::CmdLine cmd("Visualizers", ' ', "0.1" );
-
-      TCLAP::ValueArg< string > cameraFileArg("", "camera-detections", "Camera detection file", false, "", "Detections file", cmd );
-      TCLAP::ValueArg< string > sonarFileArg("", "sonar-detections", "sonar detection file", false, "", "Detections file", cmd );
-      TCLAP::ValueArg< string > overlayImageArg("", "image-overlay", "Image to overlay", false, "", "Image to overlay", cmd );
-TCLAP::ValueArg< string > backgroundImageArg("", "background-image", "Image for background", false, "", "Image for background", cmd );
-      TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
-      TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
-
-      TCLAP::ValueArg< string > annotatedArg("", "annotate", "Annotation mode", false, "", "{}", cmd );
-      TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
-
-      TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
-      TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
-      TCLAP::SwitchArg doDisplayArg( "", "do-display", "Do display", cmd, false );
-
-      TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
-
-      cmd.parse( argc, argv );
-
-      pcFile = pcFileArg.getValue();
-
-      imageOverlay = overlayImageArg.getValue();
-      cameraFile   = cameraFileArg.getValue();
-      sonarFile    = sonarFileArg.getValue();
-      cameraCalibration = cameraCalArg.getValue();
-      cameraSonarFile = cameraSonarFileArg.getValue();
-      annotatedImage = annotatedImageArg.getValue();
-backgroundFile = backgroundImageArg.getValue();
-      doDisplay = doDisplayArg.getValue();
-      dropNonImaged = dropNonImagedArg.getValue();
-
-      if( annotatedArg.isSet() ) {
-        string arg( annotatedArg.getValue() );
-        if( arg.compare( "overlay") == 0 )      annotateMode = OVERLAY;
-        else if( arg.compare("segment") == 0 )  annotateMode = SEGMENT;
-        else {
-          LOG(ERROR) << "Couldn't understant annotation mode \"" << arg << "\"";
-          return false;
-        }
-      }
-
-      imageAxes = imgAxesArg.getValue();
-
-
-    } catch (TCLAP::ArgException &e) {
-      LOG(ERROR) << "error: " << e.error() << " for arg " << e.argId();
-    }
-
-    return validate();
+    VisualizerOpts::doParseCmdLine( cmd );
   }
 
-  bool  validate( void )
+  virtual bool  validate( void )
   {
-
-    bool overlay = imageOverlay.length() > 0,
-    cam     = cameraCalibration.length() > 0,
-    camson  = cameraSonarFile.length() > 0;
-
-    if( overlay == false && cam == false && camson == false ) {
-    } else if( overlay == true && cam == true && camson == true ) {
-    } else {
-      LOG(ERROR) << "All three image-overlay, camera-calibration and camera-sonar must be specified if any one is specified";
-      return false;
-    }
-
-    if( annotateMode != NONE ) {
-      // Validate for annotation modes
-    } else if( annotatedImage.length() > 0) {
-      LOG(ERROR) << "Annotated image specified, but annotate mode not given.";
-      return false;
-    }
-
     return true;
   }
 
@@ -130,164 +33,24 @@ backgroundFile = backgroundImageArg.getValue();
 
 };
 
-
-class ColorModel {
+class PCVisualizer : public VisualizerCommon  {
 public:
-  virtual ~ColorModel() {;}
 
-  virtual bool color( const float x, const float y, const float z, uint32_t &rgb ) = 0;
-
-  // A lot janky
-  virtual vector< Vec2i > imagePoints( void ) const { return vector<Vec2i>(); }
-};
-
-class ConstantColor : public ColorModel {
-public:
-  ConstantColor( int r, int g, int b )
-  : _r(r), _g(g), _b(b), _rgb( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) )
+  PCVisualizer( PCVisualizerOpts &opts_ )
+  : VisualizerCommon( opts_ ), opts(opts_)
   {;}
 
-  virtual bool color( const float x, const float y, const float z, uint32_t &rgb )
+  virtual ~PCVisualizer()
   {
-    rgb = _rgb;
-    return true;
   }
 
-protected:
-  int _r, _g, _b;
-  uint32_t _rgb;
-};
-
-class ImageOverlay : public ColorModel {
-public:
-  ImageOverlay( const Mat &img, SonarImageWarper *warper )
-  : _img( img ), _warper( warper ), _imgPts(), _haveOutput(0)
-  {;}
-
-  ~ImageOverlay()
-  {  }
-
-  virtual bool color( const float x, const float y, const float z, uint32_t &rgb )
-  {
-    Vec2f inImg( _warper->sonarToImage( x,y,z) );
-    int r,g,b;
-    bool visible = false;
-
-    Vec2i intImg( round(inImg[0]), round(inImg[1]) );
-
-  //   if( ++_haveOutput < 10 ) {
-  // LOG(INFO) << Vec3f(x,y,z) << " -> " << inImg;
-  //   }
-
-    if( intImg[0] < 0 || intImg[0] >= _img.size().width ||
-    intImg[1] < 0 || intImg[1] >= _img.size().height ) {
-      r = g = b = 100;
-    } else {
-
-      Vec3b p( _img.at< Vec3b >( intImg[1], intImg[0] ) );
-
-      _imgPts.push_back( inImg );
-
-      r = p[0];
-      g = p[1];
-      b = p[2];
-      visible = true;
-    }
-
-
-    rgb = ( ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b) );
-    return visible;
-  }
-
-
-  virtual vector< Vec2i > imagePoints( void ) const { return _imgPts; }
-
-protected:
-
-  Mat _img;
-  SonarImageWarper *_warper;
-  vector< Vec2i > _imgPts;
-
-  int _haveOutput;
-
-};
-
-class PCVisualizer {
-public:
-
-  PCVisualizer( VisualizerOpts &opts_ )
-  : opts(opts_), model( NULL ), warper( NULL ), cloud_ptr( NULL )
-  {;}
-
-  ~PCVisualizer()
-  {
-    if( model != NULL ) delete model;
-    if( warper != NULL ) delete warper;
-  }
-
-  int run( void )
+  virtual int run( void )
   {
 
-    if( opts.imageOverlay.length() > 0 ) {
-      LOG(INFO) << "Constructing ImageOverlay";
-      warper = new SonarImageWarper( opts.cameraCalibration, opts.cameraSonarFile );
-      model = new ImageOverlay( imread( opts.imageOverlay ), warper );
-    } else {
-      model = new ConstantColor( 150, 150, 150 );
-    }
+    VisualizerCommon::loadModels();
 
-    if( model == NULL ) {
-      LOG(ERROR) << "Fatal error, color model not created.";
-      return -1;
-    }
-
-    //  This should satisfy boost::shared_ptr
-    cloud_ptr = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-
-    // Load XYZ file
-
-    ifstream infile( opts.pcFile );
-
-    if( !infile.is_open() ) {
-      LOG(ERROR) << "Error opening point cloud file \"" << opts.pcFile << "\"";
-      exit(-1);
-    }
-
-    while( !infile.eof() ) {
-      float x,y,z,r;
-
-      infile >> x >> y >> z >> r;
-
-      pcl::PointXYZRGB point;
-      point.x = x;
-
-      if( opts.imageAxes ) {
-        point.y = -z;
-        point.z = y;
-      } else {
-        point.y = y;
-        point.z = z;
-      }
-
-      uint32_t rgb;
-      bool visible = model->color( point.x, point.y, point.z, rgb );
-
-      if( visible or (opts.dropNonImaged == false) ) {
-        point.rgb = *reinterpret_cast<float*>(&rgb);
-        cloud_ptr->points.push_back( point );
-      }
-
-    }
-
-    infile.close();
-
-    cloud_ptr->width = (int) cloud_ptr->points.size ();
-    cloud_ptr->height = 1;
-
-    if( opts.doAnnotate() ) doAnnotate(  );
-    else doVisualize();
-
-
+    doVisualize();
+      
 
     //  // ----------------------------------------------------------------
     //  // -----Calculate surface normals with a search radius of 0.05-----
@@ -314,114 +77,6 @@ public:
 
 
   }
-
-  int doAnnotate( void )
-  {
-    Mat out;
-
-    switch( opts.annotateMode ) {
-      case VisualizerOpts::OVERLAY:
-      out = annotateOverlay();
-      break;
-      case VisualizerOpts::SEGMENT:
-      out =  annotateSegment();
-      break;
-      case VisualizerOpts::NONE:
-      default:
-      LOG(INFO) << "Hm, no annotation mode selected.";
-    }
-
-    if( opts.annotatedImage.length() > 0 ) {
-      imwrite( opts.annotatedImage, out );
-      LOG(INFO) << "Wrote annotated image to " << opts.annotatedImage;
-    }
-
-    if( opts.doDisplay ) {
-      imshow("visualize_pc", out );
-
-      char c = waitKey(0);
-    }
-
-    return 0;
-  }
-
-  Mat annotateOverlay( void ) {
-    Mat img = imread( opts.imageOverlay );
-    vector< Vec2i > pts = model->imagePoints();
-
-    LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
-    for( int i = 0 ; i < pts.size(); ++i ) {
-      circle( img, Point2i( pts[i][0], pts[i][1] ), 3, Scalar( 0,0,255 ), -1 );
-    }
-
-    if( (opts.sonarFile.length() > 0) and (warper != NULL) ) {
-      LOG(INFO) << "Drawing sonar sphere";
-
-      SonarDetections dets;
-      dets.load( opts.sonarFile, opts.imageAxes );
-      SonarDetection *det = dets.find( timestamp() );
-
-      if( det != NULL ) {
-        ImageDetection *imageDet = det->projectToImage( warper );
-
-        imageDet->draw( img );
-        delete imageDet;
-
-      } else {
-        LOG(INFO) << "Couldn't find timestamp \"" << timestamp() << "\" in sonar file " << opts.sonarFile;
-      }
-    }
-
-    return img;
-  }
-
-  Mat annotateSegment( void )
-  {
-    Mat overlay = imread( opts.imageOverlay ), mask( Mat::zeros(overlay.size(), CV_8UC1 ) );
-
-    _bgSeg.setImage( overlay );
-
-    if( opts.backgroundFile.length() > 0 )  {
-      LOG(INFO) << "Loading background image \"" << opts.backgroundFile << "\"";
-      LOG(INFO) << "Performing background segmentation";
-      _bgSeg.loadBackground( opts.backgroundFile );
-    }
-
-    vector< Vec2i > pts = model->imagePoints();
-
-    LOG(INFO) << "Drawing annotated image with " << pts.size() << " points";
-    for( int i = 0 ; i < pts.size(); ++i ) {
-      Point2i imagePoint( pts[i][0], pts[i][1] );
-      // Find the points in the PointCloud
-
-      //if( _bgSeg.isForeground( imagePoint ) ) {
-
-      float imgRadius = 10;
-
-      if( warper ) {
-        //pcl::PointXYZRGB pc( cloud_ptr->points[i] );
-        //float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
-        //
-        // Half a degree in Rad
-        //float radius = dist * sin(0.008726646259971648);
-float radius = tan(0.008726646259971648);
-        imgRadius = radius * warper->cam()->favg();
-
-        //LOG(INFO) << "Dist = " << dist << " ; radius = " << radius << " ; imgRadius " << imgRadius;
-
-      }
-      //float radius = 3.0;
-
-      circle( mask, imagePoint, imgRadius, Scalar( 255 ), -1 );
-      //}
-    }
-
-    Mat out( Mat::zeros(overlay.size(), overlay.type() ) );
-    overlay.copyTo( out, mask );
-
-    return out;
-  }
-
 
   int doVisualize( void )
   {
@@ -456,22 +111,12 @@ float radius = tan(0.008726646259971648);
     return 0;
   }
 
-  string timestamp()
-  {
-    if( opts.imageOverlay.length() > 0 ) {
-      return boost::filesystem::path( opts.imageOverlay).stem().string();
-    } else {
-      return string("");
-    }
-  }
+
 
 protected:
 
-  VisualizerOpts &opts;
-BackgroundSegmenter _bgSeg;
-  ColorModel *model;
-  SonarImageWarper *warper;
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_ptr;
+  PCVisualizerOpts &opts;
+
 };
 
 
@@ -484,8 +129,7 @@ int main (int argc, char** argv)
   google::InitGoogleLogging( argv[0] );
   FLAGS_logtostderr = 1;
 
-
-  VisualizerOpts opts;
+  PCVisualizerOpts opts;
   if( !opts.parseCmdLine( argc, argv ) ) exit(-1);
 
   PCVisualizer viz( opts );

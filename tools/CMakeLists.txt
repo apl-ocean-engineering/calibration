@@ -97,6 +97,15 @@ target_compile_definitions( visualize_pc PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( visualize_pc PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( visualize_pc ${PCL_LIBRARIES} )
 
+add_executable( visualize_img visualize_img.cpp
+  ${SONAR_SRCS}
+  ../lib/sonar_image_warper.cpp
+  ../lib/sonar_detections.cpp
+  ../lib/background_segmenter.cpp  )
+target_compile_definitions( visualize_img PUBLIC ${PCL_DEFINITIONS})
+target_include_directories( visualize_img PUBLIC ${PCL_INCLUDE_DIRS} )
+target_link_libraries( visualize_img ${PCL_LIBRARIES} )
+
 
 
 add_executable( deinterlace deinterlace.cpp )
