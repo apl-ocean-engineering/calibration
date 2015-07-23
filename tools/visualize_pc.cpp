@@ -395,16 +395,24 @@ public:
       // Find the points in the PointCloud
 
       //if( _bgSeg.isForeground( imagePoint ) ) {
-        // pcl::PointXYZRGB pc( cloud_ptr->points[i] );
-        // float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
+
+      float imgRadius = 10;
+
+      if( warper ) {
+        //pcl::PointXYZRGB pc( cloud_ptr->points[i] );
+        //float dist = sqrt( pc.x*pc.x + pc.y*pc.y + pc.z+pc.z );
         //
-        // // Half a degree in Rad
-        // float radius = dist * sin(0.008726646259971648);
-        // LOG(INFO) << "Dist = " << dist << " ; radius = " << radius;
+        // Half a degree in Rad
+        //float radius = dist * sin(0.008726646259971648);
+float radius = tan(0.008726646259971648);
+        imgRadius = radius * warper->cam()->favg();
 
-        float radius = 3.0;
+        //LOG(INFO) << "Dist = " << dist << " ; radius = " << radius << " ; imgRadius " << imgRadius;
 
-        circle( mask, imagePoint, radius, Scalar( 255 ), -1 );
+      }
+      //float radius = 3.0;
+
+      circle( mask, imagePoint, imgRadius, Scalar( 255 ), -1 );
       //}
     }
 

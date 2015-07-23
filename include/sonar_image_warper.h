@@ -20,6 +20,8 @@ public:
   cv::Vec2f sonarToImage(  float x, float y, float z );
   cv::Vec2f sonarToImage( const cv::Vec3f &s );
 
+  Distortion::DistortionModel *cam( void ) { return _cam; }
+
 protected:
 
   Distortion::DistortionModel *_cam;
