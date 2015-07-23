@@ -33,6 +33,33 @@ public:
 
 };
 
+static void keyboardEventOccurred (const pcl::visualization::KeyboardEvent &event, void* viewer_void)
+{
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
+
+LOG(INFO) << "Keypress: " << event.getKeySym();
+
+if (event.getKeySym () == "q" && event.keyDown ()) {
+    viewer->close();
+  }
+}
+
+static void mouseEventOccurred (const pcl::visualization::MouseEvent &event,  void* viewer_void)
+{
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
+
+  // if (event.getButton () == pcl::visualization::MouseEvent::LeftButton &&
+  // event.getType () == pcl::visualization::MouseEvent::MouseButtonRelease)
+  // {
+  //   std::cout << "Left mouse button released at position (" << event.getX () << ", " << event.getY () << ")" << std::endl;
+  //
+  //   char str[512];
+  //   sprintf (str, "text#%03d", text_id ++);
+  //   viewer->addText ("clicked here", event.getX (), event.getY (), str);
+  // }
+}
+
+
 class PCVisualizer : public VisualizerCommon  {
 public:
 
@@ -50,7 +77,7 @@ public:
     VisualizerCommon::loadModels();
 
     doVisualize();
-      
+
 
     //  // ----------------------------------------------------------------
     //  // -----Calculate surface normals with a search radius of 0.05-----
@@ -74,17 +101,17 @@ public:
 
 
     return 0;
-
-
   }
 
   int doVisualize( void )
   {
-    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer ("3D Viewer"));
 
     viewer->setBackgroundColor (0, 0, 0);
+
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_ptr);
     viewer->addPointCloud<pcl::PointXYZRGB> ( cloud_ptr, rgb, "sample cloud");
+
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
     viewer->addCoordinateSystem (0.25, 0, 0, 0 );
     viewer->initCameraParameters ();
@@ -93,6 +120,9 @@ public:
     // that is, initial view, +X is to right, +Y is down, +Z is away
     if( opts.imageAxes ) viewer->setCameraPosition( 0, 0, 0, 0, -1, 0 );
 
+    viewer->registerKeyboardCallback (keyboardEventOccurred, (void*)&viewer);
+    viewer->registerMouseCallback (mouseEventOccurred, (void*)&viewer);
+
     //--------------------
     // -----Main loop-----
     //--------------------
@@ -100,17 +130,10 @@ public:
     {
       viewer->spinOnce (100);
       boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-      //
-      // char c = getchar();
-      // switch(c) {
-      //   case 'q': viewer->close(); break;
-      //
-      // }
     }
 
     return 0;
   }
-
 
 
 protected:
@@ -118,7 +141,6 @@ protected:
   PCVisualizerOpts &opts;
 
 };
-
 
 
 // --------------
@@ -282,50 +304,18 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> normalsVis (
       }
 
 
-      unsigned int text_id = 0;
-      void keyboardEventOccurred (const pcl::visualization::KeyboardEvent &event,
-        void* viewer_void)
-        {
-          boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
-          if (event.getKeySym () == "r" && event.keyDown ())
-          {
-            std::cout << "r was pressed => removing all text" << std::endl;
 
-            char str[512];
-            for (unsigned int i = 0; i < text_id; ++i)
-            {
-              sprintf (str, "text#%03d", i);
-              viewer->removeShape (str);
-            }
-            text_id = 0;
-          }
-        }
 
-        void mouseEventOccurred (const pcl::visualization::MouseEvent &event,
-          void* viewer_void)
-          {
-            boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer = *static_cast<boost::shared_ptr<pcl::visualization::PCLVisualizer> *> (viewer_void);
-            if (event.getButton () == pcl::visualization::MouseEvent::LeftButton &&
-            event.getType () == pcl::visualization::MouseEvent::MouseButtonRelease)
-            {
-              std::cout << "Left mouse button released at position (" << event.getX () << ", " << event.getY () << ")" << std::endl;
+      boost::shared_ptr<pcl::visualization::PCLVisualizer> interactionCustomizationVis ()
+      {
+        boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+        viewer->setBackgroundColor (0, 0, 0);
+        viewer->addCoordinateSystem (1.0);
 
-              char str[512];
-              sprintf (str, "text#%03d", text_id ++);
-              viewer->addText ("clicked here", event.getX (), event.getY (), str);
-            }
-          }
+        viewer->registerKeyboardCallback (keyboardEventOccurred, (void*)&viewer);
+        viewer->registerMouseCallback (mouseEventOccurred, (void*)&viewer);
 
-          boost::shared_ptr<pcl::visualization::PCLVisualizer> interactionCustomizationVis ()
-          {
-            boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-            viewer->setBackgroundColor (0, 0, 0);
-            viewer->addCoordinateSystem (1.0);
+        return (viewer);
+      }
 
-            viewer->registerKeyboardCallback (keyboardEventOccurred, (void*)&viewer);
-            viewer->registerMouseCallback (mouseEventOccurred, (void*)&viewer);
-
-            return (viewer);
-          }
-
-          #endif
+      #endif

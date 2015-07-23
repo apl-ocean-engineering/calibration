@@ -42,7 +42,10 @@ public:
 
   string pcFile, imageOverlay, cameraCalibration, cameraSonarFile;
   string sonarFile, cameraFile, backgroundFile;
-  bool imageAxes, doDisplay, dropNonImaged;
+  bool imageAxes, doDisplay, dropNonImaged, dropSmallClusters;
+
+float smallClusterRadius;
+int smallClusterNeighbors;
 
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
@@ -74,8 +77,14 @@ public:
     TCLAP::ValueArg< string > cameraCalArg("", "camera-calibration", "Camera calibration", false, "", "Calibration file", cmd );
     TCLAP::ValueArg< string > cameraSonarFileArg("", "camera-sonar", "Camera-sonar calibration", false, "", "Calibration file", cmd );
 
+// Small cluster filtering
+    TCLAP::SwitchArg dropSmallClustersArg( "", "drop-small-clusters", "", cmd, false );
+TCLAP::ValueArg< float > smallClusterRadiusArg("", "small-cluster-radius", "Radius", false, 2.0, "Radius", cmd );
+TCLAP::ValueArg< int > smallClusterNeighborsArg("", "small-cluster-neighbors", "Num neighbors", false, 5, "Neighbors", cmd );
+
     TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
     TCLAP::SwitchArg dropNonImagedArg( "", "drop-non-imaged", "", cmd, false );
+
     TCLAP::SwitchArg doDisplayArg( "", "do-display", "Do display", cmd, false );
 
     TCLAP::UnlabeledValueArg< string > pcFileArg( "pc-file", "Point cloudfile", true, "", "File name", cmd );
@@ -91,12 +100,17 @@ public:
     cameraSonarFile = cameraSonarFileArg.getValue();
     backgroundFile = backgroundImageArg.getValue();
     doDisplay = doDisplayArg.getValue();
+
     dropNonImaged = dropNonImagedArg.getValue();
+
+    dropSmallClusters = dropSmallClustersArg.getValue();
+smallClusterRadius = smallClusterRadiusArg.getValue();
+smallClusterNeighbors = smallClusterNeighborsArg.getValue();
 
     imageAxes = imgAxesArg.getValue();
 }
 
-bool  validate( void )
+bool validate( void )
 {
 
   bool overlay = imageOverlay.length() > 0,
@@ -212,6 +226,8 @@ public:
 
   virtual int run( void ) = 0;
 
+typedef pcl::PointXYZRGB PCPointType;
+
   int loadModels( void )
   {
 
@@ -229,7 +245,7 @@ public:
     }
 
     //  This should satisfy boost::shared_ptr
-    cloud_ptr = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+    cloud_ptr = pcl::PointCloud<PCPointType>::Ptr(new pcl::PointCloud<PCPointType>);
 
     // Load XYZ file
 
@@ -265,16 +281,18 @@ public:
       }
 
     }
-
     infile.close();
 
     cloud_ptr->width = (int) cloud_ptr->points.size ();
     cloud_ptr->height = 1;
 
+if( opts.dropSmallClusters == true ) filterSmallClusters();
+
     return 0;
 
-
   }
+
+void filterSmallClusters( void );
 
   string timestamp()
   {

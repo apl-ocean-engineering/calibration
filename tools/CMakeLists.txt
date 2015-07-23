@@ -7,6 +7,7 @@ set( SONAR_SRCS
   ../lib/sonar_calibration_solver.cpp
   ../lib/sonar_pose.cpp )
 
+
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 include_directories( ${aplcam_INCLUDE_DIR}
 	             ${tclap_INCLUDE_DIR} )
@@ -88,20 +89,27 @@ add_executable( validate_sonar validate_sonar.cpp
   ../lib/sonar_image_warper.cpp
   ../lib/sonar_detections.cpp )
 
+
+
+
+set( VISUALIZE_SRCS
+../lib/visualize_app_common.cpp
+../lib/sonar_image_warper.cpp
+../lib/sonar_detections.cpp
+../lib/background_segmenter.cpp
+)
+
 add_executable( visualize_pc visualize_pc.cpp
   ${SONAR_SRCS}
-  ../lib/sonar_image_warper.cpp
-  ../lib/sonar_detections.cpp
-  ../lib/background_segmenter.cpp  )
+  ${VISUALIZE_SRCS}
+ )
 target_compile_definitions( visualize_pc PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( visualize_pc PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( visualize_pc ${PCL_LIBRARIES} )
 
 add_executable( visualize_img visualize_img.cpp
   ${SONAR_SRCS}
-  ../lib/sonar_image_warper.cpp
-  ../lib/sonar_detections.cpp
-  ../lib/background_segmenter.cpp  )
+  ${VISUALIZE_SRCS} )
 target_compile_definitions( visualize_img PUBLIC ${PCL_DEFINITIONS})
 target_include_directories( visualize_img PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( visualize_img ${PCL_LIBRARIES} )
