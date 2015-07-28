@@ -17,6 +17,7 @@ public:
   {;}
 
   string annotatedImage;
+  bool refineSegmentation;
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
   virtual void doParseCmdLine( TCLAP::CmdLine &cmd )
@@ -25,9 +26,12 @@ public:
     TCLAP::ValueArg< string > annotatedArg("", "annotate", "Annotation mode", true, "", "{}", cmd );
     TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
 
+    TCLAP::SwitchArg doRefineSegmentationArg( "", "refine-segmentation", "Refine segmentations", cmd, false );
+
     VisualizerOpts::doParseCmdLine( cmd );
 
     annotatedImage = annotatedImageArg.getValue();
+    refineSegmentation = doRefineSegmentationArg.getValue();
 
     if( annotatedArg.isSet() ) {
       string arg( annotatedArg.getValue() );
@@ -163,7 +167,6 @@ public:
         }
       }
 
-
       LOG(INFO) << "Drawing annotated image with " << inliers->size() << " inlier points";
       for( int i = 0 ; i < inliers->size(); ++i ) {
         //if( _bgSeg.isForeground( imagePoint ) ) {
@@ -185,10 +188,135 @@ public:
       }
     }
 
-    overlay.copyTo( out, mask );
+    Mat refinedMask;
+    if( opts.refineSegmentation ) {
+      LOG(INFO) << "Refining segmentation.";
+      refineSegmentation( overlay, mask, refinedMask );
+      overlay.copyTo( out, refinedMask );
+    } else {
+      overlay.copyTo( out, mask );
+    }
 
     return out;
   }
+
+  void refineSegmentation( const Mat &img, const Mat &mask, Mat &out )
+  {
+    //const int numLabels = 2;
+    const int numIter = 10;
+    const string SegmentationWindow("refineSegmentation");
+
+    // Create a number of masks.
+    //   Background = !( dilated many times )
+    //   Foreground = eroded many times
+    //   Prob foreground = dilated - foreground
+    //   Prob background = background - prob foreground
+
+    // Hmm, well you have to classify everything, eh?
+    const int FGErodeIterations = 20;
+    Mat defFG;
+    erode( mask, defFG, Mat(), Point(-1,-1), FGErodeIterations );
+
+    const int probFGDilateIterations = 20;
+    Mat probFG;
+    dilate( mask, probFG, Mat(), Point(-1,-1), probFGDilateIterations );
+    imshow( "mask", mask );
+
+    const int probBGDilateIterations = 40;
+    Mat probBG;
+    dilate( probFG, probBG, Mat(), Point(-1,-1), probBGDilateIterations );
+    //     Mat probBGInv( img.size(), CV_8UC1, Scalar( 1 ) );
+    // probBGInv.setTo( Scalar( 0 ), probBG );
+
+    //     const int defBGDilateIterations = 50;
+    //     Mat defBG;
+    //     dilate( probBG, defBG, Mat(), Point(-1,-1), defBGDilateIterations );
+    //     Mat defBGInv( img.size(), CV_8UC1, Scalar( 1 ) );
+    // defBGInv.setTo( Scalar( 0 ), defBG );
+
+    // construct initial mask, order matters
+    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GC_BGD ) );
+    grabCutMask.setTo( GC_PR_BGD, probBG );
+    grabCutMask.setTo( GC_PR_FGD, probFG );
+    grabCutMask.setTo( GC_FGD, defFG );
+
+    Mat gcMaskImage;
+    drawGrabCutMask( grabCutMask, gcMaskImage );
+    imshow( SegmentationWindow, gcMaskImage );
+
+    Mat bgModel, fgModel;
+
+    for( int i = 0; i < numIter; ++i ) {
+      LOG(INFO) << "Performing GrabCut iter " << i;
+
+
+      int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
+      grabCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
+
+      drawGrabCutMask( grabCutMask, gcMaskImage );
+      imshow( SegmentationWindow, gcMaskImage );
+
+      // If we weren't displaying the image, this could go outside the loop.
+      Mat binMask( img.size(), CV_8UC1, Scalar(0));
+      binMask = grabCutMask & GC_FGD;
+      out = binMask;
+
+      Mat maskedImage;
+      img.copyTo( maskedImage, binMask );
+      imshow( "refinedImage", maskedImage );
+      waitKey(1);
+    }
+
+
+  }
+
+  void drawGrabCutMask( const Mat &mask, Mat &image )
+  {
+    image = Mat::zeros( mask.size(), CV_8UC3 );
+
+    const Scalar Red( 0, 0, 255 ), Yellow(0, 255, 255),
+    Green(0, 255, 0), Blue(255,0,0), Black(0,0,0);
+
+    // Tried to do this with masks and bitwise operations.
+    // image.setTo( Red, mask & GC_FGD );
+    // image.setTo( Yellow, mask & GC_PR_FGD );
+    // image.setTo( Green, mask & GC_PR_BGD );
+    // image.setTo( Blue, mask & GC_BGD );
+
+    // The GC_* flags are bitwise, so that didn't work.
+    // could do something like
+    Mat bitmask;
+    cv::compare( mask, Scalar( GC_FGD ), bitmask, CMP_EQ );
+    image.setTo( Red, bitmask );
+
+    cv::compare( mask, Scalar( GC_PR_FGD ), bitmask, CMP_EQ );
+    image.setTo( Yellow, bitmask );
+
+    cv::compare( mask, Scalar( GC_PR_BGD ), bitmask, CMP_EQ );
+    image.setTo( Green, bitmask );
+
+    cv::compare( mask, Scalar( GC_BGD ), bitmask, CMP_EQ );
+    image.setTo( Blue, bitmask );
+
+    // ....
+
+    // Size sz( image.size() );
+    // for( unsigned int i = 0; i < sz.height; ++i ) {
+    //   for( unsigned int j = 0; j < sz.width; ++j ) {
+    //     Scalar color;
+    //     switch( mask.at<unsigned char>(i,j) ) {
+    //       case GC_FGD:    color = Red; break;
+    //       case GC_PR_FGD: color = Yellow; break;
+    //       case GC_PR_BGD: color = Green; break;
+    //       case GC_BGD:    color = Blue; break;
+    //       default:        color = Black;
+    //     }
+    //     image.at< Scalar >(i,j) = color;
+    //   }
+    // }
+
+  }
+
 
 protected:
 

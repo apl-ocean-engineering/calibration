@@ -111,13 +111,14 @@ public:
 
     pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(inliers);
     viewer->addPointCloud<pcl::PointXYZRGB> ( inliers, rgb, "inlier cloud");
+    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "inlier cloud");
 
     if( opts.showOutliers ) {
       pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgbOutliers(outliers);
       viewer->addPointCloud<pcl::PointXYZRGB> ( outliers, rgbOutliers, "outlier cloud");
+    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "outlier cloud");
     }
 
-    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
     viewer->addCoordinateSystem (0.25, 0, 0, 0 );
     viewer->initCameraParameters ();
 
