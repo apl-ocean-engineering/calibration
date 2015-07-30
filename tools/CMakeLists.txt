@@ -108,6 +108,7 @@ target_include_directories( visualize_pc PUBLIC ${PCL_INCLUDE_DIRS} )
 target_link_libraries( visualize_pc ${PCL_LIBRARIES} )
 
 add_executable( visualize_img visualize_img.cpp
+  ../lib/graphcut.cpp
   ${SONAR_SRCS}
   ${VISUALIZE_SRCS} )
 target_compile_definitions( visualize_img PUBLIC ${PCL_DEFINITIONS})

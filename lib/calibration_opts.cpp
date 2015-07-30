@@ -7,8 +7,8 @@ CalibrationOpts::CalibrationOpts()
   detectionDb(),
   saveBoardPoses(),
   dataDir("../data"),
-  boardName(), 
-  cameraName(), 
+  boardName(),
+  cameraName(),
   calibType( DistortionModel::CALIBRATION_NONE ),
   overwriteDb( false ),
   huberLoss( false ),
@@ -120,7 +120,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
 //    case 'm':
 //      calibType = DistortionModel::ParseCalibrationType( optarg );
 //      break;
-//    case '?': 
+//    case '?':
 //      help();
 //      break;
 //    default:
@@ -140,17 +140,17 @@ bool CalibrationOpts::validateOpts( void )
   }
 
   if( boardName.empty() ) {
-    LOG(ERROR) << "Board name not set"; 
-    return false; 
+    LOG(ERROR) << "Board name not set";
+    return false;
   }
 
-  if( cameraName.empty() ) { LOG(ERROR) << "Camera name not set"; 
-    return false; 
+  if( cameraName.empty() ) { LOG(ERROR) << "Camera name not set";
+    return false;
   }
 
-  if( calibType == DistortionModel::CALIBRATION_NONE ) { 
-    LOG(ERROR) << "Calibration type not specified"; 
-    return false; 
+  if( calibType == DistortionModel::CALIBRATION_NONE ) {
+    LOG(ERROR) << "Calibration type not specified";
+    return false;
   }
 
   //   if( calibrationFile.empty() ) calibrationFile = cameraPath( mkCameraFileName() );
@@ -163,4 +163,3 @@ if( !calibrationDb.empty() ) calibrationFile.clear();
 
 return validate();
 }
-

@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 
+#include "graphcut.h"
 
 #include "visualize_app_common.h"
 
@@ -191,7 +192,8 @@ public:
     Mat refinedMask;
     if( opts.refineSegmentation ) {
       LOG(INFO) << "Refining segmentation.";
-      refineSegmentation( overlay, mask, refinedMask );
+      grabCutRefinement( overlay, mask, refinedMask );
+      //activeContoursRefinement( overlay, mask, refinedMask );
       overlay.copyTo( out, refinedMask );
     } else {
       overlay.copyTo( out, mask );
@@ -200,10 +202,54 @@ public:
     return out;
   }
 
-  void refineSegmentation( const Mat &img, const Mat &mask, Mat &out )
+  void activeContoursRefinement( const Mat &img, const Mat &mask, Mat &out )
+  {
+    int niters = 6;
+
+    vector<vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+
+    Mat temp;
+    dilate(mask, temp, Mat(), Point(-1,-1), niters);
+    erode(temp, temp, Mat(), Point(-1,-1), niters*2);
+    dilate(temp, temp, Mat(), Point(-1,-1), niters);
+
+    imshow( "mask", temp );
+
+    findContours( temp, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE );
+
+    int count = 0;
+    for( int i = 0; i < contours.size(); ++i ) count += contours[i].size();
+
+    LOG(INFO) << "Extracted of " << contours.size() << " contours, totalling " << count << " points";
+
+    Mat dst;
+    img.copyTo( dst, temp );
+
+    // Draw contours
+    for( int i = 0; i < contours.size(); ++i )
+    {
+      vector<Point> &pts( contours[i] );
+      Scalar color( 0, 0, 255 );
+      const int thickness = 4;
+
+      LOG(INFO) << "Contour " << i << " has " << pts.size() << " points";
+
+      for( int j = 0; j < (pts.size()-1); ++j ) line( dst, pts[i], pts[i+1], color, thickness );
+
+      if( pts.size() > 2 ) line( dst, pts[ pts.size() - 1 ], pts[0], color, thickness );
+    }
+
+    imshow( "activeContours", dst);
+    waitKey(0);
+
+    out = mask;
+  }
+
+  void grabCutRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
     //const int numLabels = 2;
-    const int numIter = 10;
+    const int numIter = 30;
     const string SegmentationWindow("refineSegmentation");
 
     // Create a number of masks.
@@ -235,10 +281,10 @@ public:
     // defBGInv.setTo( Scalar( 0 ), defBG );
 
     // construct initial mask, order matters
-    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GC_BGD ) );
-    grabCutMask.setTo( GC_PR_BGD, probBG );
+    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GC_PR_BGD ) );
+    //grabCutMask.setTo( GC_PR_BGD, probBG );
     grabCutMask.setTo( GC_PR_FGD, probFG );
-    grabCutMask.setTo( GC_FGD, defFG );
+    //grabCutMask.setTo( GC_FGD, defFG );
 
     Mat gcMaskImage;
     drawGrabCutMask( grabCutMask, gcMaskImage );
@@ -249,9 +295,8 @@ public:
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
 
-
       int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
-      grabCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
+      graphCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
 
       drawGrabCutMask( grabCutMask, gcMaskImage );
       imshow( SegmentationWindow, gcMaskImage );
