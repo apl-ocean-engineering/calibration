@@ -4,13 +4,14 @@
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/ximgproc.hpp>
 
 #include <glog/logging.h>
 
 using namespace cv;
 
 //median filtered dark channel
-static Mat getMedianDarkChannel(const Mat &src, int patch)
+Mat DarkChannelDehaze::getMedianDarkChannel(const Mat &src, int patch)
 {
   Mat rgbmin = Mat::zeros(src.size(), CV_8UC1);
   Mat MDCP;
@@ -29,7 +30,7 @@ static Mat getMedianDarkChannel(const Mat &src, int patch)
 }
 
 //estimate airlight by the brightest pixel in dark channel (proposed by He et al.)
-static int estimateA( const Mat &DC)
+int DarkChannelDehaze::estimateA( const Mat &DC)
 {
   double minDC, maxDC;
   minMaxLoc(DC, &minDC, &maxDC);
@@ -39,7 +40,7 @@ static int estimateA( const Mat &DC)
 
 
 //estimate transmission map
-static Mat estimateTransmission(const Mat &DCP, int ac)
+Mat DarkChannelDehaze::estimateTransmission(const Mat &DCP, int ac)
 {
   double w = 0.75;
   Mat transmission = Mat::zeros(DCP.size(), CV_8UC1);
@@ -58,7 +59,7 @@ static Mat estimateTransmission(const Mat &DCP, int ac)
 
 
 //dehazing foggy image
-static Mat getDehazed(const Mat &source, const Mat &t, int al)
+Mat DarkChannelDehaze::getDehazed(const Mat &source, const Mat &t, int al)
 {
   float tmin = 0.1;
   float tmax;
@@ -71,13 +72,13 @@ static Mat getDehazed(const Mat &source, const Mat &t, int al)
   {
     for(int j=0; j<source.cols; j++)
     {
-    float inttran = t.at<uchar>(i,j);
+      float inttran = t.at<uchar>(i,j);
       const Vec3b &intsrc( source.at<Vec3b>(i,j) );
       tmax = std::max( inttran/255, tmin );
 
       for(int k=0; k<3; k++)
       {
-int val = abs((intsrc.val[k] - al) / tmax + al);
+        int val = abs((intsrc.val[k] - al) / tmax + al);
         dehazed.at<Vec3b>(i,j)[k] = std::min( val, 255 );
       }
     }
@@ -108,9 +109,31 @@ void DarkChannelDehaze::dehaze( const Mat &img, Mat &out )
   _transmission = estimateTransmission(_darkChannel, _airlight);
   out = getDehazed(img, _transmission, _airlight);
 
-imshow( "Dehaze dark channel", _darkChannel );
-imshow( "Dehaze transmission", _transmission );
-imshow( "Dehaze out", out );
-waitKey(0);
+  imshow( "Dehaze dark channel", _darkChannel );
+  imshow( "Dehaze transmission", _transmission );
+  imshow( "Dehaze out", out );
+  waitKey(0);
 
+}
+
+
+//===================================================================
+
+GuidedFilterDarkChannelDehaze::GuidedFilterDarkChannelDehaze( const Mat &img, Mat &out )
+: DarkChannelDehaze( img, out )
+{ ; }
+
+
+//dehazing foggy image
+Mat GuidedFilterDarkChannelDehaze::getDehazed(const Mat &source, const Mat &t, int al)
+{
+  //Scalar inttran;
+  //Vec3b intsrc;
+  Mat dehazed = Mat::zeros(source.size(), CV_8UC3);
+  const int radius = 5;
+  const double eps = 0.1;
+
+  ximgproc::guidedFilter( source, t, dehazed, radius, eps );
+
+  return dehazed;
 }

@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/ximgproc.hpp>
 
 #include "graphcut.h"
 #include "dark_channel.h"
@@ -195,8 +196,17 @@ public:
     if( opts.refineSegmentation ) {
       LOG(INFO) << "Refining segmentation.";
       Mat refined;
-      darkChannelRefinement( overlay, refined );
-      grabCutRefinement( refined, mask, refinedMask );
+      //darkChannelRefinement( overlay, refined );
+imshow( "Original image", overlay );
+
+//darkChannelRefinement( overlay, refined );
+
+Mat filtered;
+bilateralFilterRefinement( overlay, filtered );
+
+imshow("Filtered image", filtered );
+
+      grabCutRefinement( filtered, mask, refinedMask );
       //activeContoursRefinement( overlay, mask, refinedMask );
       overlay.copyTo( out, refinedMask );
     } else {
@@ -253,8 +263,36 @@ public:
 
   void darkChannelRefinement( const Mat &img, Mat &out )
   {
-    DarkChannelDehaze dcDehaze( img, out );
+    GuidedFilterDarkChannelDehaze dcDehaze( img, out );
   }
+
+  void guidedFilterRefinement( const Mat &img, Mat &out )
+  {
+    const double eps = 0.1;
+    const int radius = 5;
+
+    // With guide and input images = img, this should be
+    // equivalent to the bilateral filter (?)
+    ximgproc::guidedFilter( img, img, out, radius, eps*eps );
+  }
+
+  void bilateralFilterRefinement( const Mat &img, Mat &out )
+  {
+    const double sigmaColor = 75.0;
+    const double sigmaSpace = sigmaColor;
+    const int radius = 5;
+
+    // With guide and input images = img, this should be
+    // equivalent to the bilateral filter (?)
+    bilateralFilter( img, out, radius, sigmaColor, sigmaSpace );
+  }
+
+void specularDetection( const Mat &img, Mat &specMask )
+{
+// Specular -- brightest and should all be close to white (or light color)
+
+}
+
 
   void grabCutRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
@@ -268,22 +306,24 @@ public:
     //   Prob foreground = dilated - foreground
     //   Prob background = background - prob foreground
 
-    Mat blurredImg;
-    cv::blur( img, blurredImg, Size(5,5) );
-
     // Hmm, well you have to classify everything, eh?
-    const int FGErodeIterations = 20;
-    Mat defFG;
-    erode( mask, defFG, Mat(), Point(-1,-1), FGErodeIterations );
+    //const int FGErodeIterations = 20;
+    //Mat defFG;
+    //erode( mask, defFG, Mat(), Point(-1,-1), FGErodeIterations );
 
-    const int probFGDilateIterations = 20;
+Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
+
+    const int probFGIterations = 2;
     Mat probFG;
-    dilate( mask, probFG, Mat(), Point(-1,-1), probFGDilateIterations );
-    imshow( "mask", mask );
+    morphologyEx( mask, probFG, MORPH_CLOSE, structuringElement,
+               Point(-1,-1), probFGIterations * 5 );
+    morphologyEx( probFG, probFG, MORPH_ERODE, structuringElement,
+                          Point(-1,-1), probFGIterations );
 
-    const int probBGDilateIterations = 40;
-    Mat probBG;
-    dilate( probFG, probBG, Mat(), Point(-1,-1), probBGDilateIterations );
+    // const int probBGDilateIterations = 40;
+    // Mat probBG;
+    // dilate( probFG, probBG, MORPH_OPEN, getStructuringElement(  MORPH_RECT, 5 ),
+    //          Point(-1,-1), probBGDilateIterations );
     //     Mat probBGInv( img.size(), CV_8UC1, Scalar( 1 ) );
     // probBGInv.setTo( Scalar( 0 ), probBG );
 
@@ -309,7 +349,7 @@ public:
       LOG(INFO) << "Performing GrabCut iter " << i;
 
       int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
-      graphCut( blurredImg, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
+      graphCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
 
       drawGrabCutMask( grabCutMask, gcMaskImage );
       imshow( SegmentationWindow, gcMaskImage );
@@ -320,7 +360,7 @@ public:
       out = binMask;
 
       Mat maskedImage;
-      blurredImg.copyTo( maskedImage, binMask );
+      img.copyTo( maskedImage, binMask );
       imshow( "refinedImage", maskedImage );
       waitKey(1);
     }
