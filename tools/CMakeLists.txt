@@ -109,6 +109,7 @@ target_link_libraries( visualize_pc ${PCL_LIBRARIES} )
 
 add_executable( visualize_img visualize_img.cpp
   ../lib/graphcut.cpp
+  ../lib/dark_channel.cpp
   ${SONAR_SRCS}
   ${VISUALIZE_SRCS} )
 target_compile_definitions( visualize_img PUBLIC ${PCL_DEFINITIONS})

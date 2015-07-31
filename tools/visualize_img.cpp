@@ -4,6 +4,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "graphcut.h"
+#include "dark_channel.h"
 
 #include "visualize_app_common.h"
 
@@ -193,7 +194,9 @@ public:
     Mat refinedMask;
     if( opts.refineSegmentation ) {
       LOG(INFO) << "Refining segmentation.";
-      grabCutRefinement( overlay, mask, refinedMask );
+      Mat refined;
+      darkChannelRefinement( overlay, refined );
+      grabCutRefinement( refined, mask, refinedMask );
       //activeContoursRefinement( overlay, mask, refinedMask );
       overlay.copyTo( out, refinedMask );
     } else {
@@ -247,6 +250,12 @@ public:
     out = mask;
   }
 
+
+  void darkChannelRefinement( const Mat &img, Mat &out )
+  {
+    DarkChannelDehaze dcDehaze( img, out );
+  }
+
   void grabCutRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
     //const int numLabels = 2;
@@ -259,8 +268,8 @@ public:
     //   Prob foreground = dilated - foreground
     //   Prob background = background - prob foreground
 
-Mat blurredImg;
-cv::blur( img, blurredImg, Size(5,5) );
+    Mat blurredImg;
+    cv::blur( img, blurredImg, Size(5,5) );
 
     // Hmm, well you have to classify everything, eh?
     const int FGErodeIterations = 20;
