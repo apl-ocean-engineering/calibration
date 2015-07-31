@@ -315,13 +315,15 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
     {
       for( p.x = 0; p.x < _image.cols; p.x++ )
       {
-        if( compIdxs.at<int>(p) == ci )
-        {
-          if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD )
+        int ci = compIdxs.at<int>(p);
+        // if( compIdxs.at<int>(p) == ci )
+        // {
+        if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD ) {
           _bgdGMM.addSample( ci, _image.at<Vec3b>(p) );
-          else
+        } else {
           _fgdGMM.addSample( ci, _image.at<Vec3b>(p) );
         }
+        //}
       }
     }
   }
