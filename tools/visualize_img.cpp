@@ -1,6 +1,7 @@
 
 
 #include <glog/logging.h>
+#include <opencv2/imgproc.hpp>
 
 #include "graphcut.h"
 
@@ -258,6 +259,9 @@ public:
     //   Prob foreground = dilated - foreground
     //   Prob background = background - prob foreground
 
+Mat blurredImg;
+cv::blur( img, blurredImg, Size(5,5) );
+
     // Hmm, well you have to classify everything, eh?
     const int FGErodeIterations = 20;
     Mat defFG;
@@ -296,7 +300,7 @@ public:
       LOG(INFO) << "Performing GrabCut iter " << i;
 
       int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
-      graphCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
+      graphCut( blurredImg, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
 
       drawGrabCutMask( grabCutMask, gcMaskImage );
       imshow( SegmentationWindow, gcMaskImage );
@@ -307,7 +311,7 @@ public:
       out = binMask;
 
       Mat maskedImage;
-      img.copyTo( maskedImage, binMask );
+      blurredImg.copyTo( maskedImage, binMask );
       imshow( "refinedImage", maskedImage );
       waitKey(1);
     }
