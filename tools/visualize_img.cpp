@@ -195,16 +195,16 @@ public:
     Mat refinedMask;
     if( opts.refineSegmentation ) {
       LOG(INFO) << "Refining segmentation.";
-      Mat refined;
+      //Mat refined;
       //darkChannelRefinement( overlay, refined );
-imshow( "Original image", overlay );
+      imshow( "Original image", overlay );
 
-//darkChannelRefinement( overlay, refined );
+      //darkChannelRefinement( overlay, refined );
 
-Mat filtered;
-bilateralFilterRefinement( overlay, filtered );
+      Mat filtered;
+      bilateralFilterRefinement( overlay, filtered );
 
-imshow("Filtered image", filtered );
+      imshow("Filtered image", filtered );
 
       grabCutRefinement( filtered, mask, refinedMask );
       //activeContoursRefinement( overlay, mask, refinedMask );
@@ -287,18 +287,18 @@ imshow("Filtered image", filtered );
     bilateralFilter( img, out, radius, sigmaColor, sigmaSpace );
   }
 
-void specularDetection( const Mat &img, Mat &specMask )
-{
-// Specular -- brightest and should all be close to white (or light color)
+  void specularDetection( const Mat &img, Mat &specMask )
+  {
+    // Specular -- brightest and should all be close to white (or light color)
 
-}
+  }
 
 
   void grabCutRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
     //const int numLabels = 2;
     const int numIter = 30;
-    const string SegmentationWindow("refineSegmentation");
+    const string GrabCutMask("grabcutMask");
 
     // Create a number of masks.
     //   Background = !( dilated many times )
@@ -311,14 +311,12 @@ void specularDetection( const Mat &img, Mat &specMask )
     //Mat defFG;
     //erode( mask, defFG, Mat(), Point(-1,-1), FGErodeIterations );
 
-Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
+    Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
 
     const int probFGIterations = 2;
     Mat probFG;
-    morphologyEx( mask, probFG, MORPH_CLOSE, structuringElement,
-               Point(-1,-1), probFGIterations * 5 );
-    morphologyEx( probFG, probFG, MORPH_ERODE, structuringElement,
-                          Point(-1,-1), probFGIterations );
+    morphologyEx( mask, probFG, MORPH_CLOSE, structuringElement,  Point(-1,-1), probFGIterations * 5 );
+    morphologyEx( probFG, probFG, MORPH_ERODE, structuringElement, Point(-1,-1), probFGIterations );
 
     // const int probBGDilateIterations = 40;
     // Mat probBG;
@@ -339,81 +337,38 @@ Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
     grabCutMask.setTo( GC_PR_FGD, probFG );
     //grabCutMask.setTo( GC_FGD, defFG );
 
-    Mat gcMaskImage;
-    drawGrabCutMask( grabCutMask, gcMaskImage );
-    imshow( SegmentationWindow, gcMaskImage );
+    //Mat bgModel, fgModel;
 
-    Mat bgModel, fgModel;
+    GraphCut gc;
+    gc.setImage( img );
+    gc.setMask( grabCutMask );
+
+    imshow( GrabCutMask, gc.drawMask() );
 
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
 
-      int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
-      graphCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
+      // int gcMode = ( i == 0 ? GC_INIT_WITH_MASK : GC_EVAL );
+      // graphCut( img, grabCutMask, Rect(), bgModel, fgModel, 1, gcMode );
 
-      drawGrabCutMask( grabCutMask, gcMaskImage );
-      imshow( SegmentationWindow, gcMaskImage );
+      gc.process();
+
+      imshow( GrabCutMask, gc.drawMask() );
 
       // If we weren't displaying the image, this could go outside the loop.
       Mat binMask( img.size(), CV_8UC1, Scalar(0));
-      binMask = grabCutMask & GC_FGD;
+      binMask = gc.mask() & GC_FGD;
       out = binMask;
 
       Mat maskedImage;
       img.copyTo( maskedImage, binMask );
-      imshow( "refinedImage", maskedImage );
+      imshow( "grabcut output", maskedImage );
       waitKey(1);
     }
 
 
   }
 
-  void drawGrabCutMask( const Mat &mask, Mat &image )
-  {
-    image = Mat::zeros( mask.size(), CV_8UC3 );
-
-    const Scalar Red( 0, 0, 255 ), Yellow(0, 255, 255),
-    Green(0, 255, 0), Blue(255,0,0), Black(0,0,0);
-
-    // Tried to do this with masks and bitwise operations.
-    // image.setTo( Red, mask & GC_FGD );
-    // image.setTo( Yellow, mask & GC_PR_FGD );
-    // image.setTo( Green, mask & GC_PR_BGD );
-    // image.setTo( Blue, mask & GC_BGD );
-
-    // The GC_* flags are bitwise, so that didn't work.
-    // could do something like
-    Mat bitmask;
-    cv::compare( mask, Scalar( GC_FGD ), bitmask, CMP_EQ );
-    image.setTo( Red, bitmask );
-
-    cv::compare( mask, Scalar( GC_PR_FGD ), bitmask, CMP_EQ );
-    image.setTo( Yellow, bitmask );
-
-    cv::compare( mask, Scalar( GC_PR_BGD ), bitmask, CMP_EQ );
-    image.setTo( Green, bitmask );
-
-    cv::compare( mask, Scalar( GC_BGD ), bitmask, CMP_EQ );
-    image.setTo( Blue, bitmask );
-
-    // ....
-
-    // Size sz( image.size() );
-    // for( unsigned int i = 0; i < sz.height; ++i ) {
-    //   for( unsigned int j = 0; j < sz.width; ++j ) {
-    //     Scalar color;
-    //     switch( mask.at<unsigned char>(i,j) ) {
-    //       case GC_FGD:    color = Red; break;
-    //       case GC_PR_FGD: color = Yellow; break;
-    //       case GC_PR_BGD: color = Green; break;
-    //       case GC_BGD:    color = Blue; break;
-    //       default:        color = Black;
-    //     }
-    //     image.at< Scalar >(i,j) = color;
-    //   }
-    // }
-
-  }
 
 
 protected:
