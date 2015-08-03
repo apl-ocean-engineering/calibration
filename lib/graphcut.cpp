@@ -177,14 +177,14 @@ float q;
     //if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
 
     q = _fgdGMM.maxQat(color, at);
-fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
+    fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
 
-q = _bgdGMM.maxQat(color, at);
-bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
+    q = _bgdGMM.maxQat(color, at);
+    bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
   }
 
   imshow( "qimage fgb", fgdQimage );
-imshow( "qimage bgb", bgdQimage );
+  imshow( "qimage bgb", bgdQimage );
 
   // Relearn the GMMs based
   initGMMs();
@@ -210,6 +210,31 @@ void GraphCut::bgRefineMask( float pLimit )
 
     if( prob > pLimit ) _mask.at<uchar>(p) = GC_PR_BGD;
 
+  }
+
+  // Relearn the GMMs based
+  initGMMs();
+
+  for( int ci = 0; ci < _fgdGMM.componentsCount; ++ci ) {
+    int idx;
+    float prob = _bgdGMM.maxQat( _fgdGMM.mean( ci ), idx );
+
+LOG(INFO) << "Fgd " << ci << " : " << _fgdGMM.mean( ci );
+  for( int bci = 0; bci < _bgdGMM.componentsCount; ++bci )
+    LOG(INFO)<< "Bgd " << bci << " : " << _bgdGMM.mean( bci );
+
+
+    LOG(INFO) << "mean of fgd GMM " << ci << " has max Q=" << prob << " in bgd GMM " << idx;
+
+    if( prob > 1e-4 ) {
+LOG(INFO) << "Reassigning FGB " << ci << " to background.";
+
+      for( p.y = 0; p.y < _image.rows; p.y++ )
+      for( p.x = 0; p.x < _image.cols; p.x++ )
+      if( (_fgdGMM.whichComponent( _csImage.at<Vec3b>(p) ) == ci) && (_mask.at<uchar>(p) = GC_PR_FGD) )
+        _mask.at<uchar>(p) = GC_PR_BGD;
+
+    }
   }
 
   // Relearn the GMMs based

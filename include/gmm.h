@@ -32,12 +32,14 @@ double uniform( int ci, const Vec3d color ) const;
   void addSample( int ci, const Vec3d color );
   void endLearning();
 
+Vec3d mean( int ci ) const;
+
 private:
 
   void calcInverseCovAndDeterm( int ci );
   Mat _model;
   double* coefs;
-  double* mean;
+  double* _mean;
   double* cov;
 
   double inverseCovs[comp][3][3];
