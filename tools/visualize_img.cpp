@@ -195,14 +195,15 @@ public:
     Mat refinedMask;
     if( opts.refineSegmentation ) {
       LOG(INFO) << "Refining segmentation.";
-      //Mat refined;
+
       //darkChannelRefinement( overlay, refined );
       imshow( "Original image", overlay );
 
-      //darkChannelRefinement( overlay, refined );
+      // Mat refined;
+      // darkChannelRefinement( overlay, refined );
 
       Mat filtered;
-      bilateralFilterRefinement( overlay, filtered );
+      applyBilateralFilter( overlay, filtered );
 
       imshow("Filtered image", filtered );
 
@@ -276,11 +277,11 @@ public:
     ximgproc::guidedFilter( img, img, out, radius, eps*eps );
   }
 
-  void bilateralFilterRefinement( const Mat &img, Mat &out )
+  void applyBilateralFilter( const Mat &img, Mat &out )
   {
-    const double sigmaColor = 75.0;
-    const double sigmaSpace = sigmaColor;
-    const int radius = 5;
+    const double sigmaColor = 200.0;
+    const double sigmaSpace = 75;
+    const int radius = 9;
 
     // With guide and input images = img, this should be
     // equivalent to the bilateral filter (?)
@@ -298,7 +299,8 @@ public:
   {
     //const int numLabels = 2;
     const int numIter = 30;
-    const string GrabCutMask("grabcutMask");
+    const string GrabCutMask("grabcutMask"),
+                 RefinedMask( "refinedMask");
 
     // Create a number of masks.
     //   Background = !( dilated many times )
@@ -345,6 +347,18 @@ public:
 
     imshow( GrabCutMask, gc.drawMask() );
 
+gc.showMaxQImages();
+LOG(INFO) << "Press any key...";
+waitKey(0);
+
+LOG(INFO) << "Refining mask using just background info.";
+
+gc.bgRefineMask( 0.5 );
+gc.showMaxQImages();
+imshow( RefinedMask, gc.drawMask() );
+LOG(INFO) << "Press any key...";
+waitKey(0);
+
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
 
@@ -353,6 +367,7 @@ public:
 
       gc.process();
 
+gc.showMaxQImages();
       imshow( GrabCutMask, gc.drawMask() );
 
       // If we weren't displaying the image, this could go outside the loop.

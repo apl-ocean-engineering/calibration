@@ -39,9 +39,13 @@
 //
 //M*/
 
+#include <glog/logging.h>
+
 #include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include <limits>
 
+#include "spectrum.h"
 #include "graphcut.h"
 
 using namespace cv;
@@ -143,12 +147,79 @@ void GraphCut::setMaskRect( const Rect &rect )
 void GraphCut::setImage( const Mat &img )
 {
   _image = img;
+
+cvtColor( _image, _csImage, cv::COLOR_BGR2Lab );
+//_image.copyTo( _csImage );
 }
+
+
+void GraphCut::showMaxQImages( )
+{
+  CV_Assert( !_image.empty() && !_mask.empty() );
+
+  // Assume the BG mask is more accurate than the FG mask (FG mask might
+  // include some BG).  Update the mask using solely the BG GMM
+
+  Mat bgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
+  Mat fgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
+
+Spectrum bgdSpectrum( _bgdGMM.componentsCount );
+Spectrum fgdSpectrum( _fgdGMM.componentsCount );
+
+
+  Point p;
+  for( p.y = 0; p.y < _image.rows; p.y++ )
+  for( p.x = 0; p.x < _image.cols; p.x++ )
+  {
+int at;
+float q;
+    Vec3d color = _csImage.at<Vec3b>(p);
+    //if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
+
+    q = _fgdGMM.maxQat(color, at);
+fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
+
+q = _bgdGMM.maxQat(color, at);
+bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
+  }
+
+  imshow( "qimage fgb", fgdQimage );
+imshow( "qimage bgb", bgdQimage );
+
+  // Relearn the GMMs based
+  initGMMs();
+}
+
+
+void GraphCut::bgRefineMask( float pLimit )
+{
+  CV_Assert( !_image.empty() && !_mask.empty() );
+
+  // Assume the BG mask is more accurate than the FG mask (FG mask might
+  // include some BG).  Update the mask using solely the BG GMM
+
+  Point p;
+  for( p.y = 0; p.y < _image.rows; p.y++ )
+  for( p.x = 0; p.x < _image.cols; p.x++ )
+  {
+    Vec3d color = _csImage.at<Vec3b>(p);
+    if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
+
+    float prob = _bgdGMM.maxQ(color);
+    //LOG(INFO) << p << " : " << prob;
+
+    if( prob > pLimit ) _mask.at<uchar>(p) = GC_PR_BGD;
+
+  }
+
+  // Relearn the GMMs based
+  initGMMs();
+}
+
 
 void GraphCut::process( int iterCount )
 {
-  CV_Assert( !_image.empty() );
-  CV_Assert( !_mask.empty() );
+  CV_Assert( !_image.empty() && !_mask.empty() );
 
   // if( _image.type() != CV_8UC3 )
   // CV_Error( CV_StsBadArg, "image mush have CV_8UC3 type" );
@@ -173,7 +244,7 @@ void GraphCut::process( int iterCount )
   const double beta = calcBeta( _image );
 
   Mat leftW, upleftW, upW, uprightW;
-  calcNWeights( _image, leftW, upleftW, upW, uprightW, beta, gamma );
+  calcNWeights( _csImage, leftW, upleftW, upW, uprightW, beta, gamma );
 
   for( int i = 0; i < iterCount; i++ )
   {
@@ -248,40 +319,52 @@ Initialize GMM background and foreground models using kmeans algorithm.
 */
 void GraphCut::initGMMs( void )
 {
-  const int kMeansItCount = 10;
-  const int kMeansType = KMEANS_PP_CENTERS;
+const int kMeansAttempts = 1;
+  const int kMeansIterations = 100;
+  const int kMeansType = KMEANS_PP_CENTERS;; //KMEANS_RANDOM_CENTERS; //
 
-  Mat bgdLabels, fgdLabels;
+
   std::vector<Vec3f> bgdSamples, fgdSamples;
+  std::vector<Vec3f> bgdScaledSamples, fgdScaledSamples;
+
   Point p;
-  for( p.y = 0; p.y < _image.rows; p.y++ )
+  for( p.y = 0; p.y < _csImage.rows; p.y++ )
   {
-    for( p.x = 0; p.x < _image.cols; p.x++ )
+    for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
-      if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD )
-      bgdSamples.push_back( (Vec3f)_image.at<Vec3b>(p) );
-      else // GC_FGD | GC_PR_FGD
-      fgdSamples.push_back( (Vec3f)_image.at<Vec3b>(p) );
+Vec3f color = (Vec3f)_csImage.at<Vec3b>(p);
+
+
+      if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD ){
+        bgdSamples.push_back( color );
+//color[0] *= 0.1;
+        bgdScaledSamples.push_back( color );
+      }else {// GC_FGD | GC_PR_FGD
+        fgdSamples.push_back( color );
+        //color[0] *= 0.1;
+                fgdScaledSamples.push_back( color );
+}
     }
   }
 
   CV_Assert( !bgdSamples.empty() && !fgdSamples.empty() );
 
-  Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
+  Mat bgdLabels, fgdLabels;
+  //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
 
-  kmeans( _bgdSamples, GMM::componentsCount, bgdLabels, TermCriteria( CV_TERMCRIT_ITER, kMeansItCount, 0.0), 0, kMeansType );
+  kmeans( bgdScaledSamples, _bgdGMM.componentsCount, bgdLabels,
+          TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
-  Mat _fgdSamples( (int)fgdSamples.size(), 3, CV_32FC1, &fgdSamples[0][0] );
-  kmeans( _fgdSamples, GMM::componentsCount, fgdLabels, TermCriteria( CV_TERMCRIT_ITER, kMeansItCount, 0.0), 0, kMeansType );
+  // Mat _fgdSamples( (int)fgdSamples.size(), 3, CV_32FC1, &fgdSamples[0][0] );
+  kmeans( fgdScaledSamples, _fgdGMM.componentsCount, fgdLabels,
+          TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   _bgdGMM.initLearning();
-  for( int i = 0; i < (int)bgdSamples.size(); i++ )
-  _bgdGMM.addSample( bgdLabels.at<int>(i,0), bgdSamples[i] );
+  for( int i = 0; i < (int)bgdSamples.size(); i++ ) _bgdGMM.addSample( bgdLabels.at<int>(i,0), bgdSamples[i] );
   _bgdGMM.endLearning();
 
   _fgdGMM.initLearning();
-  for( int i = 0; i < (int)fgdSamples.size(); i++ )
-  _fgdGMM.addSample( fgdLabels.at<int>(i,0), fgdSamples[i] );
+  for( int i = 0; i < (int)fgdSamples.size(); i++ ) _fgdGMM.addSample( fgdLabels.at<int>(i,0), fgdSamples[i] );
   _fgdGMM.endLearning();
 }
 
@@ -291,11 +374,11 @@ Assign GMMs components for each pixel.
 void GraphCut::assignGMMsComponents( Mat& compIdxs )
 {
   Point p;
-  for( p.y = 0; p.y < _image.rows; p.y++ )
+  for( p.y = 0; p.y < _csImage.rows; p.y++ )
   {
-    for( p.x = 0; p.x < _image.cols; p.x++ )
+    for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
-      Vec3d color = _image.at<Vec3b>(p);
+      Vec3d color = _csImage.at<Vec3b>(p);
       compIdxs.at<int>(p) = (_mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD) ?  _bgdGMM.whichComponent(color) : _fgdGMM.whichComponent(color);
     }
   }
@@ -309,8 +392,8 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
   _bgdGMM.initLearning();
   _fgdGMM.initLearning();
   Point p;
-  for( int ci = 0; ci < GMM::componentsCount; ci++ )
-  {
+//  for( int ci = 0; ci < GMM::componentsCount; ci++ )
+//  {
     for( p.y = 0; p.y < _image.rows; p.y++ )
     {
       for( p.x = 0; p.x < _image.cols; p.x++ )
@@ -326,7 +409,7 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
         //}
       }
     }
-  }
+//  }
   _bgdGMM.endLearning();
   _fgdGMM.endLearning();
 }
@@ -347,7 +430,7 @@ void GraphCut::constructGCGraph( double lambda,
       {
         // add node
         int vtxIdx = graph.addVtx();
-        Vec3b color = _image.at<Vec3b>(p);
+        Vec3b color = _csImage.at<Vec3b>(p);
 
         // set t-weights
         double fromSource, toSink;
@@ -427,25 +510,25 @@ void GraphCut::constructGCGraph( double lambda,
     {
       for( int x = 0; x < _image.cols; x++ )
       {
-        Vec3d color = _image.at<Vec3b>(y,x);
+        Vec3d color = _csImage.at<Vec3b>(y,x);
         if( x>0 ) // left
         {
-          Vec3d diff = color - (Vec3d)_image.at<Vec3b>(y,x-1);
+          Vec3d diff = color - (Vec3d)_csImage.at<Vec3b>(y,x-1);
           beta += diff.dot(diff);
         }
         if( y>0 && x>0 ) // upleft
         {
-          Vec3d diff = color - (Vec3d)_image.at<Vec3b>(y-1,x-1);
+          Vec3d diff = color - (Vec3d)_csImage.at<Vec3b>(y-1,x-1);
           beta += diff.dot(diff);
         }
         if( y>0 ) // up
         {
-          Vec3d diff = color - (Vec3d)_image.at<Vec3b>(y-1,x);
+          Vec3d diff = color - (Vec3d)_csImage.at<Vec3b>(y-1,x);
           beta += diff.dot(diff);
         }
         if( y>0 && x<_image.cols-1) // upright
         {
-          Vec3d diff = color - (Vec3d)_image.at<Vec3b>(y-1,x+1);
+          Vec3d diff = color - (Vec3d)_csImage.at<Vec3b>(y-1,x+1);
           beta += diff.dot(diff);
         }
       }

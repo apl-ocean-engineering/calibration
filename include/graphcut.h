@@ -26,6 +26,9 @@ public:
   void setMaskRect( const Rect &rect );
   void setImage( const Mat &img );
 
+void showMaxQImages( );
+void bgRefineMask( float pLimit = 0.5 );
+
   void process( int iterCount = 1 );
 
   const Mat &mask( void ) const { return _mask; }
@@ -49,8 +52,9 @@ protected:
     void calcNWeights( const Mat& img, Mat& leftW, Mat& upleftW, Mat& upW, Mat& uprightW, double beta, double gamma );
 
 
-    Mat _image, _mask, _fgdModel, _bgdModel;
-    GMM _bgdGMM, _fgdGMM;
+    Mat _image, _csImage, _mask, _fgdModel, _bgdModel;
+    GMM<5> _bgdGMM;
+    GMM<5> _fgdGMM;
   };
 
   #endif
