@@ -40,14 +40,15 @@ LOG(INFO) << "DarkChannelPrior::calculateDarkChannel";
   return blurred;
 }
 
-//estimate airlight by the brightest pixel in dark channel (proposed by He et al.)
-int DarkChannelPrior::estimateA( const Mat &DC)
+//estimate airlight by the brightest dark channel pixel
+int DarkChannelPrior::estimateA(  const Mat &DC)
 {
   double minDC, maxDC;
   minMaxLoc(DC, &minDC, &maxDC);
   LOG(INFO) << "estimated airlight is: " << maxDC;
   return maxDC;
 }
+
 
 
 //estimate transmission map
@@ -102,16 +103,6 @@ Mat DarkChannelPrior::calculateDehazed(const Mat &source, const Mat &t, int al)
 
 void DarkChannelPrior::dehaze( const Mat &img, Mat &out )
 {
-  //Mat fog = imread("tiananmen1.bmp");
-  // Mat darkChannel;
-  // Mat T;
-  // Mat fogfree;
-  // Mat beforeafter = Mat::zeros(fog.rows, 2 * fog.cols, CV_8UC3);
-  // Rect roil (0, 0, fog.cols, fog.rows);
-  // Rect roir (fog.cols, 0, fog.cols, fog.rows);
-  // int Airlight;
-  // namedWindow("before and after", CV_WINDOW_AUTOSIZE);
-
   Mat transmission, darkChannel;
   int airlight;
 
@@ -165,7 +156,110 @@ Mat BGDarkChannelPrior::calculateRGBMin(const Mat &src)
   return rgbmin;
 }
 
+//===================================================================
 
+Vec3b ColorDarkChannelPrior::estimateAirlightColor( const Mat &img, const Mat &DC, InputArray bgMask )
+{
+  double minDC, maxDC;
+
+  minMaxLoc(DC, &minDC, &maxDC, NULL, NULL, bgMask );
+
+imshow("bgMask", bgMask );
+imshow("original DC", DC );
+
+  double thr = 0.9*(maxDC - minDC) + minDC;
+  Mat dcMask;
+  compare( DC, Scalar( thr ), dcMask, CMP_GE );
+
+  Mat andMask;
+  if( bgMask.empty() )
+    andMask = dcMask;
+  else
+    bitwise_and( dcMask, bgMask, andMask );
+
+  imshow( "estimated most distant", andMask );
+
+  // mean
+  Scalar m( mean( img, andMask ));
+
+  return Vec3b( max(m[0],1.0),
+                max(m[1],1.0),
+                max(m[2],1.0) );
+}
+
+
+//estimate transmission map
+Mat ColorDarkChannelPrior::estimateTransmission(const Mat &img, const Vec3b &al )
+{
+  const double w = 0.95;
+  Mat transmission = Mat::zeros(img.size(), CV_8UC1);
+  Vec3b intensity;
+  Point p;
+
+  for (p.y=0; p.y<img.rows; p.y++)
+    for (p.x=0; p.x<img.cols; p.x++)
+    {
+      Vec3b intensity( img.at<Vec3b>(p) );
+      float m[3];
+      for( int i = 0; i < 3; ++i ) m[i] = intensity[i] * 1.0 / al[i];
+
+      float minM = min( min( m[0], m[1] ), m[2] );
+
+      transmission.at<uchar>(p) = (1 - w * minM) * 255;
+    }
+
+  return transmission;
+}
+
+
+//dehazing foggy image
+Mat ColorDarkChannelPrior::calculateDehazed(const Mat &source, const Mat &t, const Vec3b &al )
+{
+  float tmin = 0.1;
+  float tmax;
+  Point p;
+
+  //Scalar inttran;
+  //Vec3b intsrc;
+  Mat Priord = Mat::zeros(source.size(), CV_8UC3);
+
+  for(p.y=0; p.y<source.rows; p.y++)
+  {
+    for(p.x=0; p.x<source.cols; p.x++)
+    {
+      float inttran = t.at<uchar>(p);
+      const Vec3b &intsrc( source.at<Vec3b>(p) );
+      tmax = std::max( inttran/255, tmin );
+
+      for(int k=0; k<3; k++)
+      {
+        int val = abs((intsrc.val[k] - al[k]) / tmax + al[k]);
+        Priord.at<Vec3b>(p)[k] = std::min( val, 255 );
+      }
+    }
+  }
+  return Priord;
+}
+
+void ColorDarkChannelPrior::dehaze( const Mat &img, Mat &out, InputArray bgMask )
+{
+  Mat transmission, darkChannel;
+  Vec3b airlight;
+
+  darkChannel = calculateDarkChannel(img);
+  airlight = estimateAirlightColor(img, darkChannel, bgMask );
+
+  LOG(INFO) << "Calculated airlight as " << airlight;
+
+  transmission = estimateTransmission(img, airlight);
+  out = calculateDehazed(img, transmission, airlight);
+
+  imshow( "Dark channel", darkChannel );
+  imshow( "Transmission", transmission );
+  imshow( "Dehazed output", out );
+  waitKey(0);
+
+}
 
 //===================================================================
 

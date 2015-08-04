@@ -4,6 +4,8 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/ximgproc.hpp>
 
+#include "trendnet_time_code.h"
+
 #include "graphcut.h"
 #include "dark_channel.h"
 
@@ -200,7 +202,7 @@ public:
       imshow( "Original image", overlay );
 
       Mat refined;
-      darkChannelRefinement( overlay, refined );
+      darkChannelRefinement( overlay, mask, refined );
 
       Mat filtered;
       applyBilateralFilter( refined, filtered );
@@ -262,9 +264,19 @@ public:
   }
 
 
-  void darkChannelRefinement( const Mat &img, Mat &out )
+  void darkChannelRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
-    MedianDarkChannelPrior dcp( img, out );
+Mat consMask;
+dilate( mask, consMask, Mat(), Point(-1,-1), 10 );
+
+Mat bgMask;
+bitwise_not( consMask, bgMask );
+
+// And include the time mark
+Mat roi( bgMask, TimeCode_1920x1080::timeCodeROI );
+roi.setTo( 0.0 );
+
+    ColorDarkChannelPrior dcp( img, out, bgMask );
   }
 
   void guidedFilterRefinement( const Mat &img, Mat &out )
