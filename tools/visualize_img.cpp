@@ -293,7 +293,7 @@ roi.setTo( 0.0 );
   {
     const double sigmaColor = 200.0;
     const double sigmaSpace = 75;
-    const int radius = 9;
+    const int radius = 5;
 
     // With guide and input images = img, this should be
     // equivalent to the bilateral filter (?)

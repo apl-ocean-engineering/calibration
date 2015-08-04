@@ -164,8 +164,7 @@ Vec3b ColorDarkChannelPrior::estimateAirlightColor( const Mat &img, const Mat &D
 
   minMaxLoc(DC, &minDC, &maxDC, NULL, NULL, bgMask );
 
-imshow("bgMask", bgMask );
-imshow("original DC", DC );
+//imshow("bgMask", bgMask );
 
   double thr = 0.9*(maxDC - minDC) + minDC;
   Mat dcMask;
@@ -177,7 +176,7 @@ imshow("original DC", DC );
   else
     bitwise_and( dcMask, bgMask, andMask );
 
-  imshow( "estimated most distant", andMask );
+  //imshow( "estimated most distant", andMask );
 
   // mean
   Scalar m( mean( img, andMask ));
@@ -191,21 +190,21 @@ imshow("original DC", DC );
 //estimate transmission map
 Mat ColorDarkChannelPrior::estimateTransmission(const Mat &img, const Vec3b &al )
 {
-  const double w = 0.95;
-  Mat transmission = Mat::zeros(img.size(), CV_8UC1);
+  const float w = 0.95;
+  Mat transmission = Mat::zeros(img.size(), CV_32FC1);
   Vec3b intensity;
   Point p;
 
   for (p.y=0; p.y<img.rows; p.y++)
     for (p.x=0; p.x<img.cols; p.x++)
     {
-      Vec3b intensity( img.at<Vec3b>(p) );
+      const Vec3b &intensity( img.at<Vec3b>(p) );
       float m[3];
       for( int i = 0; i < 3; ++i ) m[i] = intensity[i] * 1.0 / al[i];
 
       float minM = min( min( m[0], m[1] ), m[2] );
 
-      transmission.at<uchar>(p) = (1 - w * minM) * 255;
+      transmission.at<float>(p) = (1 - w * minM);
     }
 
   return transmission;
@@ -219,26 +218,22 @@ Mat ColorDarkChannelPrior::calculateDehazed(const Mat &source, const Mat &t, con
   float tmax;
   Point p;
 
-  //Scalar inttran;
-  //Vec3b intsrc;
-  Mat Priord = Mat::zeros(source.size(), CV_8UC3);
+  Mat dehazed = Mat::zeros(source.size(), CV_8UC3);
 
   for(p.y=0; p.y<source.rows; p.y++)
-  {
     for(p.x=0; p.x<source.cols; p.x++)
     {
-      float inttran = t.at<uchar>(p);
-      const Vec3b &intsrc( source.at<Vec3b>(p) );
-      tmax = std::max( inttran/255, tmin );
+      const Vec3b &intensity( source.at<Vec3b>(p) );
+      tmax = std::max( t.at<float>(p), tmin );
 
       for(int k=0; k<3; k++)
       {
-        int val = abs((intsrc.val[k] - al[k]) / tmax + al[k]);
-        Priord.at<Vec3b>(p)[k] = std::min( val, 255 );
+        int val = abs((intensity[k] - al[k]) / tmax + al[k]);
+        dehazed.at<Vec3b>(p)[k] = std::min( val, 255 );
       }
     }
-  }
-  return Priord;
+
+  return dehazed;
 }
 
 void ColorDarkChannelPrior::dehaze( const Mat &img, Mat &out, InputArray bgMask )
@@ -252,10 +247,18 @@ void ColorDarkChannelPrior::dehaze( const Mat &img, Mat &out, InputArray bgMask 
   LOG(INFO) << "Calculated airlight as " << airlight;
 
   transmission = estimateTransmission(img, airlight);
-  out = calculateDehazed(img, transmission, airlight);
+
+
+  const int radius = 5;
+  const float sigmaColor = 100.0;
+  const float sigmaSpace = sigmaColor;
+  Mat filteredTransmission;
+  bilateralFilter( transmission, filteredTransmission, radius, sigmaColor, sigmaSpace );
+
+  out = calculateDehazed(img, filteredTransmission, airlight);
 
   imshow( "Dark channel", darkChannel );
-  imshow( "Transmission", transmission );
+  imshow( "Filtered transmission", filteredTransmission );
   imshow( "Dehazed output", out );
   waitKey(0);
 
