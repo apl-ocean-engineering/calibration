@@ -199,11 +199,11 @@ public:
       //darkChannelRefinement( overlay, refined );
       imshow( "Original image", overlay );
 
-      // Mat refined;
-      // darkChannelRefinement( overlay, refined );
+      Mat refined;
+      darkChannelRefinement( overlay, refined );
 
       Mat filtered;
-      applyBilateralFilter( overlay, filtered );
+      applyBilateralFilter( refined, filtered );
 
       imshow("Filtered image", filtered );
 
@@ -264,7 +264,7 @@ public:
 
   void darkChannelRefinement( const Mat &img, Mat &out )
   {
-    GuidedFilterDarkChannelDehaze dcDehaze( img, out );
+    MedianDarkChannelPrior dcp( img, out );
   }
 
   void guidedFilterRefinement( const Mat &img, Mat &out )

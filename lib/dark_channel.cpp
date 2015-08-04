@@ -10,27 +10,38 @@
 
 using namespace cv;
 
-//median filtered dark channel
-Mat DarkChannelDehaze::getMedianDarkChannel(const Mat &src, int patch)
+
+Mat DarkChannelPrior::calculateRGBMin(const Mat &src)
 {
   Mat rgbmin = Mat::zeros(src.size(), CV_8UC1);
-  Mat MDCP;
 
-  for(int m=0; m<src.rows; m++)
+  Point p;
+  for(p.y=0 ; p.y<src.rows ; p.y++)
   {
-    for(int n=0; n<src.cols; n++)
+    for(p.x=0 ; p.x<src.cols ; p.x++)
     {
-      const Vec3b &intensity( src.at<Vec3b>(m,n) );
-      rgbmin.at<uchar>(m,n) = min(min(intensity.val[0], intensity.val[1]), intensity.val[2]);
+      const Vec3b &intensity( src.at<Vec3b>(p) );
+      rgbmin.at<uchar>(p) = min(min(intensity.val[0], intensity.val[1]), intensity.val[2]);
     }
   }
 
-  medianBlur(rgbmin, MDCP, patch);
-  return MDCP;
+  return rgbmin;
+}
+
+Mat DarkChannelPrior::calculateDarkChannel( const Mat &src )
+{
+  Mat rgbMin( calculateRGBMin( src ) );
+
+LOG(INFO) << "DarkChannelPrior::calculateDarkChannel";
+
+  Mat blurred;
+  const int patchSize = 5;
+  erode(rgbMin, blurred, getStructuringElement( MORPH_RECT, Size( patchSize, patchSize )));
+  return blurred;
 }
 
 //estimate airlight by the brightest pixel in dark channel (proposed by He et al.)
-int DarkChannelDehaze::estimateA( const Mat &DC)
+int DarkChannelPrior::estimateA( const Mat &DC)
 {
   double minDC, maxDC;
   minMaxLoc(DC, &minDC, &maxDC);
@@ -40,7 +51,7 @@ int DarkChannelDehaze::estimateA( const Mat &DC)
 
 
 //estimate transmission map
-Mat DarkChannelDehaze::estimateTransmission(const Mat &DCP, int ac)
+Mat DarkChannelPrior::estimateTransmission(const Mat &DCP, int ac)
 {
   double w = 0.75;
   Mat transmission = Mat::zeros(DCP.size(), CV_8UC1);
@@ -59,14 +70,14 @@ Mat DarkChannelDehaze::estimateTransmission(const Mat &DCP, int ac)
 
 
 //dehazing foggy image
-Mat DarkChannelDehaze::getDehazed(const Mat &source, const Mat &t, int al)
+Mat DarkChannelPrior::calculateDehazed(const Mat &source, const Mat &t, int al)
 {
   float tmin = 0.1;
   float tmax;
 
   //Scalar inttran;
   //Vec3b intsrc;
-  Mat dehazed = Mat::zeros(source.size(), CV_8UC3);
+  Mat Priord = Mat::zeros(source.size(), CV_8UC3);
 
   for(int i=0; i<source.rows; i++)
   {
@@ -79,20 +90,17 @@ Mat DarkChannelDehaze::getDehazed(const Mat &source, const Mat &t, int al)
       for(int k=0; k<3; k++)
       {
         int val = abs((intsrc.val[k] - al) / tmax + al);
-        dehazed.at<Vec3b>(i,j)[k] = std::min( val, 255 );
+        Priord.at<Vec3b>(i,j)[k] = std::min( val, 255 );
       }
     }
   }
-  return dehazed;
+  return Priord;
 }
 
 
-DarkChannelDehaze::DarkChannelDehaze( const Mat &img, Mat &out )
-{
-  dehaze( img, out );
-}
 
-void DarkChannelDehaze::dehaze( const Mat &img, Mat &out )
+
+void DarkChannelPrior::dehaze( const Mat &img, Mat &out )
 {
   //Mat fog = imread("tiananmen1.bmp");
   // Mat darkChannel;
@@ -104,14 +112,18 @@ void DarkChannelDehaze::dehaze( const Mat &img, Mat &out )
   // int Airlight;
   // namedWindow("before and after", CV_WINDOW_AUTOSIZE);
 
-  _darkChannel = getMedianDarkChannel(img, 5);
-  _airlight = estimateA(_darkChannel);
-  _transmission = estimateTransmission(_darkChannel, _airlight);
-  out = getDehazed(img, _transmission, _airlight);
+  Mat transmission, darkChannel;
+  int airlight;
 
-  imshow( "Dehaze dark channel", _darkChannel );
-  imshow( "Dehaze transmission", _transmission );
-  imshow( "Dehaze out", out );
+  darkChannel = calculateDarkChannel(img);
+
+  airlight = estimateA(darkChannel);
+  transmission = estimateTransmission(darkChannel, airlight);
+  out = calculateDehazed(img, transmission, airlight);
+
+  imshow( "Prior dark channel", darkChannel );
+  imshow( "Prior transmission", transmission );
+  imshow( "Prior out", out );
   waitKey(0);
 
 }
@@ -119,21 +131,55 @@ void DarkChannelDehaze::dehaze( const Mat &img, Mat &out )
 
 //===================================================================
 
-GuidedFilterDarkChannelDehaze::GuidedFilterDarkChannelDehaze( const Mat &img, Mat &out )
-: DarkChannelDehaze( img, out )
-{ ; }
+Mat MedianDarkChannelPrior::calculateDarkChannel( const Mat &src )
+{
+  Mat rgbMin( calculateRGBMin( src ) );
+
+  const int filterPatch = 5;
+
+LOG(INFO) << "Median filter dark channel";
+
+  Mat blurred;
+  medianBlur(rgbMin, blurred, filterPatch);
+  return blurred;
+}
+
+//===================================================================
+
+Mat BGDarkChannelPrior::calculateRGBMin(const Mat &src)
+{
+  Mat rgbmin = Mat::zeros(src.size(), CV_8UC1);
+
+  Point p;
+  for(p.y=0 ; p.y<src.rows ; p.y++)
+  {
+    for(p.x=0 ; p.x<src.cols ; p.x++)
+    {
+      const Vec3b &intensity( src.at<Vec3b>(p) );
+
+      // Assumes BGR ordering
+      rgbmin.at<uchar>(p) = min(intensity.val[0], intensity.val[1]);
+    }
+  }
+
+  return rgbmin;
+}
+
+
+
+//===================================================================
 
 
 //dehazing foggy image
-Mat GuidedFilterDarkChannelDehaze::getDehazed(const Mat &source, const Mat &t, int al)
+Mat GuidedFilterDarkChannelPrior::calculateDehazed(const Mat &source, const Mat &t, int al)
 {
   //Scalar inttran;
   //Vec3b intsrc;
-  Mat dehazed = Mat::zeros(source.size(), CV_8UC3);
+  Mat Priord = Mat::zeros(source.size(), CV_8UC3);
   const int radius = 5;
   const double eps = 0.1;
 
-  ximgproc::guidedFilter( source, t, dehazed, radius, eps );
+  ximgproc::guidedFilter( source, t, Priord, radius, eps );
 
-  return dehazed;
+  return Priord;
 }

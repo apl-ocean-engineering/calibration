@@ -5,35 +5,60 @@
 
 using cv::Mat;
 
-class DarkChannelDehaze {
+class DarkChannelPrior {
 public:
 
-  DarkChannelDehaze( const Mat &img, Mat &out );
+DarkChannelPrior( void ) {;}
+
+  DarkChannelPrior( const Mat &img, Mat &out )
+  { dehaze( img, out );}
+
 
   void dehaze( const Mat &img, Mat &out );
 
 protected:
 
-Mat getMedianDarkChannel(const Mat &src, int patch);
-int estimateA( const Mat &DC);
-Mat estimateTransmission(const Mat &DCP, int ac);
-virtual Mat getDehazed(const Mat &source, const Mat &t, int al);
-
-  Mat _transmission, _darkChannel;
-  int _airlight;
+  virtual Mat calculateRGBMin(const Mat &src);
+virtual Mat calculateDarkChannel( const Mat &src );
+  int estimateA( const Mat &DC);
+  Mat estimateTransmission(const Mat &DCP, int ac);
+  virtual Mat calculateDehazed(const Mat &source, const Mat &t, int al);
 
 };
 
-class GuidedFilterDarkChannelDehaze : public DarkChannelDehaze {
+class MedianDarkChannelPrior : public DarkChannelPrior {
 public:
 
-  GuidedFilterDarkChannelDehaze( const Mat &img, Mat &out );
-
-
+  MedianDarkChannelPrior( const Mat &img, Mat &out )
+  { dehaze( img, out );}
 
 protected:
 
-virtual Mat getDehazed(const Mat &source, const Mat &t, int al);
+  virtual Mat calculateDarkChannel(const Mat &src );
+
+};
+
+class BGDarkChannelPrior : public DarkChannelPrior {
+public:
+
+  BGDarkChannelPrior( const Mat &img, Mat &out )
+  { dehaze( img, out );}
+
+protected:
+
+  virtual Mat calculateRGBMin(const Mat &src );
+
+};
+
+class GuidedFilterDarkChannelPrior : public DarkChannelPrior {
+public:
+
+  GuidedFilterDarkChannelPrior( const Mat &img, Mat &out )
+  { dehaze( img, out );}
+
+protected:
+
+  virtual Mat calculateDehazed(const Mat &source, const Mat &t, int al);
 
 };
 

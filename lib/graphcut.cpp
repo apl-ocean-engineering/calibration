@@ -148,8 +148,9 @@ void GraphCut::setImage( const Mat &img )
 {
   _image = img;
 
-cvtColor( _image, _csImage, cv::COLOR_BGR2Lab );
-//_image.copyTo( _csImage );
+  cvtColor( _image, _csImage, cv::COLOR_BGR2Lab );
+  LOG(INFO) << "Converting image to CIE Lab space.";
+  //_image.copyTo( _csImage );
 }
 
 
