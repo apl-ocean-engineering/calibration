@@ -115,8 +115,6 @@ void DarkChannelPrior::dehaze( const Mat &img, Mat &out )
   imshow( "Prior dark channel", darkChannel );
   imshow( "Prior transmission", transmission );
   imshow( "Prior out", out );
-  waitKey(0);
-
 }
 
 
@@ -260,8 +258,6 @@ void ColorDarkChannelPrior::dehaze( const Mat &img, Mat &out, InputArray bgMask 
   imshow( "Dark channel", darkChannel );
   imshow( "Filtered transmission", filteredTransmission );
   imshow( "Dehazed output", out );
-  waitKey(0);
-
 }
 
 //===================================================================

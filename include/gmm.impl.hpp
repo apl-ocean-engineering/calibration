@@ -86,7 +86,7 @@ template <unsigned int comp>
 float GMM<comp>::maxQat( const Vec3d color, int &at ) const
 {
   float max = -1;
-at = -1;
+  at = -1;
 
   // Want to calculate the percentage of randomly drawn points
   // which are more extreme than this point
@@ -117,8 +117,8 @@ float GMM<comp>::maxQ( const Vec3d color ) const
 template <unsigned int comp>
 Vec3d GMM<comp>::mean( int ci ) const
 {
-      double* m = _mean + 3*ci;
-return Vec3b( m[0], m[1], m[2] );
+  double* m = _mean + 3*ci;
+  return Vec3b( m[0], m[1], m[2] );
 }
 
 template <unsigned int comp>

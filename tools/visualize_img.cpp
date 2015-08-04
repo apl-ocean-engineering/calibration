@@ -206,7 +206,6 @@ public:
 
       Mat filtered;
       applyBilateralFilter( refined, filtered );
-
       imshow("Filtered image", filtered );
 
       grabCutRefinement( filtered, mask, refinedMask );
@@ -266,15 +265,15 @@ public:
 
   void darkChannelRefinement( const Mat &img, const Mat &mask, Mat &out )
   {
-Mat consMask;
-dilate( mask, consMask, Mat(), Point(-1,-1), 10 );
+    Mat consMask;
+    dilate( mask, consMask, Mat(), Point(-1,-1), 10 );
 
-Mat bgMask;
-bitwise_not( consMask, bgMask );
+    Mat bgMask;
+    bitwise_not( consMask, bgMask );
 
-// And include the time mark
-Mat roi( bgMask, TimeCode_1920x1080::timeCodeROI );
-roi.setTo( 0.0 );
+    // And include the time mark
+    Mat roi( bgMask, TimeCode_1920x1080::timeCodeROI );
+    roi.setTo( 0.0 );
 
     ColorDarkChannelPrior dcp( img, out, bgMask );
   }
@@ -312,7 +311,7 @@ roi.setTo( 0.0 );
     //const int numLabels = 2;
     const int numIter = 30;
     const string GrabCutMask("grabcutMask"),
-                 RefinedMask( "refinedMask");
+    RefinedMask( "refinedMask");
 
     // Create a number of masks.
     //   Background = !( dilated many times )
@@ -359,17 +358,23 @@ roi.setTo( 0.0 );
 
     imshow( GrabCutMask, gc.drawMask() );
 
-gc.showMaxQImages();
-LOG(INFO) << "Press any key...";
-waitKey(0);
+    // LOG(INFO) << "Initial estimate of GMMs";
+    // gc.showMaxQImages();
+    // LOG(INFO) << "Press any key...";
+    // waitKey(0);
 
-LOG(INFO) << "Refining mask using just background info.";
+    LOG(INFO) << "Refining mask using just background info.";
+    gc.bgRefineMask( 0.4 );
+    gc.showMaxQImages();
+    imshow( RefinedMask, gc.drawMask() );
+    LOG(INFO) << "Press any key...";
+    waitKey(0);
 
-gc.bgRefineMask( 0.5 );
-gc.showMaxQImages();
-imshow( RefinedMask, gc.drawMask() );
-LOG(INFO) << "Press any key...";
-waitKey(0);
+    LOG(INFO) << "Reassigning from FG to BG.";
+    gc.reassignFGtoBG( 0.01 );
+    gc.showMaxQImages();
+    LOG(INFO) << "Press any key...";
+    waitKey(0);
 
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
@@ -379,7 +384,7 @@ waitKey(0);
 
       gc.process();
 
-gc.showMaxQImages();
+      gc.showMaxQImages();
       imshow( GrabCutMask, gc.drawMask() );
 
       // If we weren't displaying the image, this could go outside the loop.
@@ -389,7 +394,7 @@ gc.showMaxQImages();
 
       Mat maskedImage;
       img.copyTo( maskedImage, binMask );
-      imshow( "grabcut output", maskedImage );
+      imshow( "Graphcut Output", maskedImage );
       waitKey(1);
     }
 

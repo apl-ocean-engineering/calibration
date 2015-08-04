@@ -26,20 +26,21 @@ public:
   void setMaskRect( const Rect &rect );
   void setImage( const Mat &img );
 
-void showMaxQImages( );
-void bgRefineMask( float pLimit = 0.5 );
+  void showMaxQImages( );
+  void bgRefineMask( float pLimit = 0.5 );
+void reassignFGtoBG( float pLimit = 1e-4 );
 
-  void process( int iterCount = 1 );
+  bool process( int iterCount = 1 );
 
   const Mat &mask( void ) const { return _mask; }
 
-Mat drawMask( void ) const;
+  Mat drawMask( void ) const;
 
 protected:
 
   void checkMask( void );
 
-  void initGMMs( void );
+  bool initGMMs( void );
   void assignGMMsComponents( Mat& compIdxs );
   void learnGMMs( const Mat& compIdxs );
   void constructGCGraph( double lambda,

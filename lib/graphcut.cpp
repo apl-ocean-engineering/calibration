@@ -148,9 +148,13 @@ void GraphCut::setImage( const Mat &img )
 {
   _image = img;
 
-  cvtColor( _image, _csImage, cv::COLOR_BGR2Lab );
-  LOG(INFO) << "Converting image to CIE Lab space.";
-  //_image.copyTo( _csImage );
+  if( false ) {
+    cvtColor( _image, _csImage, cv::COLOR_BGR2Lab );
+    LOG(INFO) << "Converting image to CIE Lab space.";
+  } else {
+    LOG(INFO) << "Using image in RGB space.";
+    _image.copyTo( _csImage );
+  }
 }
 
 
@@ -186,9 +190,6 @@ float q;
 
   imshow( "qimage fgb", fgdQimage );
   imshow( "qimage bgb", bgdQimage );
-
-  // Relearn the GMMs based
-  initGMMs();
 }
 
 
@@ -197,43 +198,50 @@ void GraphCut::bgRefineMask( float pLimit )
   CV_Assert( !_image.empty() && !_mask.empty() );
 
   // Assume the BG mask is more accurate than the FG mask (FG mask might
-  // include some BG).  Update the mask using solely the BG GMM
+  // include some BG).  Update the mask by identifying any PR_FGD points
+  // which are matched by any bgd GMM with at least pLimit.
+  // Switched those points to GC_PR_BGD
 
   Point p;
   for( p.y = 0; p.y < _image.rows; p.y++ )
-  for( p.x = 0; p.x < _image.cols; p.x++ )
-  {
-    Vec3d color = _csImage.at<Vec3b>(p);
-    if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
+    for( p.x = 0; p.x < _image.cols; p.x++ )
+    {
+      Vec3d color = _csImage.at<Vec3b>(p);
+      if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
 
-    float prob = _bgdGMM.maxQ(color);
-    //LOG(INFO) << p << " : " << prob;
+      float prob = _bgdGMM.maxQ(color);
+      //LOG(INFO) << p << " : " << prob;
 
-    if( prob > pLimit ) _mask.at<uchar>(p) = GC_PR_BGD;
+      if( prob > pLimit ) _mask.at<uchar>(p) = GC_PR_BGD;
 
-  }
+    }
 
   // Relearn the GMMs based
   initGMMs();
+}
+
+void GraphCut::reassignFGtoBG( float pLimit )
+{
+  Point p;
 
   for( int ci = 0; ci < _fgdGMM.componentsCount; ++ci ) {
     int idx;
     float prob = _bgdGMM.maxQat( _fgdGMM.mean( ci ), idx );
 
-LOG(INFO) << "Fgd " << ci << " : " << _fgdGMM.mean( ci );
-  for( int bci = 0; bci < _bgdGMM.componentsCount; ++bci )
-    LOG(INFO)<< "Bgd " << bci << " : " << _bgdGMM.mean( bci );
+    LOG(INFO) << "Fgd " << ci << " : " << _fgdGMM.mean( ci );
+    for( int bci = 0; bci < _bgdGMM.componentsCount; ++bci )
+      LOG(INFO)<< "Bgd " << bci << " : " << _bgdGMM.mean( bci );
 
 
-    LOG(INFO) << "mean of fgd GMM " << ci << " has max Q=" << prob << " in bgd GMM " << idx;
+    LOG(INFO) << "Mean of fgd GMM " << ci << " has max Q = " << prob << " in bgd GMM " << idx;
 
-    if( prob > 1e-4 ) {
-LOG(INFO) << "Reassigning FGB " << ci << " to background.";
+    if( prob > pLimit ) {
+      LOG(INFO) << "Reassigning FGB " << ci << " to background.";
 
       for( p.y = 0; p.y < _image.rows; p.y++ )
-      for( p.x = 0; p.x < _image.cols; p.x++ )
-      if( (_fgdGMM.whichComponent( _csImage.at<Vec3b>(p) ) == ci) && (_mask.at<uchar>(p) = GC_PR_FGD) )
-        _mask.at<uchar>(p) = GC_PR_BGD;
+        for( p.x = 0; p.x < _image.cols; p.x++ )
+          if( (_fgdGMM.whichComponent( _csImage.at<Vec3b>(p) ) == ci) && (_mask.at<uchar>(p) = GC_PR_FGD) )
+            _mask.at<uchar>(p) = GC_PR_BGD;
 
     }
   }
@@ -243,27 +251,13 @@ LOG(INFO) << "Reassigning FGB " << ci << " to background.";
 }
 
 
-void GraphCut::process( int iterCount )
+bool GraphCut::process( int iterCount )
 {
   CV_Assert( !_image.empty() && !_mask.empty() );
 
-  // if( _image.type() != CV_8UC3 )
-  // CV_Error( CV_StsBadArg, "image mush have CV_8UC3 type" );
+  if( iterCount <= 0) return false;
 
-  Mat compIdxs( _image.size(), CV_32SC1 );
-
-  if( iterCount <= 0) return;
-
-  // if( mode == GC_INIT_WITH_RECT || mode == GC_INIT_WITH_MASK )
-  // {
-  //   if( mode == GC_INIT_WITH_RECT )
-  //   initMaskWithRect( mask, _image.size(), rect );
-  //   else // flag == GC_INIT_WITH_MASK
-  //   checkMask( _image, mask );
-  //   initGMMs( _image, mask, bgdGMM, fgdGMM );
-  // } else if( mode == GC_EVAL ) {
   checkMask( );
-  //    }
 
   const double gamma = 50;
   const double lambda = 9*gamma;
@@ -271,6 +265,8 @@ void GraphCut::process( int iterCount )
 
   Mat leftW, upleftW, upW, uprightW;
   calcNWeights( _csImage, leftW, upleftW, upW, uprightW, beta, gamma );
+
+  Mat compIdxs( _image.size(), CV_32SC1 );
 
   for( int i = 0; i < iterCount; i++ )
   {
@@ -280,7 +276,10 @@ void GraphCut::process( int iterCount )
     constructGCGraph( lambda, leftW, upleftW, upW, uprightW, graph );
     estimateSegmentation( graph );
   }
+
+return true;
 }
+
 
 Mat GraphCut::drawMask( void ) const
 {
@@ -343,46 +342,40 @@ void GraphCut::checkMask( void )
 /*
 Initialize GMM background and foreground models using kmeans algorithm.
 */
-void GraphCut::initGMMs( void )
+bool GraphCut::initGMMs( void )
 {
-const int kMeansAttempts = 1;
+  const int kMeansAttempts = 1;
   const int kMeansIterations = 100;
   const int kMeansType = KMEANS_PP_CENTERS;; //KMEANS_RANDOM_CENTERS; //
 
-
   std::vector<Vec3f> bgdSamples, fgdSamples;
-  std::vector<Vec3f> bgdScaledSamples, fgdScaledSamples;
 
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
   {
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
-Vec3f color = (Vec3f)_csImage.at<Vec3b>(p);
 
+      Vec3f color = (Vec3f)_csImage.at<Vec3b>(p);
 
-      if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD ){
+      if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD )
         bgdSamples.push_back( color );
-//color[0] *= 0.1;
-        bgdScaledSamples.push_back( color );
-      }else {// GC_FGD | GC_PR_FGD
+      else // GC_FGD | GC_PR_FGD
         fgdSamples.push_back( color );
-        //color[0] *= 0.1;
-                fgdScaledSamples.push_back( color );
-}
+
     }
   }
 
-  CV_Assert( !bgdSamples.empty() && !fgdSamples.empty() );
+  if( bgdSamples.empty() || fgdSamples.empty() ) { return false; }
 
   Mat bgdLabels, fgdLabels;
   //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
 
-  kmeans( bgdScaledSamples, _bgdGMM.componentsCount, bgdLabels,
+  kmeans( bgdSamples, _bgdGMM.componentsCount, bgdLabels,
           TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   // Mat _fgdSamples( (int)fgdSamples.size(), 3, CV_32FC1, &fgdSamples[0][0] );
-  kmeans( fgdScaledSamples, _fgdGMM.componentsCount, fgdLabels,
+  kmeans( fgdSamples, _fgdGMM.componentsCount, fgdLabels,
           TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   _bgdGMM.initLearning();
@@ -392,6 +385,8 @@ Vec3f color = (Vec3f)_csImage.at<Vec3b>(p);
   _fgdGMM.initLearning();
   for( int i = 0; i < (int)fgdSamples.size(); i++ ) _fgdGMM.addSample( fgdLabels.at<int>(i,0), fgdSamples[i] );
   _fgdGMM.endLearning();
+
+return true;
 }
 
 /*
@@ -405,7 +400,10 @@ void GraphCut::assignGMMsComponents( Mat& compIdxs )
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
-      compIdxs.at<int>(p) = (_mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD) ?  _bgdGMM.whichComponent(color) : _fgdGMM.whichComponent(color);
+      if (_mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD)
+        compIdxs.at<int>(p) = _bgdGMM.whichComponent(color);
+      else
+        compIdxs.at<int>(p) = _fgdGMM.whichComponent(color);
     }
   }
 }
@@ -516,9 +514,9 @@ void GraphCut::constructGCGraph( double lambda,
         if( _mask.at<uchar>(p) == GC_PR_BGD || _mask.at<uchar>(p) == GC_PR_FGD )
         {
           if( graph.inSourceSegment( p.y*_mask.cols+p.x /*vertex index*/ ) )
-          _mask.at<uchar>(p) = GC_PR_FGD;
+            _mask.at<uchar>(p) = GC_PR_FGD;
           else
-          _mask.at<uchar>(p) = GC_PR_BGD;
+            _mask.at<uchar>(p) = GC_PR_BGD;
         }
       }
     }
@@ -578,39 +576,44 @@ void GraphCut::constructGCGraph( double lambda,
     upleftW.create( img.rows, img.cols, CV_64FC1 );
     upW.create( img.rows, img.cols, CV_64FC1 );
     uprightW.create( img.rows, img.cols, CV_64FC1 );
+
     for( int y = 0; y < img.rows; y++ )
     {
       for( int x = 0; x < img.cols; x++ )
       {
         Vec3d color = img.at<Vec3b>(y,x);
+
         if( x-1>=0 ) // left
         {
           Vec3d diff = color - (Vec3d)img.at<Vec3b>(y,x-1);
           leftW.at<double>(y,x) = gamma * exp(-beta*diff.dot(diff));
         }
         else
-        leftW.at<double>(y,x) = 0;
+          leftW.at<double>(y,x) = 0;
+
         if( x-1>=0 && y-1>=0 ) // upleft
         {
           Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x-1);
           upleftW.at<double>(y,x) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
         }
         else
-        upleftW.at<double>(y,x) = 0;
+          upleftW.at<double>(y,x) = 0;
+
         if( y-1>=0 ) // up
         {
           Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x);
           upW.at<double>(y,x) = gamma * exp(-beta*diff.dot(diff));
         }
         else
-        upW.at<double>(y,x) = 0;
+          upW.at<double>(y,x) = 0;
+
         if( x+1<img.cols && y-1>=0 ) // upright
         {
           Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x+1);
           uprightW.at<double>(y,x) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
         }
         else
-        uprightW.at<double>(y,x) = 0;
+          uprightW.at<double>(y,x) = 0;
       }
     }
   }
