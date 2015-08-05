@@ -345,9 +345,9 @@ public:
     // defBGInv.setTo( Scalar( 0 ), defBG );
 
     // construct initial mask, order matters
-    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GC_PR_BGD ) );
+    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GraphCut::G_PR_BGD ) );
     //grabCutMask.setTo( GC_PR_BGD, probBG );
-    grabCutMask.setTo( GC_PR_FGD, probFG );
+    grabCutMask.setTo( GraphCut::G_PR_FGD, probFG );
     //grabCutMask.setTo( GC_FGD, defFG );
 
     //Mat bgModel, fgModel;
@@ -363,18 +363,20 @@ public:
     // LOG(INFO) << "Press any key...";
     // waitKey(0);
 
-    LOG(INFO) << "Refining mask using just background info.";
-    gc.bgRefineMask( 0.4 );
-    gc.showMaxQImages();
-    imshow( RefinedMask, gc.drawMask() );
-    LOG(INFO) << "Press any key...";
-    //waitKey(0);
+    if( false ) {
+      LOG(INFO) << "Refining mask using just background info.";
+      gc.bgRefineMask( 0.4 );
+      gc.showMaxQImages();
+      imshow( RefinedMask, gc.drawMask() );
+      LOG(INFO) << "Press any key...";
+      //waitKey(0);
 
-    LOG(INFO) << "Reassigning from FG to BG.";
-    gc.reassignFGtoBG( 0.01 );
-    gc.showMaxQImages();
-    LOG(INFO) << "Press any key...";
-    //waitKey(0);
+      LOG(INFO) << "Reassigning from FG to BG.";
+      gc.reassignFGtoBG( 0.01 );
+      gc.showMaxQImages();
+      LOG(INFO) << "Press any key...";
+      //waitKey(0);
+    }
 
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
@@ -388,8 +390,7 @@ public:
       imshow( GrabCutMask, gc.drawMask() );
 
       // If we weren't displaying the image, this could go outside the loop.
-      Mat binMask( img.size(), CV_8UC1, Scalar(0));
-      binMask = gc.mask() & GC_FGD;
+      Mat binMask(  gc.fgdMask() );
       out = binMask;
 
       Mat maskedImage;

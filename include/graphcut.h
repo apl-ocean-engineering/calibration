@@ -20,6 +20,16 @@ using cv::Mat;
 class GraphCut {
 public:
 
+  enum GraphCutLabels {
+    G_IGNORE = 0,
+    G_BGD    = 1,
+    G_PR_BGD = 2,
+    G_PR_FGD = 4,
+    G_FGD    = 8,
+    G_MASK   = 128
+  };
+  typedef uchar LabelType;
+
   GraphCut( void );
 
   void setMask( const Mat &mask );
@@ -33,8 +43,12 @@ void reassignFGtoBG( float pLimit = 1e-4 );
   bool process( int iterCount = 1 );
 
   const Mat &mask( void ) const { return _mask; }
+  Mat fgdMask( void ) const {  return  ( mask() & (GC_FGD | GC_PR_FGD) ); }
 
   Mat drawMask( void ) const;
+
+  LabelType maskAt( const Point &p ) const           { return _mask.at<LabelType>(p); }
+  void      maskSet( const Point &p, LabelType l )   { _mask.at<LabelType>(p) = l; }
 
 protected:
 
@@ -54,6 +68,7 @@ protected:
 
 
     Mat _image, _csImage, _mask, _fgdModel, _bgdModel;
+    GMM<1> _ignoreGMM;
     GMM<5> _bgdGMM;
     GMM<5> _fgdGMM;
   };

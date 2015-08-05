@@ -57,21 +57,6 @@ Carsten Rother, Vladimir Kolmogorov, Andrew Blake.
 */
 
 
-/*
-Initialize mask using rectangular.
-*/
-static void initMaskWithRect( Mat& mask, Size _imageSize, Rect rect )
-{
-  mask.create( _imageSize, CV_8UC1 );
-  mask.setTo( GC_BGD );
-
-  rect.x = std::max(0, rect.x);
-  rect.y = std::max(0, rect.y);
-  rect.width = std::min(rect.width, _imageSize.width-rect.x);
-  rect.height = std::min(rect.height, _imageSize.height-rect.y);
-
-  (mask(rect)).setTo( Scalar(GC_PR_FGD) );
-}
 
 //   void graphCut( InputArray _image, InputOutputArray _mask, Rect rect,
 //     InputOutputArray _bgdModel, InputOutputArray _fgdModel,
@@ -93,14 +78,14 @@ static void initMaskWithRect( Mat& mask, Size _imageSize, Rect rect )
 //       if( iterCount <= 0)
 //         return;
 //
-//       if( mode == GC_INIT_WITH_RECT || mode == GC_INIT_WITH_MASK )
+//       if( mode == G_INIT_WITH_RECT || mode == G_INIT_WITH_MASK )
 //       {
-//         if( mode == GC_INIT_WITH_RECT )
+//         if( mode == G_INIT_WITH_RECT )
 //         initMaskWithRect( mask, _image.size(), rect );
-//         else // flag == GC_INIT_WITH_MASK
+//         else // flag == G_INIT_WITH_MASK
 //         checkMask( _image, mask );
 //         initGMMs( _image, mask, bgdGMM, fgdGMM );
-//       } else if( mode == GC_EVAL ) {
+//       } else if( mode == G_EVAL ) {
 //         checkMask( _image, mask );
 // }
 //
@@ -135,10 +120,21 @@ void GraphCut::setMask( const Mat &msk )
   initGMMs();
 }
 
-void GraphCut::setMaskRect( const Rect &rect )
+void GraphCut::setMaskRect( const Rect &r )
 {
   CV_Assert( !_image.empty() );
-  initMaskWithRect( _mask, _image.size(), rect );
+
+  const Size imgSize( _image.size() );
+  _mask.create( imgSize, CV_8UC1 );
+  _mask.setTo( G_BGD );
+
+  Rect rect(r);
+  rect.x = std::max(0, rect.x);
+  rect.y = std::max(0, rect.y);
+  rect.width = std::min(rect.width, imgSize.width-rect.x);
+  rect.height = std::min(rect.height, imgSize.height-rect.y);
+
+  (_mask(rect)).setTo( Scalar(G_PR_FGD) );
 
   checkMask();
   initGMMs();
@@ -179,7 +175,7 @@ Spectrum fgdSpectrum( _fgdGMM.componentsCount );
 int at;
 float q;
     Vec3d color = _csImage.at<Vec3b>(p);
-    //if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
+    //if( _mask.at<uchar>(p) != G_PR_FGD ) continue;
 
     q = _fgdGMM.maxQat(color, at);
     fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
@@ -200,19 +196,19 @@ void GraphCut::bgRefineMask( float pLimit )
   // Assume the BG mask is more accurate than the FG mask (FG mask might
   // include some BG).  Update the mask by identifying any PR_FGD points
   // which are matched by any bgd GMM with at least pLimit.
-  // Switched those points to GC_PR_BGD
+  // Switched those points to G_PR_BGD
 
   Point p;
   for( p.y = 0; p.y < _image.rows; p.y++ )
     for( p.x = 0; p.x < _image.cols; p.x++ )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
-      if( _mask.at<uchar>(p) != GC_PR_FGD ) continue;
+      if( maskAt(p) != G_PR_FGD ) continue;
 
       float prob = _bgdGMM.maxQ(color);
       //LOG(INFO) << p << " : " << prob;
 
-      if( prob > pLimit ) _mask.at<uchar>(p) = GC_PR_BGD;
+      if( prob > pLimit ) maskSet(p, G_PR_BGD);
 
     }
 
@@ -240,8 +236,7 @@ void GraphCut::reassignFGtoBG( float pLimit )
 
       for( p.y = 0; p.y < _image.rows; p.y++ )
         for( p.x = 0; p.x < _image.cols; p.x++ )
-          if( (_fgdGMM.whichComponent( _csImage.at<Vec3b>(p) ) == ci) && (_mask.at<uchar>(p) = GC_PR_FGD) )
-            _mask.at<uchar>(p) = GC_PR_BGD;
+          if( (_fgdGMM.whichComponent( _csImage.at<Vec3b>(p) ) == ci) && (maskAt(p) == G_PR_FGD) )  maskSet(p, G_PR_BGD );
 
     }
   }
@@ -286,33 +281,50 @@ Mat GraphCut::drawMask( void ) const
   Mat image( Mat::zeros( _mask.size(), CV_8UC3 ) );
 
   const Scalar Red( 0, 0, 255 ), Yellow(0, 255, 255),
-  Green(0, 255, 0), Blue(255,0,0), Black(0,0,0);
+               Green(0, 255, 0), Blue(255,0,0),
+               Grey( 128,128,128 );
 
   // Tried to do this with masks and bitwise operations.
-  // image.setTo( Red, mask & GC_FGD );
-  // image.setTo( Yellow, mask & GC_PR_FGD );
-  // image.setTo( Green, mask & GC_PR_BGD );
-  // image.setTo( Blue, mask & GC_BGD );
-  // The GC_* flags are bitwise, so that didn't work.
+  // image.setTo( Red, mask & G_FGD );
+  // image.setTo( Yellow, mask & G_PR_FGD );
+  // image.setTo( Green, mask & G_PR_BGD );
+  // image.setTo( Blue, mask & G_BGD );
+  // The G_* flags are bitwise, so that didn't work.
 
   // could do something like
   Mat bitmask;
-  cv::compare( _mask, Scalar( GC_FGD ), bitmask, CMP_EQ );
+  cv::compare( _mask, Scalar( G_FGD ), bitmask, CMP_EQ );
   image.setTo( Red, bitmask );
 
-  cv::compare( _mask, Scalar( GC_PR_FGD ), bitmask, CMP_EQ );
+  cv::compare( _mask, Scalar( G_PR_FGD ), bitmask, CMP_EQ );
   image.setTo( Yellow, bitmask );
 
-  cv::compare( _mask, Scalar( GC_PR_BGD ), bitmask, CMP_EQ );
+  cv::compare( _mask, Scalar( G_PR_BGD ), bitmask, CMP_EQ );
   image.setTo( Green, bitmask );
 
-  cv::compare( _mask, Scalar( GC_BGD ), bitmask, CMP_EQ );
+  cv::compare( _mask, Scalar( G_BGD ), bitmask, CMP_EQ );
   image.setTo( Blue, bitmask );
+
+  cv::compare( _mask, Scalar( G_IGNORE ), bitmask, CMP_EQ );
+  image.setTo( Grey, bitmask );
+
 
 return image;
 }
 
 
+static unsigned char countBits( unsigned char v )
+{
+  unsigned char c; // store the total here
+  static const int S[] = {1, 2, 4}; // Magic Binary Numbers
+  static const int B[] = {0x55, 0x33, 0x0F};
+
+  c = v - ((v >> 1) & B[0]);
+  c = ((c >> S[1]) & B[1]) + (c & B[1]);
+  c = ((c >> S[2]) + c) & B[2];
+
+  return c;
+}
 
 //=== Protected functions =================
 
@@ -327,15 +339,15 @@ void GraphCut::checkMask( void )
   CV_Error( CV_StsBadArg, "_mask must have CV_8UC1 type" );
   if( _mask.cols != _image.cols || _mask.rows != _image.rows )
   CV_Error( CV_StsBadArg, "_mask must have as many rows and cols as _image" );
-  for( int y = 0; y < _mask.rows; y++ )
-  {
-    for( int x = 0; x < _mask.cols; x++ )
+
+  Point p;
+  for(  p.y = 0; p.y < _mask.rows; p.y++ )
+    for(  p.x = 0; p.x < _mask.cols; p.x++ )
     {
-      uchar val = _mask.at<uchar>(y,x);
-      if( val!=GC_BGD && val!=GC_FGD && val!=GC_PR_BGD && val!=GC_PR_FGD )
-      CV_Error( CV_StsBadArg, "_mask element value must be GC_BGD or GC_FGD or GC_PR_BGD or GC_PR_FGD" );
+      uchar val = maskAt(p);
+      if( countBits(val) > 1 )
+        CV_Error( CV_StsBadArg, "_mask element value must be G_BGD or G_FGD or G_PR_BGD or G_PR_FGD" );
     }
-  }
 }
 
 
@@ -358,9 +370,9 @@ bool GraphCut::initGMMs( void )
 
       Vec3f color = (Vec3f)_csImage.at<Vec3b>(p);
 
-      if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD )
+      if( maskAt(p) == G_BGD || maskAt(p) == G_PR_BGD )
         bgdSamples.push_back( color );
-      else // GC_FGD | GC_PR_FGD
+      else // G_FGD | G_PR_FGD
         fgdSamples.push_back( color );
 
     }
@@ -400,7 +412,7 @@ void GraphCut::assignGMMsComponents( Mat& compIdxs )
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
-      if (_mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD)
+      if (_mask.at<uchar>(p) == G_BGD || _mask.at<uchar>(p) == G_PR_BGD)
         compIdxs.at<int>(p) = _bgdGMM.whichComponent(color);
       else
         compIdxs.at<int>(p) = _fgdGMM.whichComponent(color);
@@ -425,7 +437,7 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
         int ci = compIdxs.at<int>(p);
         // if( compIdxs.at<int>(p) == ci )
         // {
-        if( _mask.at<uchar>(p) == GC_BGD || _mask.at<uchar>(p) == GC_PR_BGD ) {
+        if( maskAt(p) == G_BGD || maskAt(p) == G_PR_BGD ) {
           _bgdGMM.addSample( ci, _image.at<Vec3b>(p) );
         } else {
           _fgdGMM.addSample( ci, _image.at<Vec3b>(p) );
@@ -458,17 +470,17 @@ void GraphCut::constructGCGraph( double lambda,
 
         // set t-weights
         double fromSource, toSink;
-        if( _mask.at<uchar>(p) == GC_PR_BGD || _mask.at<uchar>(p) == GC_PR_FGD )
+        if( maskAt(p) == G_PR_BGD || maskAt(p) == G_PR_FGD )
         {
           fromSource = -log( _bgdGMM(color) );
           toSink = -log( _fgdGMM(color) );
         }
-        else if( _mask.at<uchar>(p) == GC_BGD )
+        else if( maskAt(p) == G_BGD )
         {
           fromSource = 0;
           toSink = lambda;
         }
-        else // GC_FGD
+        else // G_FGD
         {
           fromSource = lambda;
           toSink = 0;
@@ -508,17 +520,16 @@ void GraphCut::constructGCGraph( double lambda,
     graph.maxFlow();
     Point p;
     for( p.y = 0; p.y < _mask.rows; p.y++ )
-    {
       for( p.x = 0; p.x < _mask.cols; p.x++ )
       {
-        if( _mask.at<uchar>(p) == GC_PR_BGD || _mask.at<uchar>(p) == GC_PR_FGD )
+        if( maskAt(p) == G_PR_BGD || maskAt(p) == G_PR_FGD )
         {
           if( graph.inSourceSegment( p.y*_mask.cols+p.x /*vertex index*/ ) )
-            _mask.at<uchar>(p) = GC_PR_FGD;
+            maskSet(p, G_PR_FGD );
           else
-            _mask.at<uchar>(p) = GC_PR_BGD;
+            maskSet(p, G_PR_BGD );
         }
-      }
+
     }
   }
 
