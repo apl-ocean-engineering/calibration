@@ -43,7 +43,7 @@ void reassignFGtoBG( float pLimit = 1e-4 );
   bool process( int iterCount = 1 );
 
   const Mat &mask( void ) const { return _mask; }
-  Mat fgdMask( void ) const {  return  ( mask() & (GC_FGD | GC_PR_FGD) ); }
+  Mat fgdMask( void ) const {  return  ( mask() & (G_FGD | G_PR_FGD) ); }
 
   Mat drawMask( void ) const;
 
