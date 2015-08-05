@@ -259,7 +259,7 @@ bool GraphCut::process( int iterCount )
 
   checkMask( );
 
-  const double gamma = 50;
+  const double gamma = 100; //50;
   const double lambda = 9*gamma;
   const double beta = calcBeta( _image );
 
@@ -293,8 +293,8 @@ Mat GraphCut::drawMask( void ) const
   // image.setTo( Yellow, mask & GC_PR_FGD );
   // image.setTo( Green, mask & GC_PR_BGD );
   // image.setTo( Blue, mask & GC_BGD );
-
   // The GC_* flags are bitwise, so that didn't work.
+
   // could do something like
   Mat bitmask;
   cv::compare( _mask, Scalar( GC_FGD ), bitmask, CMP_EQ );

@@ -368,13 +368,13 @@ public:
     gc.showMaxQImages();
     imshow( RefinedMask, gc.drawMask() );
     LOG(INFO) << "Press any key...";
-    waitKey(0);
+    //waitKey(0);
 
     LOG(INFO) << "Reassigning from FG to BG.";
     gc.reassignFGtoBG( 0.01 );
     gc.showMaxQImages();
     LOG(INFO) << "Press any key...";
-    waitKey(0);
+    //waitKey(0);
 
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
