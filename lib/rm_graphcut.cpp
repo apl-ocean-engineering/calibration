@@ -57,7 +57,7 @@ using namespace cv;
 
 RMGraphCut::RMGraphCut( double colorWeight )
 :   _colorWeight( colorWeight ), _image(), _labels(),
-_gmm(10)
+_gmm(15)
 {;}
 
 void RMGraphCut::setLabels( const Mat &labels )
@@ -91,28 +91,33 @@ void RMGraphCut::showMaxQImages( )
   Mat fgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
   Mat allQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
 
-  Spectrum bgdSpectrum( _gmm.componentsCount( G_BGD_MASK ) );
-  Spectrum fgdSpectrum( _gmm.componentsCount( G_FGD_MASK ) );
+  //Spectrum bgdSpectrum( _gmm.componentsCount( G_BGD_MASK ) );
+  //Spectrum fgdSpectrum( _gmm.componentsCount( G_FGD_MASK ) );
   Spectrum allSpectrum( _gmm.componentsCount() );
 
   Point p;
   for( p.y = 0; p.y < _image.rows; p.y++ )
-  for( p.x = 0; p.x < _image.cols; p.x++ )
-  {
-    int at;
-    float q;
-    Vec3d color = _csImage.at<Vec3b>(p);
-    //if( _mask.at<uchar>(p) != G_PR_FGD ) continue;
+    for( p.x = 0; p.x < _image.cols; p.x++ )
+    {
+      int at;
+      float q;
+      Vec3d color = _csImage.at<Vec3b>(p);
+      //if( _mask.at<uchar>(p) != G_PR_FGD ) continue;
 
-    q = _gmm.maxQat( G_FGD_MASK, color, at);
-    fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
+      // q = _gmm.maxQat( G_FGD_MASK, color, at);
+      // if(at >= 0) fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
+      //
+      // q = _gmm.maxQat( G_BGD_MASK, color, at);
+      // if(at >= 0) bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
 
-    q = _gmm.maxQat( G_BGD_MASK, color, at);
-    bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
+      q = _gmm.maxQat( color, at );
+      allQimage.at<Vec3b>(p) = allSpectrum( at, q );
 
-    q = _gmm.maxQat( color, at );
-    allQimage.at<Vec3b>(p) = allSpectrum( at, q );
-  }
+      if( _gmm.maskAt( at ) & G_BGD_MASK )
+        bgdQimage.at<Vec3b>(p) = allSpectrum( at, q );
+      else if( _gmm.maskAt( at ) & G_FGD_MASK )
+        fgdQimage.at<Vec3b>(p) = allSpectrum( at, q );
+    }
 
   imshow( "qimage fgb", fgdQimage );
   imshow( "qimage bgb", bgdQimage );
@@ -249,19 +254,19 @@ Check size, type and element values of mask matrix.
 void RMGraphCut::checkLabels( void )
 {
   if( _labels.empty() )
-  CV_Error( CV_StsBadArg, "_labels is empty" );
+    CV_Error( CV_StsBadArg, "_labels is empty" );
   if( _labels.type() != CV_8UC1 )
-  CV_Error( CV_StsBadArg, "_labels must have CV_8UC1 type" );
+    CV_Error( CV_StsBadArg, "_labels must have CV_8UC1 type" );
   if( _labels.cols != _image.cols || _labels.rows != _image.rows )
-  CV_Error( CV_StsBadArg, "_labels must have as many rows and cols as _image" );
+    CV_Error( CV_StsBadArg, "_labels must have as many rows and cols as _image" );
 
   Point p;
   for(  p.y = 0; p.y < _labels.rows; p.y++ )
-  for(  p.x = 0; p.x < _labels.cols; p.x++ )
-  {
-    if( countBits( labelAt(p) ) > 1 )
-      CV_Error( CV_StsBadArg, "_labels element value must a single RMGraphCutLabels value" );
-  }
+    for(  p.x = 0; p.x < _labels.cols; p.x++ )
+    {
+      if( countBits( labelAt(p) ) > 1 )
+        CV_Error( CV_StsBadArg, "_labels element value must a single RMGraphCutLabels value" );
+    }
 }
 
 
@@ -319,12 +324,14 @@ bool RMGraphCut::initGMMs( void )
 
   // Apply labels to each cluster
   for( int i = 0; i < _gmm.componentsCount(); ++i ) {
+LOG(INFO) << i << " fgd: " << labelHistograms[i].fgd << " bgd: " << labelHistograms[i].bgd << " ignore: " << labelHistograms[i].ignore;
+
     if( labelHistograms[i].max() == labelHistograms[i].fgd )
-    _gmm.setMask( i, G_FGD );
+      _gmm.setMask( i, G_FGD );
     else if( labelHistograms[i].max() == labelHistograms[i].bgd )
-    _gmm.setMask( i, G_BGD );
+      _gmm.setMask( i, G_BGD );
     else
-    _gmm.setMask( i, G_IGNORE );
+      _gmm.setMask( i, G_IGNORE );
   }
 
   _gmm.endLearning();
@@ -362,7 +369,6 @@ void RMGraphCut::learnGMMs( const Mat& compIdxs )
     _gmm.addSample( compIdxs.at<int>(p), _image.at<Vec3b>(p) );
 
   }
-  //  }
 
   _gmm.endLearning( );
 }

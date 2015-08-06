@@ -365,10 +365,10 @@ public:
 
     imshow( GrabCutMask, gc.drawLabels() );
 
-    // LOG(INFO) << "Initial estimate of GMMs";
-    // gc.showMaxQImages();
-    // LOG(INFO) << "Press any key...";
-    // waitKey(0);
+    LOG(INFO) << "Initial estimate of GMMs";
+    gc.showMaxQImages();
+    LOG(INFO) << "Press any key...";
+    waitKey(0);
 
     // if( false ) {
     //   LOG(INFO) << "Refining mask using just background info.";

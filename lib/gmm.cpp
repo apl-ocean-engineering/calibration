@@ -307,7 +307,7 @@ double MaskedGMM::logLikelihood( MaskType mask, const Vec3d &color ) const
 
 float MaskedGMM::maxQat( MaskType mask, const Vec3d &color, int &at ) const
 {
-  float max = -1;
+  float max = 0;
   at = -1;
 
   // Want to calculate the percentage of randomly drawn points
@@ -361,12 +361,12 @@ void MaskedGMM::endLearning( void )
   for( unsigned int i = 0; i < 8*sizeof(MaskType); ++i ) {
     MaskType mask = 0x01<<i;
 
-    int sampleCount;
-    for( int ci = 0; ci < componentsCount(); ci++ ) {
+    int sampleCount = 0;
+    for( int ci = 0; ci < componentsCount(); ci++ )
       if( maskAt(ci) & mask ) sampleCount += _gmm[ci].sampleCount;
 
-      for( int ci = 0; ci < componentsCount(); ci++ )
+    for( int ci = 0; ci < componentsCount(); ci++ )
       if( maskAt(ci) & mask ) _gmm[ci].endLearning( sampleCount );
-    }
+
   }
 }
