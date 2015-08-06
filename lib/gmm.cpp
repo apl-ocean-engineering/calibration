@@ -39,13 +39,15 @@ double GMM::Component::uniform( const Vec3d &color ) const
   {
     // CV_Assert( covDeterms[ci] > std::numeric_limits<double>::epsilon() );
 
-    Vec3d diff( color + mean );
+    Vec3d diff( color - mean );
     // double* m = _mean + 3*ci;
     // diff[0] -= m[0]; diff[1] -= m[1]; diff[2] -= m[2];
 
-    double mult = diff[0]*(diff[0]*inverseCov[0][0] + diff[1]*inverseCov[1][0] + diff[2]*inverseCov[2][0])
-                + diff[1]*(diff[0]*inverseCov[0][1] + diff[1]*inverseCov[1][1] + diff[2]*inverseCov[2][1])
-                + diff[2]*(diff[0]*inverseCov[0][2] + diff[1]*inverseCov[1][2] + diff[2]*inverseCov[2][2]);
+    double mult = 0.0;
+    for( unsigned char i =0; i < 3; ++i )
+      for( unsigned char j = 0; j < 3; ++j )
+          mult += diff[i]*diff[j]*inverseCov[j][i];
+
     return mult;
   }
 
