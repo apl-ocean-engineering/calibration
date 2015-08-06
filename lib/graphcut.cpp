@@ -107,8 +107,9 @@ Carsten Rother, Vladimir Kolmogorov, Andrew Blake.
 //     }
 
 
-GraphCut::GraphCut( void )
-:   _image(), _mask(), _ignoreGMM(1), _bgdGMM( 5 ), _fgdGMM( 5 )
+GraphCut::GraphCut( double colorWeight )
+:   _colorWeight( colorWeight ), _image(), _mask(),
+    _ignoreGMM(1), _bgdGMM( 5 ), _fgdGMM( 5 )
 {;}
 
 void GraphCut::setMask( const Mat &msk )
@@ -164,29 +165,28 @@ void GraphCut::showMaxQImages( )
   Mat bgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
   Mat fgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
 
-Spectrum bgdSpectrum( _bgdGMM.componentsCount() );
-Spectrum fgdSpectrum( _fgdGMM.componentsCount() );
-
+  Spectrum bgdSpectrum( _bgdGMM.componentsCount() );
+  Spectrum fgdSpectrum( _fgdGMM.componentsCount() );
 
   Point p;
   for( p.y = 0; p.y < _image.rows; p.y++ )
-  for( p.x = 0; p.x < _image.cols; p.x++ )
-  {
-int at;
-float q;
-    Vec3d color = _csImage.at<Vec3b>(p);
-    //if( _mask.at<uchar>(p) != G_PR_FGD ) continue;
+    for( p.x = 0; p.x < _image.cols; p.x++ )
+    {
+      int at;
+      float q;
+      Vec3d color = _csImage.at<Vec3b>(p);
+      //if( _mask.at<uchar>(p) != G_PR_FGD ) continue;
 
-    q = _fgdGMM.maxQat(color, at);
-    fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
+      q = _fgdGMM.maxQat(color, at);
+      fgdQimage.at<Vec3b>(p) = fgdSpectrum( at, q );
 
-    q = _bgdGMM.maxQat(color, at);
-    bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
+      q = _bgdGMM.maxQat(color, at);
+      bgdQimage.at<Vec3b>(p) = bgdSpectrum( at, q );
+    }
+
+    imshow( "qimage fgb", fgdQimage );
+    imshow( "qimage bgb", bgdQimage );
   }
-
-  imshow( "qimage fgb", fgdQimage );
-  imshow( "qimage bgb", bgdQimage );
-}
 
 
 void GraphCut::bgRefineMask( float pLimit )
@@ -255,12 +255,10 @@ bool GraphCut::process( int iterCount )
 
   checkMask( );
 
-  const double gamma = 100; //50;
-  const double lambda = 9*gamma;
-  const double beta = calcBeta( _image );
+  //const double gamma = 100; //50;
 
-  Mat leftW, upleftW, upW, uprightW;
-  calcNWeights( _csImage, leftW, upleftW, upW, uprightW, beta, gamma );
+  NeighborWeights w;
+  calcNeighborWeights( _csImage, w );
 
   Mat compIdxs( _image.size(), CV_32SC1 );
 
@@ -269,7 +267,7 @@ bool GraphCut::process( int iterCount )
     GCGraph<double> graph;
     assignGMMsComponents( compIdxs );
     learnGMMs( compIdxs );
-    constructGCGraph( lambda, leftW, upleftW, upW, uprightW, graph );
+    constructGCGraph( w, graph );
     estimateSegmentation( graph );
   }
 
@@ -365,7 +363,6 @@ bool GraphCut::initGMMs( void )
 
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
-  {
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
 
@@ -377,7 +374,7 @@ bool GraphCut::initGMMs( void )
         fgdSamples.push_back( color );
 
     }
-  }
+
 
   if( bgdSamples.empty() || fgdSamples.empty() ) { return false; }
 
@@ -454,15 +451,16 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
 /*
 Construct GCGraph
 */
-void GraphCut::constructGCGraph( double lambda,
-  const Mat& leftW, const Mat& upleftW, const Mat& upW, const Mat& uprightW, GCGraph<double>& graph )
-  {
+void GraphCut::constructGCGraph( const NeighborWeights &w, GCGraph<double>& graph )
+{
+  const double lambda = 9*_colorWeight;
+
     int vtxCount = _image.cols*_image.rows,
     edgeCount = 2*(4*_image.cols*_image.rows - 3*(_image.cols + _image.rows) + 2);
     graph.create(vtxCount, edgeCount);
+
     Point p;
     for( p.y = 0; p.y < _image.rows; p.y++ )
-    {
       for( p.x = 0; p.x < _image.cols; p.x++)
       {
         // add node
@@ -473,8 +471,8 @@ void GraphCut::constructGCGraph( double lambda,
         double fromSource, toSink;
         if( maskAt(p) == G_PR_BGD || maskAt(p) == G_PR_FGD )
         {
-          fromSource = -log( _bgdGMM(color) );
-          toSink = -log( _fgdGMM(color) );
+          fromSource = -_bgdGMM.logLikelihood(color);
+          toSink =     -_fgdGMM.logLikelihood(color);
         }
         else if( maskAt(p) == G_BGD )
         {
@@ -488,29 +486,31 @@ void GraphCut::constructGCGraph( double lambda,
         }
         graph.addTermWeights( vtxIdx, fromSource, toSink );
 
+
         // set n-weights
         if( p.x>0 )
         {
-          double w = leftW.at<double>(p);
-          graph.addEdges( vtxIdx, vtxIdx-1, w, w );
+          double wt = w.left.at<double>(p);
+          graph.addEdges( vtxIdx, vtxIdx-1, wt, wt );
         }
         if( p.x>0 && p.y>0 )
         {
-          double w = upleftW.at<double>(p);
-          graph.addEdges( vtxIdx, vtxIdx-_image.cols-1, w, w );
+          double wt = w.upleft.at<double>(p);
+          graph.addEdges( vtxIdx, vtxIdx-_image.cols-1, wt, wt );
         }
         if( p.y>0 )
         {
-          double w = upW.at<double>(p);
-          graph.addEdges( vtxIdx, vtxIdx-_image.cols, w, w );
+          double wt = w.up.at<double>(p);
+          graph.addEdges( vtxIdx, vtxIdx-_image.cols, wt, wt );
         }
         if( p.x<_image.cols-1 && p.y>0 )
         {
-          double w = uprightW.at<double>(p);
-          graph.addEdges( vtxIdx, vtxIdx-_image.cols+1, w, w );
+          double wt = w.upright.at<double>(p);
+          graph.addEdges( vtxIdx, vtxIdx-_image.cols+1, wt, wt );
         }
       }
-    }
+
+
   }
 
   /*
@@ -581,51 +581,56 @@ void GraphCut::constructGCGraph( double lambda,
   Calculate weights of noterminal vertices of graph.
   beta and gamma - parameters of GrabCut algorithm.
   */
-  void GraphCut::calcNWeights( const Mat& img, Mat& leftW, Mat& upleftW, Mat& upW, Mat& uprightW, double beta, double gamma )
+  void GraphCut::calcNeighborWeights( const Mat& img, NeighborWeights &w )
   {
-    const double gammaDivSqrt2 = gamma / std::sqrt(2.0f);
-    leftW.create( img.rows, img.cols, CV_64FC1 );
-    upleftW.create( img.rows, img.cols, CV_64FC1 );
-    upW.create( img.rows, img.cols, CV_64FC1 );
-    uprightW.create( img.rows, img.cols, CV_64FC1 );
+    const double beta = calcBeta( _image );
 
-    for( int y = 0; y < img.rows; y++ )
-    {
-      for( int x = 0; x < img.cols; x++ )
+
+    const double gamma = _colorWeight,
+                gammaDivSqrt2 = _colorWeight / std::sqrt(2.0f);      // Reduced weighting for diagonal terms
+
+    w.left.create(   img.size(), CV_64FC1 );
+    w.upleft.create( img.size(), CV_64FC1 );
+    w.up.create(     img.size(), CV_64FC1 );
+    w.upright.create( img.size(), CV_64FC1 );
+
+    Point p;
+    for( p.y = 0; p.y < img.rows; p.y++ )
+      for( p.x = 0; p.x < img.cols; p.x++ )
       {
-        Vec3d color = img.at<Vec3b>(y,x);
+        Vec3d color = img.at<Vec3b>(p);
 
-        if( x-1>=0 ) // left
+        if( p.x-1>=0 ) // left
         {
-          Vec3d diff = color - (Vec3d)img.at<Vec3b>(y,x-1);
-          leftW.at<double>(y,x) = gamma * exp(-beta*diff.dot(diff));
+          Vec3d diff = color - (Vec3d)img.at<Vec3b>(p.y,p.x-1);
+          w.left.at<double>(p) = gamma * exp(-beta*diff.dot(diff));
         }
         else
-          leftW.at<double>(y,x) = 0;
+          w.left.at<double>(p) = 0;
 
-        if( x-1>=0 && y-1>=0 ) // upleft
+        if( p.x-1>=0 && p.y-1>=0 ) // upleft
         {
-          Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x-1);
-          upleftW.at<double>(y,x) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
+          Vec3d diff = color - (Vec3d)img.at<Vec3b>(p.y-1,p.x-1);
+          w.upleft.at<double>(p) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
         }
         else
-          upleftW.at<double>(y,x) = 0;
+          w.upleft.at<double>(p) = 0;
 
-        if( y-1>=0 ) // up
+        if( p.y-1>=0 ) // up
         {
-          Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x);
-          upW.at<double>(y,x) = gamma * exp(-beta*diff.dot(diff));
+          Vec3d diff = color - (Vec3d)img.at<Vec3b>(p.y-1,p.x);
+          w.up.at<double>(p) = gamma * exp(-beta*diff.dot(diff));
         }
         else
-          upW.at<double>(y,x) = 0;
+          w.up.at<double>(p) = 0;
 
-        if( x+1<img.cols && y-1>=0 ) // upright
+        if( p.x+1 < img.cols && p.y-1 >= 0 ) // upright
         {
-          Vec3d diff = color - (Vec3d)img.at<Vec3b>(y-1,x+1);
-          uprightW.at<double>(y,x) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
+          Vec3d diff = color - (Vec3d)img.at<Vec3b>(p.y-1,p.x+1);
+          w.upright.at<double>(p) = gammaDivSqrt2 * exp(-beta*diff.dot(diff));
         }
         else
-          uprightW.at<double>(y,x) = 0;
+          w.upright.at<double>(p) = 0;
       }
-    }
+
   }

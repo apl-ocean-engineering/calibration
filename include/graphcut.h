@@ -31,7 +31,8 @@ public:
   };
   typedef uchar LabelType;
 
-  GraphCut( void );
+  // gamma = 50 from original Grabcut paper
+  GraphCut( double colorWeight = 50 );
 
   void setMask( const Mat &mask );
   void setMaskRect( const Rect &rect );
@@ -39,7 +40,7 @@ public:
 
   void showMaxQImages( );
   void bgRefineMask( float pLimit = 0.5 );
-void reassignFGtoBG( float pLimit = 1e-4 );
+  void reassignFGtoBG( float pLimit = 1e-4 );
 
   bool process( int iterCount = 1 );
 
@@ -51,6 +52,10 @@ void reassignFGtoBG( float pLimit = 1e-4 );
   LabelType maskAt( const Point &p ) const           { return _mask.at<LabelType>(p); }
   void      maskSet( const Point &p, LabelType l )   { _mask.at<LabelType>(p) = l; }
 
+  struct NeighborWeights {
+    Mat left, upleft, up, upright;
+  };
+
 protected:
 
   void checkMask( void );
@@ -58,18 +63,20 @@ protected:
   bool initGMMs( void );
   void assignGMMsComponents( Mat& compIdxs );
   void learnGMMs( const Mat& compIdxs );
-  void constructGCGraph( double lambda,
-    const Mat& leftW, const Mat& upleftW, const Mat& upW, const Mat& uprightW,
-    GCGraph<double>& graph );
+  void constructGCGraph( const NeighborWeights &w,
+                         GCGraph<double>& graph );
 
     void estimateSegmentation( GCGraph<double>& graph );
 
     double calcBeta( const Mat& _image );
-    void calcNWeights( const Mat& img, Mat& leftW, Mat& upleftW, Mat& upW, Mat& uprightW, double beta, double gamma );
+    void calcNeighborWeights( const Mat& img, NeighborWeights &w );
 
+    // This is "gamma" in the original Grabcut algorithm, the weight on the color
+// difference term.
+  double _colorWeight;
 
     Mat _image, _csImage, _mask, _fgdModel, _bgdModel;
-    
+
     GMM _ignoreGMM, _bgdGMM, _fgdGMM;
   };
 

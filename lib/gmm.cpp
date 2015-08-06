@@ -21,7 +21,7 @@ double GMM::Component::pdf( const Vec3d &color ) const
 {
   if( weight > 0 )
   {
-    return invSqrtCovDeterm * exp(-0.5f*uniform(color));
+    return invSqrtCovDeterm * exp(-0.5f*uniformSq(color));
   }
 
   return 0;
@@ -32,8 +32,19 @@ double GMM::Component::weightedPdf( const Vec3d &color ) const
   return weight * pdf( color );
 }
 
+double GMM::Component::logLikelihood( const Vec3d &color ) const
+{
+  return log( weight * invSqrtCovDeterm ) - 0.5 * uniformSq( color );
+}
 
-double GMM::Component::uniform( const Vec3d &color ) const
+// For the normal distribution
+//   e^( 1/2 * (x - mu)^T Cov^-1 (x - mu) / cov ^2 )
+//
+//  Calculates the (x - mu)^T Cov^-1 (x - mu) / cov ^2 term
+//  Such that it is equivalent to a zero-mean, 1-covariance normal:
+//
+//   e^( 1/2 * uniformSq() )
+double GMM::Component::uniformSq( const Vec3d &color ) const
 {
   if( weight > 0 )
   {
@@ -161,12 +172,20 @@ GMM::~GMM( void )
   for( unsigned int i = 0; i < componentsCount(); ++i ) { delete _components[i]; }
 }
 
+double GMM::logLikelihood( const Vec3d &color ) const
+{
+  double ll = 0;
+  for( int ci = 0; ci < componentsCount(); ci++ )
+      ll += _components[ci]->logLikelihood(color );
+  return ll;
+}
+
 // TODO:: Shouldn't this by multiplication, not summation?
 double GMM::operator()( const Vec3d &color ) const
 {
   double res = 0;
   for( int ci = 0; ci < componentsCount(); ci++ )
-      res += _components[ci]->weightedPdf(color );
+      res *= _components[ci]->weightedPdf(color );
   return res;
 }
 
@@ -201,8 +220,8 @@ float GMM::maxQat( const Vec3d &color, int &at ) const
 
   for( int ci = 0; ci < componentsCount(); ci++ ) {
 
-    float x = _components[ci]->uniform( color );
-    float q = gsl_cdf_chisq_Q( x, 1 );
+    float xSq = _components[ci]->uniformSq( color );
+    float q = gsl_cdf_chisq_Q( xSq, 1 );
 
     if( q > max ) {
       at = ci;

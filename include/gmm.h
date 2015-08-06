@@ -25,6 +25,8 @@ public:
   ~GMM();
 
   double operator()( const Vec3d &color ) const;
+  double logLikelihood( const Vec3d &color ) const;
+
   //double operator()( int ci, const Vec3d &color ) const;
   int whichComponent( const Vec3d &color ) const;
 
@@ -42,8 +44,9 @@ public:
 
     double pdf( const Vec3d &color ) const;
     double weightedPdf( const Vec3d &color ) const;
+    double logLikelihood( const Vec3d &color ) const;
 
-    double uniform( const Vec3d &color ) const;
+    double uniformSq( const Vec3d &color ) const;
 
     void initLearning();
     void addSample( const Vec3d &color );

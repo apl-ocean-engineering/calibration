@@ -23,7 +23,7 @@ public:
   {;}
 
   string annotatedImage;
-  bool refineSegmentation;
+  bool refineSegmentation, darkChannelRefinement;
   enum AnnotateMode { NONE = -1, OVERLAY, SEGMENT } annotateMode;
 
   virtual void doParseCmdLine( TCLAP::CmdLine &cmd )
@@ -33,11 +33,13 @@ public:
     TCLAP::ValueArg< string > annotatedImageArg("", "annotated-image", "Annotated image", false, "", "Image file", cmd );
 
     TCLAP::SwitchArg doRefineSegmentationArg( "", "refine-segmentation", "Refine segmentations", cmd, false );
+    TCLAP::SwitchArg doDarkChannelArg( "", "dark-channel-refinement", "Apply dark channel refinement", cmd, false );
 
     VisualizerOpts::doParseCmdLine( cmd );
 
     annotatedImage = annotatedImageArg.getValue();
     refineSegmentation = doRefineSegmentationArg.getValue();
+darkChannelRefinement = doDarkChannelArg.getValue();
 
     if( annotatedArg.isSet() ) {
       string arg( annotatedArg.getValue() );
@@ -201,8 +203,12 @@ public:
       //darkChannelRefinement( overlay, refined );
       imshow( "Original image", overlay );
 
+
       Mat refined;
-      darkChannelRefinement( overlay, mask, refined );
+      if( opts.darkChannelRefinement )
+        darkChannelRefinement( overlay, mask, refined );
+      else
+        refined = overlay;
 
       Mat filtered;
       applyBilateralFilter( refined, filtered );
@@ -324,10 +330,10 @@ public:
     //Mat defFG;
     //erode( mask, defFG, Mat(), Point(-1,-1), FGErodeIterations );
 
-    Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
 
     const int probFGIterations = 2;
     Mat probFG;
+    Mat structuringElement( getStructuringElement( MORPH_RECT, Size(5,5) ));
     morphologyEx( mask, probFG, MORPH_CLOSE, structuringElement,  Point(-1,-1), probFGIterations * 5 );
     morphologyEx( probFG, probFG, MORPH_ERODE, structuringElement, Point(-1,-1), probFGIterations );
 
@@ -352,7 +358,7 @@ public:
 
     //Mat bgModel, fgModel;
 
-    GraphCut gc;
+    GraphCut gc( 100 );
     gc.setImage( img );
     gc.setMask( grabCutMask );
 
