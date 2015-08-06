@@ -1,5 +1,5 @@
-#ifndef __GRAPHCUT_H__
-#define __GRAPHCUT_H__
+#ifndef __RM_GRAPHCUT_H__
+#define __RM_GRAPHCUT_H__
 
 
 #include <opencv2/core.hpp>
@@ -13,44 +13,43 @@ using cv::Rect;
 using cv::Point;
 using cv::Mat;
 
-// void graphCut( InputArray img, InputOutputArray mask, Rect rect,
-//   InputOutputArray bgdModel, InputOutputArray fgdModel,
-//   int iterCount, int mode = cv::GC_EVAL );
 
 
-class GraphCut {
+class RMGraphCut {
 public:
 
   enum GraphCutLabels {
-    G_IGNORE = 0,
+    G_MASK   = 0,
     G_BGD    = 1,
     G_PR_BGD = 2,
+    G_BGD_MASK = 0x03,
     G_PR_FGD = 4,
     G_FGD    = 8,
-    G_MASK   = 128
+    G_FGD_MASK = 0x0C,
+    G_IGNORE   = 128
   };
   typedef uchar LabelType;
 
   // gamma = 50 from original Grabcut paper
-  GraphCut( double colorWeight = 50 );
+  RMGraphCut( double colorWeight = 50 );
 
-  void setMask( const Mat &mask );
-  void setMaskRect( const Rect &rect );
+  void setLabels( const Mat &labels );
   void setImage( const Mat &img );
 
   void showMaxQImages( );
-  void bgRefineMask( float pLimit = 0.5 );
-  void reassignFGtoBG( float pLimit = 1e-4 );
+  // void bgRefineMask( float pLimit = 0.5 );
+  // void reassignFGtoBG( float pLimit = 1e-4 );
 
   bool process( int iterCount = 1 );
 
-  const Mat &mask( void ) const { return _mask; }
-  Mat fgdMask( void ) const {  return  ( mask() & (G_FGD | G_PR_FGD) ); }
+  const Mat &labels( void ) const     { return _labels; }
+  Mat labels( LabelType mask ) const  { return ( labels() & mask ); }
+  Mat fgdLabels( void ) const         {  return labels( G_FGD_MASK ); }
 
-  Mat drawMask( void ) const;
+  Mat drawLabels( void ) const;
 
-  LabelType maskAt( const Point &p ) const           { return _mask.at<LabelType>(p); }
-  void      maskSet( const Point &p, LabelType l )   { _mask.at<LabelType>(p) = l; }
+  LabelType labelAt( const Point &p ) const           { return _labels.at<LabelType>(p); }
+  void      setLabel( const Point &p, LabelType l )   { _labels.at<LabelType>(p) = l; }
 
   struct NeighborWeights {
     Mat left, upleft, up, upright;
@@ -58,7 +57,7 @@ public:
 
 protected:
 
-  void checkMask( void );
+  void checkLabels( void );
 
   bool initGMMs( void );
   void assignGMMsComponents( Mat& compIdxs );
@@ -73,11 +72,10 @@ protected:
 
     // This is "gamma" in the original Grabcut algorithm, the weight on the color
 // difference term.
-  double _colorWeight;
+    double _colorWeight;
 
-    Mat _image, _csImage, _mask;
-
-    GMM _ignoreGMM, _bgdGMM, _fgdGMM;
+    Mat _image, _csImage, _labels;
+    MaskedGMM _gmm;
   };
 
   #endif

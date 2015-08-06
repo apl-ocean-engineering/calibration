@@ -58,55 +58,6 @@ Carsten Rother, Vladimir Kolmogorov, Andrew Blake.
 
 
 
-//   void graphCut( InputArray _image, InputOutputArray _mask, Rect rect,
-//     InputOutputArray _bgdModel, InputOutputArray _fgdModel,
-//     int iterCount, int mode )
-//     {
-//       Mat _image = _image.getMat();
-//       Mat& mask = _mask.getMatRef();
-//       Mat& bgdModel = _bgdModel.getMatRef();
-//       Mat& fgdModel = _fgdModel.getMatRef();
-//
-//       if( _image.empty() )
-//       CV_Error( CV_StsBadArg, "image is empty" );
-//       if( _image.type() != CV_8UC3 )
-//       CV_Error( CV_StsBadArg, "image mush have CV_8UC3 type" );
-//
-//       GMM bgdGMM( bgdModel ), fgdGMM( fgdModel );
-//       Mat compIdxs( _image.size(), CV_32SC1 );
-//
-//       if( iterCount <= 0)
-//         return;
-//
-//       if( mode == G_INIT_WITH_RECT || mode == G_INIT_WITH_MASK )
-//       {
-//         if( mode == G_INIT_WITH_RECT )
-//         initMaskWithRect( mask, _image.size(), rect );
-//         else // flag == G_INIT_WITH_MASK
-//         checkMask( _image, mask );
-//         initGMMs( _image, mask, bgdGMM, fgdGMM );
-//       } else if( mode == G_EVAL ) {
-//         checkMask( _image, mask );
-// }
-//
-//       const double gamma = 50;
-//       const double lambda = 9*gamma;
-//       const double beta = calcBeta( _image );
-//
-//       Mat leftW, upleftW, upW, uprightW;
-//       calcNWeights( _image, leftW, upleftW, upW, uprightW, beta, gamma );
-//
-//       for( int i = 0; i < iterCount; i++ )
-//       {
-//         GCGraph<double> graph;
-//         assignGMMsComponents( _image, mask, bgdGMM, fgdGMM, compIdxs );
-//         learnGMMs( _image, mask, compIdxs, bgdGMM, fgdGMM );
-//         constructGCGraph(_image, mask, bgdGMM, fgdGMM, lambda, leftW, upleftW, upW, uprightW, graph );
-//         estimateSegmentation( graph, mask );
-//       }
-//     }
-
-
 GraphCut::GraphCut( double colorWeight )
 :   _colorWeight( colorWeight ), _image(), _mask(),
     _ignoreGMM(1), _bgdGMM( 5 ), _fgdGMM( 5 )
@@ -288,7 +239,7 @@ Mat GraphCut::drawMask( void ) const
   // image.setTo( Yellow, mask & G_PR_FGD );
   // image.setTo( Green, mask & G_PR_BGD );
   // image.setTo( Blue, mask & G_BGD );
-  // The G_* flags are bitwise, so that didn't work.
+  // The G_* flags aren't bitwise, so that didn't work.
 
   // could do something like
   Mat bitmask;
@@ -345,7 +296,7 @@ void GraphCut::checkMask( void )
     {
       uchar val = maskAt(p);
       if( countBits(val) > 1 )
-        CV_Error( CV_StsBadArg, "_mask element value must be G_BGD or G_FGD or G_PR_BGD or G_PR_FGD" );
+        CV_Error( CV_StsBadArg, "_mask element value must a single GraphCutLabels value" );
     }
 }
 
@@ -359,7 +310,7 @@ bool GraphCut::initGMMs( void )
   const int kMeansIterations = 100;
   const int kMeansType = KMEANS_PP_CENTERS;; //KMEANS_RANDOM_CENTERS; //
 
-  std::vector<Vec3f> bgdSamples, fgdSamples;
+  std::vector<Vec3f> bgdSamples, fgdSamples, ignoreSamples;
 
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
@@ -370,8 +321,10 @@ bool GraphCut::initGMMs( void )
 
       if( maskAt(p) == G_BGD || maskAt(p) == G_PR_BGD )
         bgdSamples.push_back( color );
-      else // G_FGD | G_PR_FGD
+      else if( maskAt(p) == G_BGD || maskAt(p) == G_PR_BGD )// G_FGD | G_PR_FGD
         fgdSamples.push_back( color );
+      else if( maskAt(p) == G_IGNORE )
+        ignoreSamples.push_back( color );
 
     }
 
@@ -396,6 +349,10 @@ bool GraphCut::initGMMs( void )
   for( int i = 0; i < (int)fgdSamples.size(); i++ ) _fgdGMM.addSample( fgdLabels.at<int>(i,0), fgdSamples[i] );
   _fgdGMM.endLearning();
 
+  _ignoreGMM.initLearning();
+  for( int i = 0; i < (int)ignoreSamples.size(); i++ ) _ignoreGMM.addSample( 0, ignoreSamples[i] );
+  _ignoreGMM.endLearning();
+
 return true;
 }
 
@@ -406,16 +363,16 @@ void GraphCut::assignGMMsComponents( Mat& compIdxs )
 {
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
-  {
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
+
       if (_mask.at<uchar>(p) == G_BGD || _mask.at<uchar>(p) == G_PR_BGD)
         compIdxs.at<int>(p) = _bgdGMM.whichComponent(color);
       else
         compIdxs.at<int>(p) = _fgdGMM.whichComponent(color);
     }
-  }
+
 }
 
 /*
@@ -428,8 +385,8 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
   Point p;
 //  for( int ci = 0; ci < GMM::componentsCount; ci++ )
 //  {
+
     for( p.y = 0; p.y < _image.rows; p.y++ )
-    {
       for( p.x = 0; p.x < _image.cols; p.x++ )
       {
         int ci = compIdxs.at<int>(p);
@@ -441,7 +398,7 @@ void GraphCut::learnGMMs( const Mat& compIdxs )
           _fgdGMM.addSample( ci, _image.at<Vec3b>(p) );
         }
         //}
-      }
+
     }
 //  }
   _bgdGMM.endLearning();

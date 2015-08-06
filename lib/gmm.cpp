@@ -6,6 +6,7 @@
 
 using namespace cv;
 
+#include "count_bits.h"
 
 GMM::Component::Component( void )
 : weight( 0.0 ), covDeterm(0.0), invSqrtCovDeterm(0.0), sampleCount(0)
@@ -55,8 +56,8 @@ double GMM::Component::uniformSq( const Vec3d &color ) const
     // diff[0] -= m[0]; diff[1] -= m[1]; diff[2] -= m[2];
 
     double mult = diff[0]*(diff[0]*inverseCov[0][0] + diff[1]*inverseCov[1][0] + diff[2]*inverseCov[2][0])
-                + diff[1]*(diff[0]*inverseCov[0][1] + diff[1]*inverseCov[1][1] + diff[2]*inverseCov[2][1])
-                + diff[2]*(diff[0]*inverseCov[0][2] + diff[1]*inverseCov[1][2] + diff[2]*inverseCov[2][2]);
+    + diff[1]*(diff[0]*inverseCov[0][1] + diff[1]*inverseCov[1][1] + diff[2]*inverseCov[2][1])
+    + diff[2]*(diff[0]*inverseCov[0][2] + diff[1]*inverseCov[1][2] + diff[2]*inverseCov[2][2]);
 
     return mult;
   }
@@ -126,7 +127,7 @@ void GMM::Component::calcInverseCovAndDeterm( void  )
 {
   if( weight > 0 )
   {
-double *dcov = &(cov[0][0]);
+    double *dcov = &(cov[0][0]);
     covDeterm = dcov[0]*(dcov[4]*dcov[8]-dcov[5]*dcov[7]) - dcov[1]*(dcov[3]*dcov[8]-dcov[5]*dcov[6]) + dcov[2]*(dcov[3]*dcov[7]-dcov[4]*dcov[6]);
     invSqrtCovDeterm = 1.0f / sqrt( covDeterm );
 
@@ -144,7 +145,7 @@ double *dcov = &(cov[0][0]);
   }
 }
 
-//======================
+//===================================================================
 
 
 GMM::GMM( unsigned int components )
@@ -176,7 +177,7 @@ double GMM::logLikelihood( const Vec3d &color ) const
 {
   double ll = 0;
   for( int ci = 0; ci < componentsCount(); ci++ )
-      ll += _components[ci]->logLikelihood(color );
+  ll += _components[ci]->logLikelihood(color );
   return ll;
 }
 
@@ -185,7 +186,7 @@ double GMM::operator()( const Vec3d &color ) const
 {
   double res = 0;
   for( int ci = 0; ci < componentsCount(); ci++ )
-      res *= _components[ci]->weightedPdf(color );
+  res *= _components[ci]->weightedPdf(color );
   return res;
 }
 
@@ -259,6 +260,113 @@ void GMM::addSample( int ci, const Vec3d &color )
 
 void GMM::endLearning()
 {
-  const double variance = 0.01;
   for( int ci = 0; ci < componentsCount(); ci++ )    _components[ci]->endLearning( totalSampleCount );
+}
+
+
+//===================================================================
+
+MaskedGMM::MaskedGMM( unsigned int components )
+: _componentsCount( components ), _mask( new MaskType[components] ), _gmm( components )
+{
+  memset( _mask, 0, components );
+}
+
+MaskedGMM::~MaskedGMM( void )
+{
+  delete _mask;
+}
+
+void MaskedGMM::setMask( unsigned int idx, MaskType mask )
+{
+  assert( idx < _componentsCount );
+  assert( countBits(mask) == 1 );
+  _mask[idx] = mask;
+}
+
+MaskedGMM::MaskType MaskedGMM::maskAt( unsigned int idx ) const
+{
+  assert( idx < _componentsCount );
+  return _mask[idx];
+}
+
+int MaskedGMM::whichComponent( const Vec3d &color ) const
+{
+  return _gmm.whichComponent( color );
+}
+
+double MaskedGMM::logLikelihood( MaskType mask, const Vec3d &color ) const
+{
+  double ll = 0;
+  for( int ci = 0; ci < componentsCount(); ci++ )
+    if( maskAt(ci) & mask )
+      ll += _gmm[ci].logLikelihood(color );
+
+  return ll;
+}
+
+float MaskedGMM::maxQat( MaskType mask, const Vec3d &color, int &at ) const
+{
+  float max = -1;
+  at = -1;
+
+  // Want to calculate the percentage of randomly drawn points
+  // which are more extreme than this point
+  // (1 = all of them (e.g., this is the mean))
+  // This is the chi-squared Q function
+
+  for( int ci = 0; ci < componentsCount(); ci++ ) {
+
+    if( !(maskAt(ci) & mask) ) continue;
+
+    float xSq = _gmm[ci].uniformSq( color );
+    float q = gsl_cdf_chisq_Q( xSq, 1 );
+
+    if( q > max ) {
+      at = ci;
+      max = q;
+    }
+  }
+
+  return max;
+}
+
+float MaskedGMM::maxQ( MaskType mask, const Vec3d &color ) const
+{
+  int at;
+  return maxQat(mask, color, at);
+}
+
+unsigned int MaskedGMM::componentsCount( MaskType mask ) const
+{
+  unsigned int count = 0;
+  for( unsigned int i = 0; i < _componentsCount; ++i )
+  if( maskAt(i) & mask ) ++count;
+
+  return count;
+}
+
+void MaskedGMM::initLearning( void )
+{
+  _gmm.initLearning();
+}
+
+void MaskedGMM::addSample( int ci, const Vec3d &color )
+{
+  _gmm.addSample( ci, color );
+}
+
+void MaskedGMM::endLearning( void )
+{
+  for( unsigned int i = 0; i < 8*sizeof(MaskType); ++i ) {
+    MaskType mask = 0x01<<i;
+
+    int sampleCount;
+    for( int ci = 0; ci < componentsCount(); ci++ ) {
+      if( maskAt(ci) & mask ) sampleCount += _gmm[ci].sampleCount;
+
+      for( int ci = 0; ci < componentsCount(); ci++ )
+      if( maskAt(ci) & mask ) _gmm[ci].endLearning( sampleCount );
+    }
+  }
 }

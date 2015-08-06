@@ -7,6 +7,7 @@
 #include "trendnet_time_code.h"
 
 #include "graphcut.h"
+#include "rm_graphcut.h"
 #include "dark_channel.h"
 
 #include "visualize_app_common.h"
@@ -358,31 +359,31 @@ public:
 
     //Mat bgModel, fgModel;
 
-    GraphCut gc( 100 );
+    RMGraphCut gc( 100 );
     gc.setImage( img );
-    gc.setMask( grabCutMask );
+    gc.setLabels( grabCutMask );
 
-    imshow( GrabCutMask, gc.drawMask() );
+    imshow( GrabCutMask, gc.drawLabels() );
 
     // LOG(INFO) << "Initial estimate of GMMs";
     // gc.showMaxQImages();
     // LOG(INFO) << "Press any key...";
     // waitKey(0);
 
-    if( false ) {
-      LOG(INFO) << "Refining mask using just background info.";
-      gc.bgRefineMask( 0.4 );
-      gc.showMaxQImages();
-      imshow( RefinedMask, gc.drawMask() );
-      LOG(INFO) << "Press any key...";
-      //waitKey(0);
-
-      LOG(INFO) << "Reassigning from FG to BG.";
-      gc.reassignFGtoBG( 0.01 );
-      gc.showMaxQImages();
-      LOG(INFO) << "Press any key...";
-      //waitKey(0);
-    }
+    // if( false ) {
+    //   LOG(INFO) << "Refining mask using just background info.";
+    //   gc.bgRefineMask( 0.4 );
+    //   gc.showMaxQImages();
+    //   imshow( RefinedMask, gc.drawMask() );
+    //   LOG(INFO) << "Press any key...";
+    //   //waitKey(0);
+    //
+    //   LOG(INFO) << "Reassigning from FG to BG.";
+    //   gc.reassignFGtoBG( 0.01 );
+    //   gc.showMaxQImages();
+    //   LOG(INFO) << "Press any key...";
+    //   //waitKey(0);
+    // }
 
     for( int i = 0; i < numIter; ++i ) {
       LOG(INFO) << "Performing GrabCut iter " << i;
@@ -393,10 +394,10 @@ public:
       gc.process();
 
       gc.showMaxQImages();
-      imshow( GrabCutMask, gc.drawMask() );
+      imshow( GrabCutMask, gc.drawLabels() );
 
       // If we weren't displaying the image, this could go outside the loop.
-      Mat binMask(  gc.fgdMask() );
+      Mat binMask(  gc.fgdLabels() );
       out = binMask;
 
       Mat maskedImage;

@@ -15,6 +15,8 @@ using std::vector;
 GMM - Gaussian Mixture Model
 */
 
+class MaskedGMM;
+
 class GMM
 {
 public:
@@ -22,7 +24,7 @@ public:
   //static const int componentsCount = comp;
 
   GMM( unsigned int components );
-  ~GMM();
+  virtual ~GMM();
 
   double operator()( const Vec3d &color ) const;
   double logLikelihood( const Vec3d &color ) const;
@@ -67,26 +69,60 @@ public:
   };
 
   unsigned int componentsCount( void ) const { return _components.size(); }
-  const Component &operator[](unsigned int i ) { return *_components[i]; }
+  const Component &operator[](unsigned int i ) const { return *_components[i]; }
+  Component &operator[]( unsigned int i ) { return *_components[i]; }
 
-private:
-
-
+protected:
 
   vector<Component *> _components;
-
-  // Mat _model;
-  // double* coefs;
-  // double* _mean;
-  // double* cov;
-  //
-  // double inverseCovs[comp][3][3];
-  // double covDeterms[comp];
-  //
-  // double sums[comp][3];
-  // double prods[comp][3][3];
-  // int sampleCounts[comp];
   int totalSampleCount;
+};
+
+
+// Do this be composition rather than inheritence
+class MaskedGMM
+{
+public:
+
+  typedef unsigned char MaskType;
+
+  MaskedGMM( unsigned int components );
+  ~MaskedGMM( void );
+
+  // double operator()( const Vec3d &color ) const;
+
+  double logLikelihood( MaskType mask, const Vec3d &color ) const;
+
+  //
+  // //double operator()( int ci, const Vec3d &color ) const;
+
+  int whichComponent( const Vec3d &color ) const;
+
+  float maxQ( MaskType mask, const Vec3d &color ) const;
+  float maxQat( MaskType mask, const Vec3d &color, int &at ) const;
+  float maxQat( const Vec3d &color, int &at ) const                  { return _gmm.maxQat( color, at ); }
+
+  void initLearning( void );
+  void addSample( int ci, const Vec3d &color );
+  void endLearning( void );
+
+
+  void setMask( unsigned int idx, MaskType mask );
+  MaskType maskAt( unsigned int idx ) const;
+
+  unsigned int componentsCount( void ) const { return _componentsCount; }
+  unsigned int componentsCount( MaskType mask ) const;
+
+
+  // const Component &operator[](unsigned int i ) { return *_components[i]; }
+
+protected:
+
+  unsigned int _componentsCount;
+  MaskType *_mask;
+
+  GMM _gmm;
+
 };
 
 #endif
