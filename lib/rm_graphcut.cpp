@@ -69,6 +69,17 @@ void RMGraphCut::setLabels( const Mat &labels )
   initGMMs();
 }
 
+  unsigned int RMGraphCut::labelCount( LabelType mask )
+{
+  unsigned int count = 0;
+  Point p;
+  for( p.y = 0; p.y < _image.rows; p.y++ )
+    for( p.x = 0; p.x < _image.cols; p.x++ )
+      if( labelAt(p) & mask ) ++count;
+
+  return count;
+}
+
 void RMGraphCut::setImage( const Mat &img )
 {
   _image = img;
@@ -214,32 +225,33 @@ Mat RMGraphCut::drawLabels( void ) const
   Mat image( Mat::zeros( _labels.size(), CV_8UC3 ) );
 
   const Scalar Red( 0, 0, 255 ), Yellow(0, 255, 255),
-  Green(0, 255, 0), Blue(255,0,0),
-  Grey( 128,128,128 );
+                Green(0, 255, 0), Blue(255,0,0),
+                Grey( 128,128,128 );
 
   // Tried to do this with masks and bitwise operations.
-  // image.setTo( Red, mask & G_FGD );
-  // image.setTo( Yellow, mask & G_PR_FGD );
-  // image.setTo( Green, mask & G_PR_BGD );
-  // image.setTo( Blue, mask & G_BGD );
+  image.setTo( Red, _labels & G_FGD );
+  image.setTo( Yellow, _labels & G_PR_FGD );
+  image.setTo( Green, _labels & G_PR_BGD );
+  image.setTo( Blue, _labels & G_BGD );
+  image.setTo( Grey, _labels & G_IGNORE );
   // The G_* flags aren't bitwise, so that didn't work.
 
   // could do something like
-  Mat bitmask;
-  cv::compare( _labels, Scalar( G_FGD ), bitmask, CMP_EQ );
-  image.setTo( Red, bitmask );
-
-  cv::compare( _labels, Scalar( G_PR_FGD ), bitmask, CMP_EQ );
-  image.setTo( Yellow, bitmask );
-
-  cv::compare( _labels, Scalar( G_PR_BGD ), bitmask, CMP_EQ );
-  image.setTo( Green, bitmask );
-
-  cv::compare( _labels, Scalar( G_BGD ), bitmask, CMP_EQ );
-  image.setTo( Blue, bitmask );
-
-  cv::compare( _labels, Scalar( G_IGNORE ), bitmask, CMP_EQ );
-  image.setTo( Grey, bitmask );
+  // Mat bitmask;
+  // cv::compare( _labels, Scalar( G_FGD ), bitmask, CMP_EQ );
+  // image.setTo( Red, bitmask );
+  //
+  // cv::compare( _labels, Scalar( G_PR_FGD ), bitmask, CMP_EQ );
+  // image.setTo( Yellow, bitmask );
+  //
+  // cv::compare( _labels, Scalar( G_PR_BGD ), bitmask, CMP_EQ );
+  // image.setTo( Green, bitmask );
+  //
+  // cv::compare( _labels, Scalar( G_BGD ), bitmask, CMP_EQ );
+  // image.setTo( Blue, bitmask );
+  //
+  // cv::compare( _labels, Scalar( G_IGNORE ), bitmask, CMP_EQ );
+  // image.setTo( Grey, bitmask );
 
 
   return image;
@@ -272,16 +284,12 @@ void RMGraphCut::checkLabels( void )
 
 struct LabelHistogram {
   LabelHistogram( void )
-  : fgd(0), bgd(0), ignore(0)
-{;}
+  : fgd(0), bgd(0), ignore(0)  {;}
 
   unsigned int fgd, bgd, ignore;
 
   int max( void ) const
-  {
-    return std::max( fgd, std::max( bgd, ignore ));
-  }
-
+  { return std::max( fgd, std::max( bgd, ignore )); }
 };
 
 /*
@@ -298,10 +306,10 @@ bool RMGraphCut::initGMMs( void )
 
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
-  for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
-    samples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
-    labels.push_back( labelAt(p) );
-  }
+    for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
+      samples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+      labels.push_back( labelAt(p) );
+    }
 
   Mat indices;
   //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
@@ -322,16 +330,34 @@ bool RMGraphCut::initGMMs( void )
     else if( labels[i] & G_IGNORE )   ++labelHistograms[ index ].ignore;
   }
 
+int fgdSize = labelCount( G_FGD_MASK ),
+    ignSize = labelCount( G_IGNORE ),
+    bgdSize = _csImage.size().area() - fgdSize - ignSize;
+
   // Apply labels to each cluster
   for( int i = 0; i < _gmm.componentsCount(); ++i ) {
-LOG(INFO) << i << " fgd: " << labelHistograms[i].fgd << " bgd: " << labelHistograms[i].bgd << " ignore: " << labelHistograms[i].ignore;
+    float pctFgd = (fgdSize > 0) ? (float)labelHistograms[i].fgd / fgdSize : 0.0,
+          pctBgd = (bgdSize > 0) ? (float)labelHistograms[i].bgd / bgdSize : 0.0,
+          pctIgn = (ignSize > 0) ? (float)labelHistograms[i].ignore / ignSize : 0.0;
 
-    if( labelHistograms[i].max() == labelHistograms[i].fgd )
-      _gmm.setMask( i, G_FGD );
-    else if( labelHistograms[i].max() == labelHistograms[i].bgd )
-      _gmm.setMask( i, G_BGD );
-    else
-      _gmm.setMask( i, G_IGNORE );
+  LOG(INFO) << i << " fgd: " << labelHistograms[i].fgd << " bgd: " << labelHistograms[i].bgd << " ignore: " << labelHistograms[i].ignore;
+  LOG(INFO) << i << " fgd: " << pctFgd << " bgd: " << pctBgd << " ignore: " << pctIgn;
+
+float theMax = std::max( pctFgd, std::max( pctBgd, pctIgn ));
+
+if( pctIgn > 0.5 )
+  _gmm.setMask( i, G_IGNORE );
+else if( pctFgd > 0.1 )
+  _gmm.setMask( i, G_FGD );
+else
+  _gmm.setMask( i, G_BGD );
+
+    // if( theMax == pctFgd )
+    //   _gmm.setMask( i, G_FGD );
+    // else if( theMax == pctBgd )
+    //   _gmm.setMask( i, G_BGD );
+    // else
+    //   _gmm.setMask( i, G_IGNORE );
   }
 
   _gmm.endLearning();
@@ -396,8 +422,11 @@ void RMGraphCut::constructGCGraph( const NeighborWeights &w, GCGraph<double>& gr
     double fromSource = 0.0, toSink = 0.0;
     if( labelAt(p) & (G_PR_BGD | G_PR_FGD ) )
     {
-      fromSource = -_gmm.logLikelihood( G_BGD_MASK, color);
-      toSink =     -_gmm.logLikelihood( G_FGD_MASK, color);
+      double ll = _gmm.logLikelihood( G_BGD_MASK, color );
+      fromSource = isnan(ll) ? lambda : -(ll / _gmm.componentsCount(G_BGD_MASK));
+
+      ll = _gmm.logLikelihood( G_FGD_MASK, color );
+      toSink =     isnan(ll) ? lambda : -(ll / _gmm.componentsCount(G_FGD_MASK));
     }
     else if( labelAt(p) & G_BGD )
     {
@@ -456,10 +485,10 @@ void RMGraphCut::estimateSegmentation( GCGraph<double>& graph )
       // Reassign labels based on segmentation
       if( labelAt(p) &  (G_PR_BGD | G_PR_FGD ) )
       {
-        if( graph.inSourceSegment( p.y*_labels.cols+p.x /*vertex index*/ ) )
-          setLabel(p, G_PR_FGD );
+        if( graph.inSourceSegment( p.y*_labels.cols + p.x /*vertex index*/ ) )
+          setLabel( p, G_PR_FGD );
         else
-          setLabel(p, G_PR_BGD );
+          setLabel( p, G_PR_BGD );
       }
     }
 }

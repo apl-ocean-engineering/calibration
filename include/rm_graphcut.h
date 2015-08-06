@@ -45,6 +45,7 @@ public:
   const Mat &labels( void ) const     { return _labels; }
   Mat labels( LabelType mask ) const  { return ( labels() & mask ); }
   Mat fgdLabels( void ) const         {  return labels( G_FGD_MASK ); }
+  unsigned int labelCount( LabelType mask );
 
   Mat drawLabels( void ) const;
 

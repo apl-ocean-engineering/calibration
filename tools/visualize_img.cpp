@@ -359,7 +359,7 @@ public:
 
     //Mat bgModel, fgModel;
 
-    RMGraphCut gc( 100 );
+    RMGraphCut gc( 50 );
     gc.setImage( img );
     gc.setLabels( grabCutMask );
 

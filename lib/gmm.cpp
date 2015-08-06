@@ -297,12 +297,16 @@ int MaskedGMM::whichComponent( const Vec3d &color ) const
 
 double MaskedGMM::logLikelihood( MaskType mask, const Vec3d &color ) const
 {
-  double ll = 0;
-  for( int ci = 0; ci < componentsCount(); ci++ )
-    if( maskAt(ci) & mask )
-      ll += _gmm[ci].logLikelihood(color );
+  double ll = 0.0;
+  bool set = false;
 
-  return ll;
+  for( int ci = 0; ci < componentsCount(); ci++ )
+    if( maskAt(ci) & mask ) {
+      ll += _gmm[ci].logLikelihood( color );
+      set = true;
+    }
+
+  return (set ? ll : NAN );
 }
 
 float MaskedGMM::maxQat( MaskType mask, const Vec3d &color, int &at ) const
@@ -341,7 +345,7 @@ unsigned int MaskedGMM::componentsCount( MaskType mask ) const
 {
   unsigned int count = 0;
   for( unsigned int i = 0; i < _componentsCount; ++i )
-  if( maskAt(i) & mask ) ++count;
+    if( maskAt(i) & mask ) ++count;
 
   return count;
 }
@@ -367,6 +371,5 @@ void MaskedGMM::endLearning( void )
 
     for( int ci = 0; ci < componentsCount(); ci++ )
       if( maskAt(ci) & mask ) _gmm[ci].endLearning( sampleCount );
-
   }
 }
