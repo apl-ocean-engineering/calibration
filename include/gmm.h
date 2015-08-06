@@ -91,6 +91,7 @@ public:
 
   // double operator()( const Vec3d &color ) const;
 
+  double maxLogLikelihood( MaskType mask, const Vec3d &color ) const;
   double logLikelihood( MaskType mask, const Vec3d &color ) const;
 
   //

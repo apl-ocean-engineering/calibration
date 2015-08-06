@@ -309,6 +309,19 @@ double MaskedGMM::logLikelihood( MaskType mask, const Vec3d &color ) const
   return (set ? ll : NAN );
 }
 
+double MaskedGMM::maxLogLikelihood( MaskType mask, const Vec3d &color ) const
+{
+  double ll = NAN;
+
+  for( int ci = 0; ci < componentsCount(); ci++ )
+    if( maskAt(ci) & mask ) {
+      double l = _gmm[ci].logLikelihood( color );
+      if( (l > ll) || isnan(ll) ) ll = l;
+    }
+
+  return ll;
+}
+
 float MaskedGMM::maxQat( MaskType mask, const Vec3d &color, int &at ) const
 {
   float max = 0;

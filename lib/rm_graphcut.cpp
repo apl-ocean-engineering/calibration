@@ -422,11 +422,11 @@ void RMGraphCut::constructGCGraph( const NeighborWeights &w, GCGraph<double>& gr
     double fromSource = 0.0, toSink = 0.0;
     if( labelAt(p) & (G_PR_BGD | G_PR_FGD ) )
     {
-      double ll = _gmm.logLikelihood( G_BGD_MASK, color );
-      fromSource = isnan(ll) ? lambda : -(ll / _gmm.componentsCount(G_BGD_MASK));
+      double ll = _gmm.maxLogLikelihood( G_BGD_MASK, color );
+      fromSource = isnan(ll) ? lambda : -ll;
 
-      ll = _gmm.logLikelihood( G_FGD_MASK, color );
-      toSink =     isnan(ll) ? lambda : -(ll / _gmm.componentsCount(G_FGD_MASK));
+      ll = _gmm.maxLogLikelihood( G_FGD_MASK, color );
+      toSink =     isnan(ll) ? lambda : -ll;
     }
     else if( labelAt(p) & G_BGD )
     {
