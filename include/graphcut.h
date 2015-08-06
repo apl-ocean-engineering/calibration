@@ -10,6 +10,7 @@
 #include "gmm.h"
 
 using cv::Rect;
+using cv::Point;
 using cv::Mat;
 
 // void graphCut( InputArray img, InputOutputArray mask, Rect rect,
@@ -68,9 +69,8 @@ protected:
 
 
     Mat _image, _csImage, _mask, _fgdModel, _bgdModel;
-    GMM<1> _ignoreGMM;
-    GMM<5> _bgdGMM;
-    GMM<5> _fgdGMM;
+    
+    GMM _ignoreGMM, _bgdGMM, _fgdGMM;
   };
 
   #endif

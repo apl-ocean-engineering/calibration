@@ -108,7 +108,7 @@ Carsten Rother, Vladimir Kolmogorov, Andrew Blake.
 
 
 GraphCut::GraphCut( void )
-:   _image(), _mask(), _bgdGMM(), _fgdGMM()
+:   _image(), _mask(), _ignoreGMM(1), _bgdGMM( 5 ), _fgdGMM( 5 )
 {;}
 
 void GraphCut::setMask( const Mat &msk )
@@ -164,8 +164,8 @@ void GraphCut::showMaxQImages( )
   Mat bgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
   Mat fgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
 
-Spectrum bgdSpectrum( _bgdGMM.componentsCount );
-Spectrum fgdSpectrum( _fgdGMM.componentsCount );
+Spectrum bgdSpectrum( _bgdGMM.componentsCount() );
+Spectrum fgdSpectrum( _fgdGMM.componentsCount() );
 
 
   Point p;
@@ -220,13 +220,14 @@ void GraphCut::reassignFGtoBG( float pLimit )
 {
   Point p;
 
-  for( int ci = 0; ci < _fgdGMM.componentsCount; ++ci ) {
+  for( int ci = 0; ci < _fgdGMM.componentsCount(); ++ci ) {
     int idx;
-    float prob = _bgdGMM.maxQat( _fgdGMM.mean( ci ), idx );
+    float prob = _bgdGMM.maxQat( _fgdGMM[ci].mean, idx );
 
-    LOG(INFO) << "Fgd " << ci << " : " << _fgdGMM.mean( ci );
-    for( int bci = 0; bci < _bgdGMM.componentsCount; ++bci )
-      LOG(INFO)<< "Bgd " << bci << " : " << _bgdGMM.mean( bci );
+    LOG(INFO) << "Fgd " << ci << " : " << _fgdGMM[ci].mean;
+
+    for( int bci = 0; bci < _bgdGMM.componentsCount(); ++bci )
+      LOG(INFO)<< "Bgd " << bci << " : " << _bgdGMM[bci].mean;
 
 
     LOG(INFO) << "Mean of fgd GMM " << ci << " has max Q = " << prob << " in bgd GMM " << idx;
@@ -383,11 +384,11 @@ bool GraphCut::initGMMs( void )
   Mat bgdLabels, fgdLabels;
   //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
 
-  kmeans( bgdSamples, _bgdGMM.componentsCount, bgdLabels,
+  kmeans( bgdSamples, _bgdGMM.componentsCount(), bgdLabels,
           TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   // Mat _fgdSamples( (int)fgdSamples.size(), 3, CV_32FC1, &fgdSamples[0][0] );
-  kmeans( fgdSamples, _fgdGMM.componentsCount, fgdLabels,
+  kmeans( fgdSamples, _fgdGMM.componentsCount(), fgdLabels,
           TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   _bgdGMM.initLearning();
