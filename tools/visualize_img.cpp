@@ -373,7 +373,7 @@ public:
 
     //Mat bgModel, fgModel;
 
-    const double gamma = 100;
+    const double gamma = 200;
     RMGraphCut gc( gamma );
     gc.setImage( img );
     gc.setLabels( grabCutMask );

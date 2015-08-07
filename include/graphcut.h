@@ -27,7 +27,8 @@ namespace GC {
     G_PR_FGD = 4,
     G_FGD    = 8,
     G_FGD_MASK = (G_PR_FGD | G_FGD),
-    G_IGNORE   = 128
+    G_IGNORE   = 128,
+    G_ALL    = 0xFF
   };
 
   typedef uchar LabelType;

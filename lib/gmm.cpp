@@ -290,6 +290,11 @@ MaskedGMM::MaskType MaskedGMM::maskAt( unsigned int idx ) const
   return _mask[idx];
 }
 
+int MaskedGMM::maxPdfAt( const Vec3d &color ) const
+{
+  return maxPdfAt( 0xFF, color );
+}
+
 int MaskedGMM::maxPdfAt( MaskType mask, const Vec3d &color ) const
 {
   int k = 0;

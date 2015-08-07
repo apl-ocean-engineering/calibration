@@ -58,7 +58,7 @@ using namespace GC;
 
 RMGraphCut::RMGraphCut( double colorWeight )
 :   _colorWeight( colorWeight ), _image(), _labels(),
-_gmm(15)
+_gmm(20)
 {;}
 
 void RMGraphCut::setLabels( const Mat &labels )
@@ -312,16 +312,16 @@ bool RMGraphCut::initGMMs( void )
 
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
-  for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
-    // Does ignore always get its own GMM?
-    if( labelAt(p) & G_IGNORE ) {
-      ignSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
-    } else if( labelAt(p) & G_FGD_MASK ) {
-      fgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
-    } else if( labelAt(p) & G_BGD_MASK ) {
-      bgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+    for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
+      // Does ignore always get its own GMM?
+      if( labelAt(p) & G_IGNORE ) {
+        ignSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+      } else if( labelAt(p) & G_FGD_MASK ) {
+        fgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+      } else if( labelAt(p) & G_BGD_MASK ) {
+        bgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+      }
     }
-  }
 
 
     Mat fgdIndices, bgdIndices, ignIndices;
@@ -464,16 +464,20 @@ void RMGraphCut::assignPixelsToGMMs( Mat& compIdxs )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
 
-      // Colors are classified within their own type
-      MaskedGMM::MaskType label = 0;
-      if( labelAt(p) & G_BGD_MASK )      label = G_BGD;
-      else if( labelAt(p) & G_FGD_MASK ) label = G_FGD;
-      else if( labelAt(p) & G_IGNORE )   label = G_IGNORE;
-      else {
+      if( labelAt(p) == GC::G_MASK )
         compIdxs.at<int>(p) = -1;
-        continue;
-      }
-      compIdxs.at<int>(p) = _gmm.maxPdfAt( label, color);
+      else
+        compIdxs.at<int>(p) = _gmm.maxPdfAt(  color);
+
+      // Colors are classified within their own type
+      // MaskedGMM::MaskType label = 0;
+      // if( labelAt(p) & G_BGD_MASK )      label = G_BGD;
+      // else if( labelAt(p) & G_FGD_MASK ) label = G_FGD;
+      // else if( labelAt(p) & G_IGNORE )   label = G_IGNORE;
+      // else {
+      //   compIdxs.at<int>(p) = -1;
+      //   continue;
+      // }
     }
 
 }
