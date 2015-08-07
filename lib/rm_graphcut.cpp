@@ -279,10 +279,99 @@ struct LabelHistogram {
   { return std::max( fgd, std::max( bgd, ignore )); }
 };
 
+
+int RMGraphCut::addSampleToGMMs( int offset, int count, MaskedGMM::MaskType mask, const std::vector<Vec3f> &samples, const Mat &indices )
+{
+  for( int i = 0; i < count; ++i )
+    _gmm.setMask( offset+i, mask );
+
+  for( int i = 0; i < samples.size(); ++i )
+    _gmm.addSample( offset+indices.at<int>(i,0), samples[i] );
+
+  return offset + count;
+}
+
+
 /*
 Initialize GMM background and foreground models using kmeans algorithm.
 */
 bool RMGraphCut::initGMMs( void )
+{
+  const int kMeansAttempts = 1;
+  const int kMeansIterations = 100;
+  const int kMeansType = KMEANS_PP_CENTERS;; //KMEANS_RANDOM_CENTERS; //
+
+  const int fgdGmms = floor( 0.5 * _gmm.componentsCount() ),
+            ignGmms = 1,
+            bgdGmms = _gmm.componentsCount() - fgdGmms - ignGmms;
+
+  std::vector<Vec3f> fgdSamples, bgdSamples, ignSamples;
+  //std::vector<LabelType> labels;
+
+
+
+  Point p;
+  for( p.y = 0; p.y < _csImage.rows; p.y++ )
+  for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
+    // Does ignore always get its own GMM?
+    if( labelAt(p) & G_IGNORE ) {
+      ignSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+    } else if( labelAt(p) & G_FGD_MASK ) {
+      fgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+    } else if( labelAt(p) & G_BGD_MASK ) {
+      bgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+    }
+  }
+
+
+    Mat fgdIndices, bgdIndices, ignIndices;
+  //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
+
+  kmeans( fgdSamples, fgdGmms, fgdIndices,
+    TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
+  kmeans( bgdSamples, bgdGmms, bgdIndices,
+    TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
+  kmeans( ignSamples, ignGmms, ignIndices,
+    TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
+
+  vector< LabelHistogram > labelHistograms( _gmm.componentsCount() );
+
+  // Push each cluster into a GMM, then assign each GMM based on current labels
+  _gmm.initLearning();
+
+
+int gmm = addSampleToGMMs( 0, fgdGmms, G_FGD, fgdSamples, fgdIndices );
+gmm = addSampleToGMMs( gmm, bgdGmms, G_BGD, bgdSamples, bgdIndices );
+gmm = addSampleToGMMs( gmm, ignGmms, G_IGNORE, ignSamples, ignIndices );
+
+  //
+  // for( int i = 0; i < fgdGmms; ++i )
+  //   _gmm.setMask( gmm+i, G_FGD );
+  // for( int i = 0; i < (int)fgdSamples.size(); ++i )
+  //   _gmm.addSample( gmm+fgdIndices.at<int>(i,0), fgdSamples[i] );
+  // gmm += fgdGmms;
+  //
+  // for( int i = 0; i < bgdGmms; ++i )
+  //   _gmm.setMask( gmm+i, G_BGD );
+  // for( int i = 0; i < (int)bgdSamples.size(); ++i )
+  //   _gmm.addSample( gmm+bgdIndices.at<int>(i,0), bgdSamples[i] );
+  // gmm += bgdGmms;
+  //
+  // for( int i = 0; i < ignGmms; ++i )
+  //   _gmm.setMask( gmm+i, G_IGNORE );
+  // for( int i = 0; i < (int)ignSamples.size(); ++i )
+  //   _gmm.addSample( gmm+ignIndices.at<int>(i,0), ignSamples[i] );
+  //gmm += ignGmms;
+
+  _gmm.endLearning();
+
+  return true;
+}
+
+/*
+Initialize GMM background and foreground models using kmeans algorithm.
+*/
+bool RMGraphCut::initGMMsOrig( void )
 {
   const int kMeansAttempts = 1;
   const int kMeansIterations = 100;

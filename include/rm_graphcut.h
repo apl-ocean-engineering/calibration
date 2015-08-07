@@ -13,6 +13,7 @@
 using cv::Rect;
 using cv::Point;
 using cv::Mat;
+using cv::Vec3f;
 
 
 
@@ -52,6 +53,10 @@ protected:
   void checkLabels( void );
 
   bool initGMMs( void );
+  int addSampleToGMMs( int offset, int count, MaskedGMM::MaskType mask, const std::vector<Vec3f> &samples, const Mat &indices );
+
+  bool initGMMsOrig( void );
+
   void assignPixelsToGMMs( Mat& compIdxs );
   void updateGMMs( const Mat& compIdxs );
   void constructGCGraph( const NeighborWeights &w,
