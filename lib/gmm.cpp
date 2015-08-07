@@ -290,9 +290,22 @@ MaskedGMM::MaskType MaskedGMM::maskAt( unsigned int idx ) const
   return _mask[idx];
 }
 
-int MaskedGMM::whichComponent( const Vec3d &color ) const
+int MaskedGMM::maxPdfAt( MaskType mask, const Vec3d &color ) const
 {
-  return _gmm.whichComponent( color );
+  int k = 0;
+  double max = 0;
+
+  for( int ci = 0; ci < componentsCount(); ci++ )
+    if( maskAt(ci) & mask ) {
+      double p = _gmm[ci].pdf( color );
+      if( p > max )
+      {
+        k = ci;
+        max = p;
+      }
+    }
+
+  return k;
 }
 
 double MaskedGMM::logLikelihood( MaskType mask, const Vec3d &color ) const

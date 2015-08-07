@@ -97,7 +97,7 @@ public:
   //
   // //double operator()( int ci, const Vec3d &color ) const;
 
-  int whichComponent( const Vec3d &color ) const;
+  int maxPdfAt( MaskType mask, const Vec3d &color ) const;
 
   float maxQ( MaskType mask, const Vec3d &color ) const;
   float maxQat( MaskType mask, const Vec3d &color, int &at ) const;
