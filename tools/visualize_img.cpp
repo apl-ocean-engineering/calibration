@@ -352,9 +352,23 @@ public:
     // defBGInv.setTo( Scalar( 0 ), defBG );
 
     // construct initial mask, order matters
-    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GraphCut::G_PR_BGD ) );
+    Mat grabCutMask( img.size(), CV_8UC1, Scalar( GC::G_PR_BGD ) );
     //grabCutMask.setTo( GC_PR_BGD, probBG );
-    grabCutMask.setTo( GraphCut::G_PR_FGD, probFG );
+    grabCutMask.setTo( GC::G_PR_FGD, probFG );
+
+    // And initializing the ignore
+    Mat chans[3];
+    split( img, chans );
+    Mat masks[3];
+    for( unsigned int i = 0; i <3; ++i )
+    compare( chans[i], Scalar(230), masks[i], CMP_GT );
+    Mat specularMask( masks[0] & masks[1] & masks[2] );
+    grabCutMask.setTo( GC::G_IGNORE, specularMask );
+
+    // Try setting some mask
+    Mat roi( grabCutMask, TimeCode_1920x1080::timeCodeROI );
+    roi.setTo( GC::G_MASK );
+
     //grabCutMask.setTo( GC_FGD, defFG );
 
     //Mat bgModel, fgModel;

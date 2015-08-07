@@ -5,6 +5,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "graphcut.h"
 #include "gcgraph.hpp"
 
 #include "gmm.h"
@@ -18,17 +19,7 @@ using cv::Mat;
 class RMGraphCut {
 public:
 
-  enum GraphCutLabels {
-    G_MASK   = 0,
-    G_BGD    = 1,
-    G_PR_BGD = 2,
-    G_BGD_MASK = 0x03,
-    G_PR_FGD = 4,
-    G_FGD    = 8,
-    G_FGD_MASK = 0x0C,
-    G_IGNORE   = 128
-  };
-  typedef uchar LabelType;
+  typedef GC::LabelType LabelType;
 
   // gamma = 50 from original Grabcut paper
   RMGraphCut( double colorWeight = 50 );
@@ -44,7 +35,7 @@ public:
 
   const Mat &labels( void ) const     { return _labels; }
   Mat labels( LabelType mask ) const  { return ( labels() & mask ); }
-  Mat fgdLabels( void ) const         {  return labels( G_FGD_MASK ); }
+  Mat fgdLabels( void ) const         {  return labels( GC::G_FGD_MASK ); }
   unsigned int labelCount( LabelType mask );
 
   Mat drawLabels( void ) const;
@@ -61,8 +52,8 @@ protected:
   void checkLabels( void );
 
   bool initGMMs( void );
-  void assignGMMsComponents( Mat& compIdxs );
-  void learnGMMs( const Mat& compIdxs );
+  void assignPixelsToGMMs( Mat& compIdxs );
+  void updateGMMs( const Mat& compIdxs );
   void constructGCGraph( const NeighborWeights &w,
                          GCGraph<double>& graph );
 

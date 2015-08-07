@@ -49,6 +49,7 @@
 #include "graphcut.h"
 
 using namespace cv;
+using namespace GC;
 
 /*
 This is implementation of image segmentation algorithm GrabCut described in

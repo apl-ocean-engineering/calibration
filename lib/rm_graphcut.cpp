@@ -50,6 +50,7 @@
 
 using namespace cv;
 
+using namespace GC;
 
 
 #include "count_bits.h"
@@ -100,6 +101,7 @@ void RMGraphCut::showMaxQImages( )
 
   Mat bgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
   Mat fgdQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
+  Mat ignoreQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
   Mat allQimage( Mat::zeros( _image.size(), CV_8UC3 ) );
 
   //Spectrum bgdSpectrum( _gmm.componentsCount( G_BGD_MASK ) );
@@ -128,10 +130,13 @@ void RMGraphCut::showMaxQImages( )
         bgdQimage.at<Vec3b>(p) = allSpectrum( at, q );
       else if( _gmm.maskAt( at ) & G_FGD_MASK )
         fgdQimage.at<Vec3b>(p) = allSpectrum( at, q );
+      else if( _gmm.maskAt( at ) & G_IGNORE )
+          ignoreQimage.at<Vec3b>(p) = allSpectrum( at, q );
     }
 
-  imshow( "qimage fgb", fgdQimage );
-  imshow( "qimage bgb", bgdQimage );
+  imshow( "qimage foreground", fgdQimage );
+  imshow( "qimage background", bgdQimage );
+  imshow( "qimage ignore", ignoreQimage );
   imshow( "qimage all", allQimage );
 }
 
@@ -210,8 +215,8 @@ bool RMGraphCut::process( int iterCount )
   for( int i = 0; i < iterCount; i++ )
   {
     GCGraph<double> graph;
-    assignGMMsComponents( compIdxs );
-    learnGMMs( compIdxs );
+    assignPixelsToGMMs( compIdxs );
+    updateGMMs( compIdxs );
     constructGCGraph( w, graph );
     estimateSegmentation( graph );
   }
@@ -235,7 +240,6 @@ Mat RMGraphCut::drawLabels( void ) const
   image.setTo( Green, _labels & G_PR_BGD );
   image.setTo( Blue, _labels & G_BGD );
   image.setTo( Grey, _labels & G_IGNORE );
-
 
   return image;
 }
@@ -290,6 +294,7 @@ bool RMGraphCut::initGMMs( void )
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
     for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
+      // Does ignore always get its own GMM?
       samples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
       labels.push_back( labelAt(p) );
     }
@@ -317,8 +322,8 @@ bool RMGraphCut::initGMMs( void )
       ignSize = labelCount( G_IGNORE ),
       bgdSize = _csImage.size().area() - fgdSize - ignSize;
 
-    // Apply labels to each cluster
-    for( int i = 0; i < _gmm.componentsCount(); ++i ) {
+  // Apply labels to each cluster
+  for( int i = 0; i < _gmm.componentsCount(); ++i ) {
       float pctFgd = (fgdSize > 0) ? (float)labelHistograms[i].fgd / fgdSize : 0.0,
             pctBgd = (bgdSize > 0) ? (float)labelHistograms[i].bgd / bgdSize : 0.0,
             pctIgn = (ignSize > 0) ? (float)labelHistograms[i].ignore / ignSize : 0.0;
@@ -351,7 +356,7 @@ bool RMGraphCut::initGMMs( void )
 /*
 Assign GMMs components for each pixel.
 */
-void RMGraphCut::assignGMMsComponents( Mat& compIdxs )
+void RMGraphCut::assignPixelsToGMMs( Mat& compIdxs )
 {
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
@@ -376,7 +381,7 @@ void RMGraphCut::assignGMMsComponents( Mat& compIdxs )
 /*
 Updates GMM parameters
 */
-void RMGraphCut::learnGMMs( const Mat& compIdxs )
+void RMGraphCut::updateGMMs( const Mat& compIdxs )
 {
   _gmm.initLearning();
 
@@ -395,7 +400,7 @@ Construct GCGraph
 */
 void RMGraphCut::constructGCGraph( const NeighborWeights &w, GCGraph<double>& graph )
 {
-  const double lambda = 9*_colorWeight;
+  const double lambda = 15*_colorWeight;
 
   int vtxCount = _image.cols*_image.rows,
   edgeCount = 2*(4*_image.cols*_image.rows - 3*(_image.cols + _image.rows) + 2);
@@ -429,8 +434,10 @@ void RMGraphCut::constructGCGraph( const NeighborWeights &w, GCGraph<double>& gr
       fromSource = lambda;
       toSink = 0;
     }
-    else if( labelAt(p) & G_IGNORE )
+    else if( labelAt(p) & (G_IGNORE | G_MASK) )
     {
+      fromSource = 0;
+      toSink = 0;
       // Something TBD
     }
     graph.addTermWeights( vtxIdx, fromSource, toSink );

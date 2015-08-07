@@ -17,19 +17,26 @@ using cv::Mat;
 //   InputOutputArray bgdModel, InputOutputArray fgdModel,
 //   int iterCount, int mode = cv::GC_EVAL );
 
+namespace GC {
+  // Shared with RMGraphCut
+  enum GraphCutLabels {
+    G_MASK   = 0,
+    G_BGD    = 1,
+    G_PR_BGD = 2,
+    G_BGD_MASK = (G_PR_BGD | G_BGD),
+    G_PR_FGD = 4,
+    G_FGD    = 8,
+    G_FGD_MASK = (G_PR_FGD | G_FGD),
+    G_IGNORE   = 128
+  };
+
+  typedef uchar LabelType;
+}
+
 
 class GraphCut {
 public:
-
-  enum GraphCutLabels {
-    G_IGNORE = 0,
-    G_BGD    = 1,
-    G_PR_BGD = 2,
-    G_PR_FGD = 4,
-    G_FGD    = 8,
-    G_MASK   = 128
-  };
-  typedef uchar LabelType;
+  typedef GC::LabelType LabelType;
 
   // gamma = 50 from original Grabcut paper
   GraphCut( double colorWeight = 50 );
@@ -45,7 +52,7 @@ public:
   bool process( int iterCount = 1 );
 
   const Mat &mask( void ) const { return _mask; }
-  Mat fgdMask( void ) const {  return  ( mask() & (G_FGD | G_PR_FGD) ); }
+  Mat fgdMask( void ) const {  return  ( mask() & GC::G_FGD_MASK ); }
 
   Mat drawMask( void ) const;
 
