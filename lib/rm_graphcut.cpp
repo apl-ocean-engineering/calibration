@@ -291,31 +291,38 @@ bool RMGraphCut::initGMMs( void )
   std::vector<Vec3f> samples;
   std::vector<LabelType> labels;
 
+  // Push each cluster into a GMM, then assign each GMM based on current labels
+  _gmm.initLearning();
+  _gmm.setMask( _gmm.componentsCount()-1, G_IGNORE );
+
   Point p;
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
     for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
       // Does ignore always get its own GMM?
-      samples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
-      labels.push_back( labelAt(p) );
+      if( labelAt(p) & G_IGNORE ) {
+        _gmm.addSample( _gmm.componentsCount()-1, (Vec3f)_csImage.at<Vec3b>(p) );
+      } else {
+            samples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
+            labels.push_back( labelAt(p) );
+      }
     }
 
   Mat indices;
   //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );
 
-  kmeans( samples, _gmm.componentsCount(), indices,
+  kmeans( samples, _gmm.componentsCount()-1, indices,
           TermCriteria( CV_TERMCRIT_ITER, kMeansIterations, 1e-6), kMeansAttempts, kMeansType );
 
   vector< LabelHistogram > labelHistograms( _gmm.componentsCount() );
 
-  // Push each cluster into a GMM, then assign each GMM based on current labels
-  _gmm.initLearning();
+
   for( int i = 0; i < (int)samples.size(); i++ )  {
     int index = indices.at<int>(i,0);
     _gmm.addSample( index, samples[i] );
 
     if( labels[i] & G_BGD_MASK )      ++labelHistograms[ index ].bgd;
     else if( labels[i] & G_FGD_MASK ) ++labelHistograms[ index ].fgd;
-    else if( labels[i] & G_IGNORE )   ++labelHistograms[ index ].ignore;
+    //else if( labels[i] & G_IGNORE )   ++labelHistograms[ index ].ignore;
   }
 
   int fgdSize = labelCount( G_FGD_MASK ),
@@ -325,17 +332,21 @@ bool RMGraphCut::initGMMs( void )
   // Apply labels to each cluster
   for( int i = 0; i < _gmm.componentsCount(); ++i ) {
       float pctFgd = (fgdSize > 0) ? (float)labelHistograms[i].fgd / fgdSize : 0.0,
-            pctBgd = (bgdSize > 0) ? (float)labelHistograms[i].bgd / bgdSize : 0.0,
-            pctIgn = (ignSize > 0) ? (float)labelHistograms[i].ignore / ignSize : 0.0;
+            pctBgd = (bgdSize > 0) ? (float)labelHistograms[i].bgd / bgdSize : 0.0;
+            //pctIgn = (ignSize > 0) ? (float)labelHistograms[i].ignore / ignSize : 0.0;
 
-    LOG(INFO) << i << " fgd: " << labelHistograms[i].fgd << " bgd: " << labelHistograms[i].bgd << " ignore: " << labelHistograms[i].ignore;
-    LOG(INFO) << i << " fgd: " << pctFgd << " bgd: " << pctBgd << " ignore: " << pctIgn;
+    LOG(INFO) << i << " fgd: " << labelHistograms[i].fgd << " bgd: " << labelHistograms[i].bgd; //<< " ignore: " << labelHistograms[i].ignore;
+    LOG(INFO) << i << " fgd: " << pctFgd << " bgd: " << pctBgd; // << " ignore: " << pctIgn;
 
     //float theMax = std::max( pctFgd, std::max( pctBgd, pctIgn ));
+    //
+    // if( pctIgn > 0.5 )
+    //   _gmm.setMask( i, G_IGNORE );
+    // else
 
-    if( pctIgn > 0.5 )
-      _gmm.setMask( i, G_IGNORE );
-    else if( pctFgd > 0.1 )
+    if( _gmm.maskAt(i) == G_IGNORE )
+      ;
+    else if ( pctFgd > 0.1 )
       _gmm.setMask( i, G_FGD );
     else
       _gmm.setMask( i, G_BGD );
