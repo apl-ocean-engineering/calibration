@@ -397,7 +397,6 @@ void RMGraphCut::updateGMMs( const Mat& compIdxs )
   _gmm.initLearning();
 
   Point p;
-
   for( p.y = 0; p.y < _csImage.rows; p.y++ )
     for( p.x = 0; p.x < _csImage.cols; p.x++ )
       if( compIdxs.at<int>(p) >= 0 )

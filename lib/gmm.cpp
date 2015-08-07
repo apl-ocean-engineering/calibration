@@ -222,7 +222,7 @@ float GMM::maxQat( const Vec3d &color, int &at ) const
   for( int ci = 0; ci < componentsCount(); ci++ ) {
 
     float xSq = _components[ci]->uniformSq( color );
-    float q = gsl_cdf_chisq_Q( xSq, 1 );
+    float q = gsl_cdf_chisq_Q( xSq, 3 );
 
     if( q > max ) {
       at = ci;
@@ -350,7 +350,7 @@ float MaskedGMM::maxQat( MaskType mask, const Vec3d &color, int &at ) const
     if( !(maskAt(ci) & mask) ) continue;
 
     float xSq = _gmm[ci].uniformSq( color );
-    float q = gsl_cdf_chisq_Q( xSq, 1 );
+    float q = gsl_cdf_chisq_Q( xSq, 3 );
 
     if( q > max ) {
       at = ci;
