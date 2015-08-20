@@ -69,11 +69,11 @@ struct Options
       TCLAP::SwitchArg doDisplayArg("X", "do-display", "display", cmd, false );
 
       TCLAP::ValueArg<std::string> stereoCalibrationArg( "s", "stereo-calibration", "Stereo calibration file", true, "", "YAML file", cmd );
-      TCLAP::ValueArg<std::string> calLeftArg("0","camera-left", "Calibration file basename", true, "", "name", cmd );
-      TCLAP::ValueArg<std::string> calRightArg("1","camera-right", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calLeftArg("","left-camera", "Calibration file basename", true, "", "name", cmd );
+      TCLAP::ValueArg<std::string> calRightArg("","right-camera", "Calibration file basename", true, "", "name", cmd );
       TCLAP::ValueArg<std::string> outputFileArg("o", "output-file", "Output file", false, "", "file name", cmd );
 
-      TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, -1.0, "scale factor", cmd );
+      TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, 1.0, "scale factor", cmd );
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
 
       TCLAP::ValueArg<int> seekToArg("", "seek-to", "Seek to a frame", false, 0, "seek to" ,cmd );
@@ -288,7 +288,7 @@ class StereoProcessorMain {
 
       if( opts.doDisplay ) {
 
-        if( opts.scale  > 0.0 )
+        if( opts.scale  != 1.0 )
           imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
         else
           imshow( RectifyWindowName, canvas );
@@ -327,7 +327,7 @@ class StereoProcessorMain {
 
       if( opts.doDisplay ) {
 
-        if( opts.scale  > 0.0 )
+        if( opts.scale  != 1.0 )
           imshow( RectifyWindowName, canvas.scaled( opts.scale ) );
         else
           imshow( RectifyWindowName, canvas );
@@ -352,13 +352,18 @@ class StereoProcessorMain {
 
   bool doDenseStereo( void )
   {
-    const int numDisparities = (video.frameSize().width / 8 + 15) & -16;
     const int minDisparity = 0;
-    const int blockSize = 13;
 
-    const int SADWindowSize  = 9;
+
+    // Note this is maxDisparity - minDisparity
+    // Must be divisble by 16.
+    const int numDisparities = 1024; //(video.frameSize().width / 8 + 15) & -16;
+    const int blockSize = 11;
+
+    const int SADWindowSize  = blockSize;
     const int p1 = 2 * SADWindowSize * SADWindowSize;
     const int p2 = 4 * p1;
+    const int disp12MaxDiff = -1;
     const int speckleWindowSize = 50;
     const int speckleRange = 32;
     const int uniquenessRatio = 15;
@@ -368,28 +373,18 @@ class StereoProcessorMain {
     //Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
     //     StereoSGBM sgbm;
 
-    Ptr<StereoSGBM> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize ) );
+    Ptr<StereoSGBM> bm( StereoSGBM::create( minDisparity, numDisparities, blockSize, p1, p2, disp12MaxDiff ) );
 
-    //bm->setSpeckleRange( speckleRange );
-    //bm->setSpeckleWindowSize( speckleWindowSize );
-    //bm->setUniquenessRatio( uniquenessRatio );
-    bm->setP1( p1 );
-    bm->setP2( p2 );
-
-    ///bm->setMinDisparity( 0 );
-    ///bm->setSpeckleRange( 32 );
-    ///bm->setSpeckleWindowSize( 100 );
+    bm->setSpeckleRange( speckleRange );
+    bm->setSpeckleWindowSize( speckleWindowSize );
+    bm->setUniquenessRatio( uniquenessRatio );
 
     //     // bm.state->roi1 = roi1;
     //     // bm.state->roi2 = roi2;
     //     // bm.state->preFilterCap = 31;
     //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
-    //bm.state->minDisparity = 0;
-    //bm.state->numberOfDisparities = numberOfDisparities;
     //bm.state->textureThreshold = 10;
-    //bm.state->uniquenessRatio = 15;
-    //bm.state->speckleWindowSize = 100;
-    //bm.state->speckleRange = 32;
+
     //bm.state->disp12MaxDiff = 1;
 
     //     sgbm.preFilterCap = 63;
@@ -410,7 +405,7 @@ class StereoProcessorMain {
 
     int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
     if( wk < 1 ) wk = 1;
-    cout << "wk: " << wk << endl;
+    //cout << "wk: " << wk << endl;
     int wait = wk;
 
     int count = 0;
@@ -423,7 +418,7 @@ class StereoProcessorMain {
         remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
 
         // Apply scale before processing
-        if( opts.scale > 0 ) {
+        if( opts.scale != 1.0 ) {
           Mat resized;
           resize( canvas[k], resized, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
           cvtColor( resized, scaled[k], CV_BGR2GRAY );

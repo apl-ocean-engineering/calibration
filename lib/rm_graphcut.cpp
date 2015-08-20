@@ -464,20 +464,22 @@ void RMGraphCut::assignPixelsToGMMs( Mat& compIdxs )
     {
       Vec3d color = _csImage.at<Vec3b>(p);
 
-      if( labelAt(p) == GC::G_MASK )
-        compIdxs.at<int>(p) = -1;
-      else
-        compIdxs.at<int>(p) = _gmm.maxPdfAt(  color);
+      // if( labelAt(p) == GC::G_MASK )
+      //   compIdxs.at<int>(p) = -1;
+      // else
+      //   compIdxs.at<int>(p) = _gmm.maxPdfAt(  color);
 
       // Colors are classified within their own type
-      // MaskedGMM::MaskType label = 0;
-      // if( labelAt(p) & G_BGD_MASK )      label = G_BGD;
-      // else if( labelAt(p) & G_FGD_MASK ) label = G_FGD;
-      // else if( labelAt(p) & G_IGNORE )   label = G_IGNORE;
-      // else {
-      //   compIdxs.at<int>(p) = -1;
-      //   continue;
-      // }
+      MaskedGMM::MaskType label = 0;
+      if( labelAt(p) & G_BGD_MASK )      label = G_BGD;
+      else if( labelAt(p) & G_FGD_MASK ) label = G_FGD;
+      else if( labelAt(p) & G_IGNORE )   label = G_IGNORE;
+      else {
+        compIdxs.at<int>(p) = -1;
+        continue;
+      }
+
+      compIdxs.at<int>(p) = _gmm.maxPdfAt( label, color);
     }
 
 }
