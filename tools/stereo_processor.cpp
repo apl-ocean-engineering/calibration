@@ -75,7 +75,7 @@ struct Options
       TCLAP::ValueArg<std::string> calRightArg("","right-camera", "Calibration file basename", true, "", "name", cmd );
       TCLAP::ValueArg<std::string> outputFileArg("o", "output-file", "Output file", false, "", "file name", cmd );
 
-      TCLAP::ValueArg<std::string> stereoAlgorithmArg("","stereo-algorithm", "Stereo algorithm", false, "bm", "sgbm or bm", cmd );
+      TCLAP::ValueArg<std::string> stereoAlgorithmArg("","stereo-algorithm", "Stereo algorithm", false, "sgbm", "sgbm or bm", cmd );
 
       TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, 1.0, "scale factor", cmd );
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
@@ -368,21 +368,23 @@ private:
 
     bool doDenseStereo( void )
     {
+bool cvtToGrey = true;
       const int minDisparity = 0;
 
 
       // Note this is maxDisparity - minDisparity
       // Must be divisble by 16.
-      const int numDisparities = 1024; //(video.frameSize().width / 8 + 15) & -16;
-      const int blockSize = 11;
+      const int numDisparities = 960; //(video.frameSize().width / 8 + 15) & -16;
 
-      const int SADWindowSize  = blockSize;
-      const int p1 = 2 * SADWindowSize * SADWindowSize;
-      const int p2 = 4 * p1;
+      const int SADWindowSize  = 5;
+
       const int disp12MaxDiff = -1;
-      const int speckleWindowSize = 50;
-      const int speckleRange = 32;
-      const int uniquenessRatio = 15;
+
+      const int speckleWindowSize = 0;
+      const int speckleRange = 8;
+
+      const int uniquenessRatio = 1;
+
 
       //int SADWindowSize = 0;
 
@@ -392,14 +394,27 @@ private:
       Ptr<StereoMatcher> bm;
 
       if( opts.stereoAlgorithm == Options::STEREO_BM ) {
+        const int preFilterSize = 5;
+        const int preFilterCap = 61;
+
         LOG(INFO) << "Using StereoBM algorithm";
-        Ptr<StereoBM> sbm( StereoBM::create(numDisparities, blockSize ) );
+        Ptr<StereoBM> sbm( StereoBM::create(numDisparities, SADWindowSize ) );
         sbm->setUniquenessRatio( uniquenessRatio );
         sbm->setMinDisparity( minDisparity );
+        sbm->setPreFilterCap( preFilterCap );
+        sbm->setPreFilterSize( preFilterSize );
         bm = sbm;
       } else if( opts.stereoAlgorithm == Options::STEREO_SGBM ) {
+        const int p1 = 16 * SADWindowSize * SADWindowSize;
+        const int p2 = 4 * p1;
+        const int preFilterCap = 4;
+
         LOG(INFO) << "Using Semi-Global StereoBM algorithm";
-        Ptr<StereoSGBM> sgbm( StereoSGBM::create( minDisparity, numDisparities, blockSize, p1, p2 ) );
+        Ptr<StereoSGBM> sgbm( StereoSGBM::create( minDisparity, numDisparities, SADWindowSize, p1, p2 ) );
+        sgbm->setPreFilterCap( preFilterCap );
+
+cvtToGrey = false;
+
         bm = sgbm;
       } else {
         LOG(ERROR) << "Dense stereo algorithm is undefined.";
@@ -445,8 +460,9 @@ private:
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
 
+        int type = cvtToGrey ? CV_8UC1 : CV_8UC3;
         CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
-        canvas.size().height * opts.scale), CV_8UC1 );
+                                  canvas.size().height * opts.scale), type );
         for( int k = 0; k < 2; ++k )  {
           remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
 
@@ -454,9 +470,19 @@ private:
           if( opts.scale != 1.0 ) {
             Mat resized;
             resize( canvas[k], resized, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
-            cvtColor( resized, scaled[k], CV_BGR2GRAY );
+
+            if( cvtToGrey )
+              cvtColor( resized, scaled[k], CV_BGR2GRAY );
+            else
+              resized.copyTo( scaled[k] ); // Inefficient...
+
           } else {
-            cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
+
+            if( cvtToGrey )
+              cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
+            else
+              canvas[k].copyTo( scaled[k] ); // Inefficient...
+
           }
 
         }
