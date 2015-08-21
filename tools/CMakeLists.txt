@@ -42,7 +42,7 @@ add_executable( calculate_calibration_errors calculate_calibration_errors.cpp )
 
 add_executable( align_streams align_streams.cpp )
 
-add_executable( composite_video composite_video.cpp )
+add_executable( test_video test_video.cpp )
 
 add_executable( calibration calibration.cpp
   ${CALIBRATION_SRCS} )
@@ -71,6 +71,7 @@ add_executable( calibration_db_dump calibration_db_dump.cpp )
 add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 
 add_executable( stereo_processor stereo_processor.cpp )
+add_executable( composite_video  stereo_processor.cpp )
 
 add_executable( image_processor image_processor.cpp )
 
