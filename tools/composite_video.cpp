@@ -1,3 +1,7 @@
+//
+//   Don't work on this file, integrate it's functionality into stereo_processor!!
+//
+//
 
 #include <stdlib.h>
 #include <stdio.h>
