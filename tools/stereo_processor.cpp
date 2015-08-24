@@ -438,7 +438,7 @@ private:
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       if( wk < 1 ) wk = 1;
       //cout << "wk: " << wk << endl;
-      int wait = wk;
+      int wait =0; //wk;
 
       int count = 0;
       CompositeCanvas canvas;
@@ -480,12 +480,21 @@ private:
           // Hm, this actually changes parameters in the BM.  Is that right?
           //    matcher_left->setDisp12MaxDiff(1000000);
           //    matcher_left->setSpeckleWindowSize(0);
+          //    if( StereoSGBM ) sgbm->setUniquenessRatio(0);
           Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter( ximgproc::createDisparityWLSFilter( bm ) );
           Ptr<ximgproc::DisparityFilter>  disparityFilter( wlsDisparityFilter );
           wlsDisparityFilter->setLambda( wlsFilterLambda );
           wlsDisparityFilter->setSigmaColor( wlsFilterSigmaColor );
 
           Ptr< StereoMatcher > rightMatcher = ximgproc::createRightMatcher( bm );
+          // These are the things being set in the right matcher
+          //right_sgbm->setUniquenessRatio(0);
+          // right_sgbm->setP1(sgbm->getP1());
+          // right_sgbm->setP2(sgbm->getP2());
+          // right_sgbm->setMode(sgbm->getMode());
+          // right_sgbm->setPreFilterCap(sgbm->getPreFilterCap());
+          // right_sgbm->setDisp12MaxDiff(1000000);
+          // right_sgbm->setSpeckleWindowSize(0);
 
           Mat leftDisparity;
           int64 t = getTickCount();
@@ -603,15 +612,15 @@ private:
     void disparityToImage( const Mat &disparity, Mat &dispImage, int numDisparities )
     {
       Mat disp8;
-double offset = 0;
-double minVal, maxVal;
-      // Calculate if it's a L-R or R-L disparity image
-minMaxLoc( disparity, &minVal, &maxVal );
-LOG(INFO) << "min value " << minVal;
-LOG(INFO) << "max value" << maxVal;
+      double offset = 0;
+      double minVal, maxVal;
 
-  // Calculate the mean disparity
-if( (maxVal + minVal)/2.0 < 0.0 ) offset = 255;
+      minMaxLoc( disparity, &minVal, &maxVal );
+      // LOG(INFO) << "min value " << minVal;
+      // LOG(INFO) << "max value " << maxVal;
+
+      // Try to detect if it's a L-R or R-L disparity image
+      if( (maxVal + minVal)/2.0 < 0.0 ) offset = 255;
 
       disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.), offset);
       dispImage.create( disp8.size(), CV_8UC3 );
