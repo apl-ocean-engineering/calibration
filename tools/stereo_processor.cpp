@@ -30,6 +30,7 @@
 using namespace Distortion;
 
 #include "video_prefs.h"
+#include "disparity_db.h"
 
 #include <boost/filesystem.hpp>
 
@@ -57,7 +58,8 @@ struct Options
 
 
   Verb verb;
-  string stereoCalibration, cameraCalibrations[2], videoFile, outputFile;
+  string stereoCalibration, cameraCalibrations[2], videoFile, outputFile,
+          disparityDb, pointCloudDb;
   float scale, fastForward;
   int seekTo, stopAfter;
   bool doDisplay, doFilterDisparity;
@@ -78,6 +80,8 @@ struct Options
       TCLAP::ValueArg<std::string> outputFileArg("o", "output-file", "Output file", false, "", "file name", cmd );
 
       TCLAP::ValueArg<std::string> stereoAlgorithmArg("","stereo-algorithm", "Stereo algorithm", false, "sgbm", "sgbm or bm", cmd );
+      TCLAP::ValueArg<std::string> disparityDbArg("", "disparity-db", "Disparity d/b", false, "", "name of database", cmd );
+TCLAP::ValueArg<std::string> pointcloudDbArg("", "point-cloud-db", "Point cloud d/b", false, "", "name of database", cmd );
 
       TCLAP::ValueArg<float> scaleArg("S", "scale", "Scale displayed output", false, 1.0, "scale factor", cmd );
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
@@ -398,6 +402,21 @@ private:
       //Ptr<StereoBM> bm( StereoBM::create( numberOfDisparities ) );
       //     StereoSGBM sgbm;
 
+      PointCloudDb pcDb;
+      if( opts.pointCloudDb.length() > 0 )
+      if( !pcDb.open( opts.pointCloudDb, true ) ) {
+        LOG(ERROR) << "Error opening point cloud database: " << pcDb.error().name() << " : " << pcDb.error().message();
+        return false;
+      }
+
+      DisparityMatDb disparityDb;
+      if( opts.disparityDb.length() > 0 )
+      if( !disparityDb.open( opts.disparityDb, true ) ) {
+        LOG(ERROR) << "Error opening disparity database: " << disparityDb.error().name() << " : " << disparityDb.error().message();
+        return false;
+      }
+
+
       Ptr<StereoMatcher> bm;
 
       if( opts.stereoAlgorithm == Options::STEREO_BM ) {
@@ -558,6 +577,8 @@ private:
 
           writer << c;
         }
+
+        if( disparityDb.isOpen() ) disparityDb.save( count, disparity );
 
         if( opts.doDisplay ) {
 

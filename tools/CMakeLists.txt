@@ -70,8 +70,9 @@ add_executable( calibration_db_dump calibration_db_dump.cpp )
 
 add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 
-add_executable( stereo_processor stereo_processor.cpp )
-add_executable( composite_video  stereo_processor.cpp )
+set( STEREO_PROCESSOR_SRCS stereo_processor.cpp ../lib/disparity_db.cpp )
+add_executable( stereo_processor ${STEREO_PROCESSOR_SRCS} )
+add_executable( composite_video  ${STEREO_PROCESSOR_SRCS} )
 
 add_executable( image_processor image_processor.cpp )
 
