@@ -59,7 +59,7 @@ struct Options
   Verb verb;
   string stereoCalibration, cameraCalibrations[2], videoFile, outputFile;
   float scale, fastForward;
-  int seekTo;
+  int seekTo, stopAfter;
   bool doDisplay, doFilterDisparity;
   StereoAlgorithm stereoAlgorithm;
 
@@ -83,6 +83,7 @@ struct Options
       TCLAP::ValueArg<float> ffArg("F", "fast-forward", "Accelerate playback", false, 1.0, "factor", cmd );
 
       TCLAP::ValueArg<int> seekToArg("", "seek-to", "Seek to a frame", false, 0, "seek to" ,cmd );
+      TCLAP::ValueArg<int> stopAfterArg("", "stop-after", "Process a limited number of frames", false, -1, "frames", cmd);
 
       TCLAP::SwitchArg doFilterDisparityArg("", "filter-disparity", "Do filter the disparity map", cmd, false );
 
@@ -102,6 +103,7 @@ struct Options
       fastForward = ffArg.getValue();
 
       seekTo = seekToArg.getValue();
+      stopAfter = stopAfterArg.getValue();
 
       stereoCalibration = stereoCalibrationArg.getValue();
 
@@ -444,6 +446,8 @@ private:
       CompositeCanvas canvas;
       while( video.read( canvas ) ) {
 
+        if( (opts.stopAfter > 0) && (count >= opts.stopAfter )) break;
+
         int type = cvtToGrey ? CV_8UC1 : CV_8UC3;
         CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
         canvas.size().height * opts.scale), type );
@@ -571,7 +575,6 @@ private:
         }
 
         ++count;
-
       }
 
 
