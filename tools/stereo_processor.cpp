@@ -374,7 +374,6 @@ private:
       bool cvtToGrey = true;
       const int minDisparity = 0;
 
-
       // Note this is maxDisparity - minDisparity
       // Must be divisble by 16.
       const int numDisparities = 960; //(video.frameSize().width / 8 + 15) & -16;
@@ -386,8 +385,11 @@ private:
       const int speckleWindowSize = 0;
       const int speckleRange = 8;
 
-      const int uniquenessRatio = 1;
+      const int uniquenessRatio = 0;
 
+      // Default paramters for WLS filtering (if used)
+      const float wlsFilterLambda = 8000.0;
+      const float wlsFilterSigmaColor = 2.0;
 
       //int SADWindowSize = 0;
 
@@ -406,15 +408,19 @@ private:
         sbm->setMinDisparity( minDisparity );
         sbm->setPreFilterCap( preFilterCap );
         sbm->setPreFilterSize( preFilterSize );
+
+        sbm->setTextureThreshold(0);
+
         bm = sbm;
       } else if( opts.stereoAlgorithm == Options::STEREO_SGBM ) {
-        const int p1 = 16 * SADWindowSize * SADWindowSize;
+        const int p1 = 24 * SADWindowSize * SADWindowSize;
         const int p2 = 4 * p1;
         const int preFilterCap = 4;
 
         LOG(INFO) << "Using Semi-Global StereoBM algorithm";
         Ptr<StereoSGBM> sgbm( StereoSGBM::create( minDisparity, numDisparities, SADWindowSize, p1, p2 ) );
         sgbm->setPreFilterCap( preFilterCap );
+        sgbm->setMode(StereoSGBM::MODE_SGBM_3WAY);
 
         cvtToGrey = false;
 
@@ -428,31 +434,6 @@ private:
       bm->setSpeckleRange( speckleRange );
       bm->setSpeckleWindowSize( speckleWindowSize );
       bm->setDisp12MaxDiff( disp12MaxDiff );
-
-
-      //     // bm.state->roi1 = roi1;
-      //     // bm.state->roi2 = roi2;
-      //     // bm.state->preFilterCap = 31;
-      //     // bm.state->SADWindowSize = SADWindowSize > 0 ? SADWindowSize : 9;
-      //bm.state->textureThreshold = 10;
-
-      //bm.state->disp12MaxDiff = 1;
-
-      //     sgbm.preFilterCap = 63;
-      //     sgbm.SADWindowSize = 3;
-
-      //     //int cn = canvas.canvas.channels();
-
-      //     sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      //     sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
-      //     sgbm.minDisparity = 0;
-      //     sgbm.numberOfDisparities = numberOfDisparities;
-      //     sgbm.uniquenessRatio = 10;
-      //     //sgbm.speckleWindowSize = bm.state->speckleWindowSize;
-      //     //sgbm.speckleRange = bm.state->speckleRange;
-      //     sgbm.disp12MaxDiff = 1;
-      //     sgbm.fullDP = false;
-
 
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       if( wk < 1 ) wk = 1;
@@ -491,41 +472,66 @@ private:
         }
 
         Mat disparity;
-        int64 t = getTickCount();
-        bm->compute( scaled[0], scaled[1], disparity );
-        t = getTickCount() - t;
-        LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
-
         if( opts.doFilterDisparity ) {
+          LOG(INFO) << "Filtering disparity map with WLS filter";
+
+          //Rect ROI( computeROI( scaled[0].size(), bm ) );
+
+          // Hm, this actually changes parameters in the BM.  Is that right?
+          //    matcher_left->setDisp12MaxDiff(1000000);
+          //    matcher_left->setSpeckleWindowSize(0);
+          Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter( ximgproc::createDisparityWLSFilter( bm ) );
+          Ptr<ximgproc::DisparityFilter>  disparityFilter( wlsDisparityFilter );
+          wlsDisparityFilter->setLambda( wlsFilterLambda );
+          wlsDisparityFilter->setSigmaColor( wlsFilterSigmaColor );
+
+          Ptr< StereoMatcher > rightMatcher = ximgproc::createRightMatcher( bm );
+
+          Mat leftDisparity;
+          int64 t = getTickCount();
+          bm->compute( scaled[0], scaled[1], leftDisparity );
+          t = getTickCount() - t;
+          LOG(INFO) << video.frame() << " : Left-right dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency();
+
+
           if( opts.doDisplay ) {
             Mat unfiltDispImage;
-            disparityToImage( disparity, unfiltDispImage, numDisparities );
-            imshow( UnfilteredDenseStereoWindowName, unfiltDispImage );
+            disparityToImage( leftDisparity, unfiltDispImage, numDisparities );
+            imshow( UnfilteredLeftWindowName, unfiltDispImage );
           }
 
-          Ptr< StereoMatcher > rightMatcher( bm );
           Mat rightDisparity;
-          int64 t = getTickCount();
+          t = getTickCount();
           rightMatcher->compute( scaled[1], scaled[0], rightDisparity );
           t = getTickCount() - t;
           LOG(INFO) << video.frame() << " : Right-left dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
-          Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter( ximgproc::createDisparityWLSFilter( bm ) );
-          Ptr<ximgproc::DisparityFilter>  disparityFilter( wlsDisparityFilter );
-          const double wlsFilterLambda = 8000.0;
-          const int wlsFilterSigma = 1;
-          wlsDisparityFilter->setLambda( wlsFilterLambda );
-          wlsDisparityFilter->setSigmaColor( wlsFilterSigma );
+          if( opts.doDisplay ) {
+            Mat disparityImage;
+            disparityToImage( rightDisparity, disparityImage, numDisparities );
+            imshow( UnfilteredRightWindowName, disparityImage );
+          }
 
           Mat filteredDisparity;
           t = (double)getTickCount();
-          disparityFilter->filter(disparity, scaled[0], filteredDisparity, Rect(), rightDisparity, scaled[1] );
+          disparityFilter->filter(leftDisparity, scaled[0], filteredDisparity, rightDisparity, Rect(), scaled[1] );
           t = (getTickCount() - t);
 
           LOG(INFO) << video.frame() << " : Filtering elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
           disparity = filteredDisparity;
 
+          Mat confMap( wlsDisparityFilter->getConfidenceMap() );
+          if( opts.doDisplay ) {
+            Mat scaledConfMap = confMap / 255.0;
+            imshow( ConfidenceMapWindowName, scaledConfMap );
+          }
+
+        } else {
+          int64 t = getTickCount();
+          bm->compute( scaled[0], scaled[1], disparity );
+          t = getTickCount() - t;
+          LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency();
         }
 
 
@@ -575,10 +581,39 @@ private:
       return true;
     }
 
+    // Lifted from ximgproc/samples/disparity_filtering.cpp
+    Rect computeROI(Size2i src_sz, Ptr<StereoMatcher> matcher_instance)
+    {
+      int min_disparity = matcher_instance->getMinDisparity();
+      int num_disparities = matcher_instance->getNumDisparities();
+      int block_size = matcher_instance->getBlockSize();
+
+      int bs2 = block_size/2;
+      int minD = min_disparity, maxD = min_disparity + num_disparities - 1;
+
+      int xmin = maxD + bs2;
+      int xmax = src_sz.width + minD - bs2;
+      int ymin = bs2;
+      int ymax = src_sz.height - bs2;
+
+      Rect r(xmin, ymin, xmax - xmin, ymax - ymin);
+      return r;
+    }
+
     void disparityToImage( const Mat &disparity, Mat &dispImage, int numDisparities )
     {
       Mat disp8;
-      disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.));
+double offset = 0;
+double minVal, maxVal;
+      // Calculate if it's a L-R or R-L disparity image
+minMaxLoc( disparity, &minVal, &maxVal );
+LOG(INFO) << "min value " << minVal;
+LOG(INFO) << "max value" << maxVal;
+
+  // Calculate the mean disparity
+if( (maxVal + minVal)/2.0 < 0.0 ) offset = 255;
+
+      disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.), offset);
       dispImage.create( disp8.size(), CV_8UC3 );
       cvtColor( disp8, dispImage, CV_GRAY2BGR );
     }
@@ -612,13 +647,19 @@ private:
     }
 
 
-    static const string RectifyWindowName, UnfilteredDenseStereoWindowName, DenseStereoWindowName;
+    static const string RectifyWindowName,
+    UnfilteredLeftWindowName,
+    UnfilteredRightWindowName,
+    DenseStereoWindowName,
+    ConfidenceMapWindowName;
 
   };
 
   const string StereoProcessorMain::RectifyWindowName = "Rectify",
   StereoProcessorMain::DenseStereoWindowName = "Dense Stereo",
-  StereoProcessorMain::UnfilteredDenseStereoWindowName = "Unfiltered Dense Stereo";;
+  StereoProcessorMain::UnfilteredLeftWindowName = "Unfiltered Left Dense Stereo",
+  StereoProcessorMain::UnfilteredRightWindowName = "Unfiltered Right Dense Stereo",
+  StereoProcessorMain::ConfidenceMapWindowName = "ConfidenceMap";
 
   int main( int argc, char **argv )
   {
