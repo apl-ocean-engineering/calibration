@@ -11,4 +11,3 @@ const int         VideoCodec = cv::VideoWriter::fourcc('a','v','c','1');
 
 
 #endif
-

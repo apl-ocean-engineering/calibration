@@ -15,6 +15,8 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/calib3d.hpp>
 
+#include <opencv2/ximgproc.hpp>
+
 #include <tclap/CmdLine.h>
 #include <glog/logging.h>
 
@@ -58,7 +60,7 @@ struct Options
   string stereoCalibration, cameraCalibrations[2], videoFile, outputFile;
   float scale, fastForward;
   int seekTo;
-  bool doDisplay;
+  bool doDisplay, doFilterDisparity;
   StereoAlgorithm stereoAlgorithm;
 
   bool parseOpts( int argc, char **argv, stringstream &msg )
@@ -82,7 +84,7 @@ struct Options
 
       TCLAP::ValueArg<int> seekToArg("", "seek-to", "Seek to a frame", false, 0, "seek to" ,cmd );
 
-      //TCLAP::SwitchArg doAnnotateArg("N", "do-annotate", "Do annotate entries into a video", cmd, false );
+      TCLAP::SwitchArg doFilterDisparityArg("", "filter-disparity", "Do filter the disparity map", cmd, false );
 
       TCLAP::UnlabeledValueArg< std::string > verbArg( "verb", "Verb", true, "", "verb", cmd );
       TCLAP::UnlabeledValueArg< std::string > videoFileArg( "video-file", "Video file", true, "", "file name", cmd );
@@ -90,6 +92,7 @@ struct Options
       cmd.parse( argc, argv );
 
       doDisplay = doDisplayArg.getValue();
+      doFilterDisparity = doFilterDisparityArg.getValue();
 
       outputFile = path(outputFileArg.getValue()).replace_extension( VideoExtension ).string();
       videoFile = videoFileArg.getValue();
@@ -368,7 +371,7 @@ private:
 
     bool doDenseStereo( void )
     {
-bool cvtToGrey = true;
+      bool cvtToGrey = true;
       const int minDisparity = 0;
 
 
@@ -413,7 +416,7 @@ bool cvtToGrey = true;
         Ptr<StereoSGBM> sgbm( StereoSGBM::create( minDisparity, numDisparities, SADWindowSize, p1, p2 ) );
         sgbm->setPreFilterCap( preFilterCap );
 
-cvtToGrey = false;
+        cvtToGrey = false;
 
         bm = sgbm;
       } else {
@@ -462,7 +465,7 @@ cvtToGrey = false;
 
         int type = cvtToGrey ? CV_8UC1 : CV_8UC3;
         CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
-                                  canvas.size().height * opts.scale), type );
+        canvas.size().height * opts.scale), type );
         for( int k = 0; k < 2; ++k )  {
           remap( canvas[k], canvas[k], map[k][0], map[k][1], INTER_LINEAR );
 
@@ -472,16 +475,16 @@ cvtToGrey = false;
             resize( canvas[k], resized, Size(), opts.scale, opts.scale, cv::INTER_LINEAR );
 
             if( cvtToGrey )
-              cvtColor( resized, scaled[k], CV_BGR2GRAY );
+            cvtColor( resized, scaled[k], CV_BGR2GRAY );
             else
-              resized.copyTo( scaled[k] ); // Inefficient...
+            resized.copyTo( scaled[k] ); // Inefficient...
 
           } else {
 
             if( cvtToGrey )
-              cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
+            cvtColor( canvas[k], scaled[k], CV_BGR2GRAY );
             else
-              canvas[k].copyTo( scaled[k] ); // Inefficient...
+            canvas[k].copyTo( scaled[k] ); // Inefficient...
 
           }
 
@@ -493,10 +496,41 @@ cvtToGrey = false;
         t = getTickCount() - t;
         LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
-        Mat disp8;
-        disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.));
-        Mat colorDisparity( disp8.size(), CV_8UC3 );
-        cvtColor( disp8, colorDisparity, CV_GRAY2BGR );
+        if( opts.doFilterDisparity ) {
+          if( opts.doDisplay ) {
+            Mat unfiltDispImage;
+            disparityToImage( disparity, unfiltDispImage, numDisparities );
+            imshow( UnfilteredDenseStereoWindowName, unfiltDispImage );
+          }
+
+          Ptr< StereoMatcher > rightMatcher( bm );
+          Mat rightDisparity;
+          int64 t = getTickCount();
+          rightMatcher->compute( scaled[1], scaled[0], rightDisparity );
+          t = getTickCount() - t;
+          LOG(INFO) << video.frame() << " : Right-left dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+
+          Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter( ximgproc::createDisparityWLSFilter( bm ) );
+          Ptr<ximgproc::DisparityFilter>  disparityFilter( wlsDisparityFilter );
+          const double wlsFilterLambda = 8000.0;
+          const int wlsFilterSigma = 1;
+          wlsDisparityFilter->setLambda( wlsFilterLambda );
+          wlsDisparityFilter->setSigmaColor( wlsFilterSigma );
+
+          Mat filteredDisparity;
+          t = (double)getTickCount();
+          disparityFilter->filter(disparity, scaled[0], filteredDisparity, Rect(), rightDisparity, scaled[1] );
+          t = (getTickCount() - t);
+
+          LOG(INFO) << video.frame() << " : Filtering elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
+
+          disparity = filteredDisparity;
+
+        }
+
+
+        Mat colorDisparity;
+        disparityToImage( disparity, colorDisparity, numDisparities );
 
         if( writer.isOpened() ) {
           if( count % 100 == 0 ) { LOG(INFO) << count; }
@@ -541,6 +575,14 @@ cvtToGrey = false;
       return true;
     }
 
+    void disparityToImage( const Mat &disparity, Mat &dispImage, int numDisparities )
+    {
+      Mat disp8;
+      disparity.convertTo(disp8, CV_8U, 255/(numDisparities*16.));
+      dispImage.create( disp8.size(), CV_8UC3 );
+      cvtColor( disp8, dispImage, CV_GRAY2BGR );
+    }
+
     bool undistortCanvas( CompositeCanvas &canvas )
     {
       for( int k = 0; k < 2; ++k )
@@ -570,12 +612,13 @@ cvtToGrey = false;
     }
 
 
-    static const string RectifyWindowName, DenseStereoWindowName;
+    static const string RectifyWindowName, UnfilteredDenseStereoWindowName, DenseStereoWindowName;
 
   };
 
   const string StereoProcessorMain::RectifyWindowName = "Rectify",
-  StereoProcessorMain::DenseStereoWindowName = "Dense Stereo";
+  StereoProcessorMain::DenseStereoWindowName = "Dense Stereo",
+  StereoProcessorMain::UnfilteredDenseStereoWindowName = "Unfiltered Dense Stereo";;
 
   int main( int argc, char **argv )
   {
