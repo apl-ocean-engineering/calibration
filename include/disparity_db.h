@@ -13,7 +13,7 @@ using cv::Mat;
 
 class SequentialDb {
 public:
-SequentialDb();
+  SequentialDb();
   SequentialDb( const string &filename, bool writable = false );
 
   bool open( const string &filename, bool writable = false );
@@ -29,7 +29,7 @@ SequentialDb();
 
 protected:
 
-  kyotocabinet::TreeDB _db;
+  kyotocabinet::HashDB _db;
   bool _isOpen;
 
   static const string FpsKey;
@@ -37,16 +37,18 @@ protected:
 
 class DisparityMatDb : public SequentialDb {
 public:
-DisparityMatDb();
+  DisparityMatDb();
   DisparityMatDb( const string &filename, bool writable = false );
 
   bool save( int frame, const Mat &disp );
+
+  static const string DisparityTagName;
 
 };
 
 class PointCloudDb : public SequentialDb {
 public:
-PointCloudDb();
+  PointCloudDb();
   PointCloudDb( const string &filename, bool writable = false );
 
   bool save( int frame, const Mat &disp );

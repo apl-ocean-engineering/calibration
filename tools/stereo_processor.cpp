@@ -109,6 +109,9 @@ TCLAP::ValueArg<std::string> pointcloudDbArg("", "point-cloud-db", "Point cloud 
       seekTo = seekToArg.getValue();
       stopAfter = stopAfterArg.getValue();
 
+      disparityDb = disparityDbArg.getValue();
+      pointCloudDb = pointcloudDbArg.getValue();
+
       stereoCalibration = stereoCalibrationArg.getValue();
 
       string alg = stereoAlgorithmArg.getValue();
@@ -215,16 +218,16 @@ public:
 
     switch( opts.verb ) {
       case Options::RECTIFY:
-      return doRectify();
+      return doRectify() ? 0 : -1;
       break;
       case Options::UNDISTORT:
-      return doUndistort();
+      return doUndistort() ? 0 : -1;
       break;
       case Options::DENSE_STEREO:
-      return doDenseStereo();
+      return doDenseStereo() ? 0 : -1;
       break;
       case Options::SWAP:
-      return doSwap();
+      return doSwap() ? 0 : -1;
       break;
       case Options::VERB_NONE:
       default:
@@ -403,17 +406,25 @@ private:
       //     StereoSGBM sgbm;
 
       PointCloudDb pcDb;
-      if( opts.pointCloudDb.length() > 0 )
-      if( !pcDb.open( opts.pointCloudDb, true ) ) {
-        LOG(ERROR) << "Error opening point cloud database: " << pcDb.error().name() << " : " << pcDb.error().message();
-        return false;
+      if( opts.pointCloudDb.length() > 0 ) {
+        LOG(INFO) << "Saving point cloud to db at : " << opts.pointCloudDb;
+        if( !pcDb.open( opts.pointCloudDb, true ) ) {
+          LOG(ERROR) << "Error opening point cloud database: " << pcDb.error().name() << " : " << pcDb.error().message();
+          return false;
+        }
+
+        pcDb.setFps( video.fps () );
       }
 
       DisparityMatDb disparityDb;
-      if( opts.disparityDb.length() > 0 )
-      if( !disparityDb.open( opts.disparityDb, true ) ) {
-        LOG(ERROR) << "Error opening disparity database: " << disparityDb.error().name() << " : " << disparityDb.error().message();
-        return false;
+      if( opts.disparityDb.length() > 0 ) {
+        LOG(INFO) << "Saving disparitys to db at : " << opts.disparityDb;
+        if( !disparityDb.open( opts.disparityDb, true ) ) {
+          LOG(ERROR) << "Error opening disparity database: " << disparityDb.error().name() << " : " << disparityDb.error().message();
+          return false;
+        }
+
+        disparityDb.setFps( video.fps () );
       }
 
 
@@ -459,7 +470,7 @@ private:
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       if( wk < 1 ) wk = 1;
       //cout << "wk: " << wk << endl;
-      int wait =0; //wk;
+      int wait = wk;
 
       int count = 0;
       CompositeCanvas canvas;

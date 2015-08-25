@@ -48,6 +48,8 @@ bool SequentialDb::setFps( double fps )
 
 //========================================================================
 
+const string DisparityMatDb::DisparityTagName = "disparity";
+
 DisparityMatDb::DisparityMatDb( void )
 : SequentialDb()
 {;}
@@ -63,7 +65,7 @@ bool DisparityMatDb::save( int frame, const Mat &disp )
   snprintf( frameStr, 15, "%d", frame );
 
   cv::FileStorage st( "foo.yml.gz", FileStorage::WRITE | FileStorage::MEMORY );
-  st << disp;
+  st << DisparityTagName << disp;
 
   return _db.set( frameStr, st.releaseAndGetString() );
 }
