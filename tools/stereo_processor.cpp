@@ -497,7 +497,11 @@ Ptr< StereoMatcher > rightMatcher;
 }
 
 Mat fgConfidence;
+
 const int HistoBins = 128;
+const float DisparityToHistogramBin = (float)HistoBins/(numDisparities*16.);
+const float HistogramBinToDisparity = 1/DisparityToHistogramBin;
+
         vector<float> cumDisparityHisto( HistoBins, 0.0 );
 
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
@@ -589,32 +593,23 @@ const int HistoBins = 128;
           LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency();
         }
 
-        // Estimate FG/BG segmentation
-        if( fgConfidence.empty() ) {
-          // First time
-          fgConfidence = Mat::zeros( canvas.size(), CV_32FC1 );
+  // Isolate the ROI from the disparity map
+        Rect roi( computeROI( disparity.size(), bm ) );
+Mat disparityROI( disparity, roi );
 
-          //
-        } else {
-
-        }
 
         // Draw histogram of disparities
 
         vector<float> disparityHisto( HistoBins, 0.0 );
 
-LOG(INFO) << "Depth: " << disparity.depth();
+        Mat binnedDisparity;
+        disparityROI.convertTo(binnedDisparity, CV_8U, DisparityToHistogramBin );
 
-Mat binnedDisparity;
-      disparity.convertTo(binnedDisparity, CV_8U, (float)HistoBins/(numDisparities*16.));
-
-imshow("Binned disparities", binnedDisparity);
-
-        for( Point p(0,0); p.x < disparity.size().width; ++p.x ) {
-          for( p.y = 0; p.y < disparity.size().height; ++p.y ) {
+        for( Point p(0,0); p.x < disparityROI.size().width; ++p.x ) {
+          for( p.y = 0; p.y < disparityROI.size().height; ++p.y ) {
             int dispIdx = binnedDisparity.at<uint8_t>(p);
 
-//LOG(INFO) << "Binned disparity: " << p << " " << dispIdx;
+            //LOG(INFO) << "Binned disparity: " << p << " " << dispIdx;
 
             // Note, dropping disparities of 0.
             if( (dispIdx > 0) && (dispIdx < HistoBins )){
@@ -632,36 +627,59 @@ imshow("Binned disparities", binnedDisparity);
         }
 
         const float height = 200;
-        Mat dispHistoImg( Size(HistoBins, height), CV_8UC1, Scalar(0) ),
-            cumDispHistoImg( Size(HistoBins, height ), CV_8UC1, Scalar(0) );
+        Mat dispHistoImg( Size(HistoBins, height), CV_8UC3, Scalar(0,0,0) ),
+            cumDispHistoImg( Size(HistoBins, height ), CV_8UC3, Scalar(0,0,0) );
 
         for( Point p(0,0); p.x < HistoBins; ++p.x ) {
 
           float pct = disparityHisto[p.x]/dispSum;
 
           for( p.y = height*(1.0-pct); p.y < height; ++p.y ){
-
-            dispHistoImg.at<uint8_t>(p) = 128;
+            dispHistoImg.at<Vec3b>(p) = Vec3b(255,255,255);
           }
 
           float cumPct = cumDisparityHisto[p.x]/cumDispSum;
           for( p.y = height*(1.0-cumPct); p.y < height; ++p.y ){
-            cumDispHistoImg.at<uint8_t>(p) = 200;
+            cumDispHistoImg.at<Vec3b>(p) = Vec3b(255,255,255);
           }
 
-LOG(INFO) << "Histogram : " << p.x << " " << pct << " " << cumPct;
+          //LOG(INFO) << "Histogram : " << p.x << " " << pct << " " << cumPct;
 
         }
 
-const float scale = 4.0;
-Mat dispHistoScaled;
-resize( dispHistoImg, dispHistoScaled, Size(), scale, scale, INTER_NEAREST );
+        // Fit a simple gaussian to the cumulative data
+float mean = 0.0, var = 0.0;
+for( unsigned int x = 0; x < HistoBins; ++x ) mean += x * cumDisparityHisto[x]/cumDispSum;
+for( unsigned int x = 0; x < HistoBins; ++x ) var += cumDisparityHisto[x]/cumDispSum * powf(x - mean, 2);
+
+float stddev = sqrt(var);
+
+LOG(INFO) << "Mean: " << mean << " stddev: " << stddev;
+
+        const float scale = 4.0;
+        Mat dispHistoScaled;
+        resize( dispHistoImg, dispHistoScaled, Size(), scale, scale, INTER_NEAREST );
+
         imshow( "Disparity Histogram", dispHistoScaled );
 
         Mat cumDispHistoScaled;
         resize( cumDispHistoImg, cumDispHistoScaled, Size(), scale, scale, INTER_NEAREST );
+
+        if( (mean >= 0) && (mean < HistoBins) )
+          for( Point p(mean, 0); p.y < height; ++p.y ) cumDispHistoScaled.at<Vec3b>(p*scale) = Vec3b(0,0,255);
+
+        if( ((mean+stddev) >= 0) && ((mean+stddev) < HistoBins) )
+          for( Point p((mean+stddev), 0); p.y < height; ++p.y ) cumDispHistoScaled.at<Vec3b>(p*scale) = Vec3b(255,0,255);
+
+        if( ((mean-stddev) >= 0) && ((mean-stddev) < HistoBins) )
+          for( Point p((mean-stddev), 0); p.y < height; ++p.y ) cumDispHistoScaled.at<Vec3b>(p*scale) = Vec3b(255,0,255);
+
         imshow( "Cumulative Disparity Histogram", cumDispHistoScaled );
 
+
+        // Estimate FG/BG segmentation
+const float bgCutoffSigma = 1.0;
+compare( disparityROI, Scalar( HistogramBinToDisparity * (mean + bgCutoffSigma*stddev) ), fgConfidence, CMP_GT );
 
         Mat colorDisparity;
         disparityToImage( disparity, colorDisparity, numDisparities );
@@ -678,11 +696,19 @@ resize( dispHistoImg, dispHistoScaled, Size(), scale, scale, INTER_NEAREST );
 
         if( opts.doDisplay ) {
 
+          //Mat disparityFgMasked( Mat::zeros( disparityROI.size(), disparityROI.type() ) );
+          Mat canvas0Roi( canvas[0], roi ), canvas0Fg;
+canvas0Roi.copyTo( canvas0Fg, fgConfidence );
+
+imshow( "FG Confidence", fgConfidence );
+
           imshow( RectifyWindowName, scaled );
           imshow( DenseStereoWindowName, colorDisparity );
+          imshow( "Foreground", canvas0Fg );
+
           int ch;
           //int w = std::max( (int64)10, wait - t*1000 );
-          ch = waitKey( wait );
+          ch = waitKey( 0 );
 
           if( ch == 'q' )
           break;
