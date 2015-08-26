@@ -467,6 +467,39 @@ private:
       bm->setSpeckleWindowSize( speckleWindowSize );
       bm->setDisp12MaxDiff( disp12MaxDiff );
 
+Ptr<ximgproc::DisparityFilter>  disparityFilter;
+Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter;
+Ptr< StereoMatcher > rightMatcher;
+
+      if( opts.doFilterDisparity ) {
+        LOG(INFO) << "Filtering disparity map with WLS filter";
+
+        //Rect ROI( computeROI( scaled[0].size(), bm ) );
+
+        // Hm, this actually changes parameters in the BM.  Is that right?
+        //    matcher_left->setDisp12MaxDiff(1000000);
+        //    matcher_left->setSpeckleWindowSize(0);
+        //    if( StereoSGBM ) sgbm->setUniquenessRatio(0);
+        wlsDisparityFilter = ximgproc::createDisparityWLSFilter( bm );
+        disparityFilter = wlsDisparityFilter;
+        wlsDisparityFilter->setLambda( wlsFilterLambda );
+        wlsDisparityFilter->setSigmaColor( wlsFilterSigmaColor );
+
+        rightMatcher = ximgproc::createRightMatcher( bm );
+        // These are the things being set in the right matcher
+        //right_sgbm->setUniquenessRatio(0);
+        // right_sgbm->setP1(sgbm->getP1());
+        // right_sgbm->setP2(sgbm->getP2());
+        // right_sgbm->setMode(sgbm->getMode());
+        // right_sgbm->setPreFilterCap(sgbm->getPreFilterCap());
+        // right_sgbm->setDisp12MaxDiff(1000000);
+        // right_sgbm->setSpeckleWindowSize(0);
+}
+
+Mat fgConfidence;
+const int HistoBins = 128;
+        vector<float> cumDisparityHisto( HistoBins, 0.0 );
+
       int wk = 1000 * 1.0/(video.fps() * opts.fastForward);
       if( wk < 1 ) wk = 1;
       //cout << "wk: " << wk << endl;
@@ -477,6 +510,7 @@ private:
       while( video.read( canvas ) ) {
 
         if( (opts.stopAfter > 0) && (count >= opts.stopAfter )) break;
+
 
         int type = cvtToGrey ? CV_8UC1 : CV_8UC3;
         CompositeCanvas scaled(  Size( canvas.size().width * opts.scale,
@@ -507,30 +541,8 @@ private:
 
         Mat disparity;
         if( opts.doFilterDisparity ) {
-          LOG(INFO) << "Filtering disparity map with WLS filter";
 
-          //Rect ROI( computeROI( scaled[0].size(), bm ) );
-
-          // Hm, this actually changes parameters in the BM.  Is that right?
-          //    matcher_left->setDisp12MaxDiff(1000000);
-          //    matcher_left->setSpeckleWindowSize(0);
-          //    if( StereoSGBM ) sgbm->setUniquenessRatio(0);
-          Ptr<ximgproc::DisparityWLSFilter> wlsDisparityFilter( ximgproc::createDisparityWLSFilter( bm ) );
-          Ptr<ximgproc::DisparityFilter>  disparityFilter( wlsDisparityFilter );
-          wlsDisparityFilter->setLambda( wlsFilterLambda );
-          wlsDisparityFilter->setSigmaColor( wlsFilterSigmaColor );
-
-          Ptr< StereoMatcher > rightMatcher = ximgproc::createRightMatcher( bm );
-          // These are the things being set in the right matcher
-          //right_sgbm->setUniquenessRatio(0);
-          // right_sgbm->setP1(sgbm->getP1());
-          // right_sgbm->setP2(sgbm->getP2());
-          // right_sgbm->setMode(sgbm->getMode());
-          // right_sgbm->setPreFilterCap(sgbm->getPreFilterCap());
-          // right_sgbm->setDisp12MaxDiff(1000000);
-          // right_sgbm->setSpeckleWindowSize(0);
-
-          Mat leftDisparity;
+            Mat leftDisparity;
           int64 t = getTickCount();
           bm->compute( scaled[0], scaled[1], leftDisparity );
           t = getTickCount() - t;
@@ -556,9 +568,9 @@ private:
           }
 
           Mat filteredDisparity;
-          t = (double)getTickCount();
+          t = getTickCount();
           disparityFilter->filter(leftDisparity, scaled[0], filteredDisparity, rightDisparity, Rect(), scaled[1] );
-          t = (getTickCount() - t);
+          t = getTickCount() - t;
 
           LOG(INFO) << video.frame() << " : Filtering elapsed time (ms): " <<  t * 1000 / getTickFrequency() << endl;
 
@@ -576,6 +588,79 @@ private:
           t = getTickCount() - t;
           LOG(INFO) << video.frame() << " : Dense stereo elapsed time (ms): " <<  t * 1000 / getTickFrequency();
         }
+
+        // Estimate FG/BG segmentation
+        if( fgConfidence.empty() ) {
+          // First time
+          fgConfidence = Mat::zeros( canvas.size(), CV_32FC1 );
+
+          //
+        } else {
+
+        }
+
+        // Draw histogram of disparities
+
+        vector<float> disparityHisto( HistoBins, 0.0 );
+
+LOG(INFO) << "Depth: " << disparity.depth();
+
+Mat binnedDisparity;
+      disparity.convertTo(binnedDisparity, CV_8U, (float)HistoBins/(numDisparities*16.));
+
+imshow("Binned disparities", binnedDisparity);
+
+        for( Point p(0,0); p.x < disparity.size().width; ++p.x ) {
+          for( p.y = 0; p.y < disparity.size().height; ++p.y ) {
+            int dispIdx = binnedDisparity.at<uint8_t>(p);
+
+//LOG(INFO) << "Binned disparity: " << p << " " << dispIdx;
+
+            // Note, dropping disparities of 0.
+            if( (dispIdx > 0) && (dispIdx < HistoBins )){
+              disparityHisto[ dispIdx ] += 1;
+              cumDisparityHisto[ dispIdx ] += 1;
+            }
+          }
+        }
+
+        // Find sum for both disparity histograms, ignore the zero'th column
+        float dispSum = 0, cumDispSum = 0;
+        for( unsigned int d = 0; d < HistoBins; ++d ) {
+          dispSum += disparityHisto[d];
+          cumDispSum += cumDisparityHisto[d];
+        }
+
+        const float height = 200;
+        Mat dispHistoImg( Size(HistoBins, height), CV_8UC1, Scalar(0) ),
+            cumDispHistoImg( Size(HistoBins, height ), CV_8UC1, Scalar(0) );
+
+        for( Point p(0,0); p.x < HistoBins; ++p.x ) {
+
+          float pct = disparityHisto[p.x]/dispSum;
+
+          for( p.y = height*(1.0-pct); p.y < height; ++p.y ){
+
+            dispHistoImg.at<uint8_t>(p) = 128;
+          }
+
+          float cumPct = cumDisparityHisto[p.x]/cumDispSum;
+          for( p.y = height*(1.0-cumPct); p.y < height; ++p.y ){
+            cumDispHistoImg.at<uint8_t>(p) = 200;
+          }
+
+LOG(INFO) << "Histogram : " << p.x << " " << pct << " " << cumPct;
+
+        }
+
+const float scale = 4.0;
+Mat dispHistoScaled;
+resize( dispHistoImg, dispHistoScaled, Size(), scale, scale, INTER_NEAREST );
+        imshow( "Disparity Histogram", dispHistoScaled );
+
+        Mat cumDispHistoScaled;
+        resize( cumDispHistoImg, cumDispHistoScaled, Size(), scale, scale, INTER_NEAREST );
+        imshow( "Cumulative Disparity Histogram", cumDispHistoScaled );
 
 
         Mat colorDisparity;
