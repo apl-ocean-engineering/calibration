@@ -14,7 +14,7 @@ include_directories( ${aplcam_INCLUDE_DIR}
 
 link_libraries(	${aplcam_LIBS}
         ${CERES_LIBRARIES}
-	${KyotoCabinet_LIBRARIES}
+	       ${KyotoCabinet_LIBRARIES}
 	${GSL_LIBRARIES}
 	${Boost_LIBRARIES}
         cryptopp )
@@ -70,9 +70,7 @@ add_executable( calibration_db_dump calibration_db_dump.cpp )
 
 add_executable( db_stereo_calibration db_stereo_calibration.cpp )
 
-set( STEREO_PROCESSOR_SRCS stereo_processor.cpp ../lib/disparity_db.cpp )
-add_executable( stereo_processor ${STEREO_PROCESSOR_SRCS} )
-add_executable( composite_video  ${STEREO_PROCESSOR_SRCS} )
+#add_executable( composite_video  ${STEREO_PROCESSOR_SRCS} )
 
 add_executable( image_processor image_processor.cpp )
 
@@ -90,7 +88,6 @@ add_executable( validate_sonar validate_sonar.cpp
   ${SONAR_SRCS}
   ../lib/sonar_image_warper.cpp
   ../lib/sonar_detections.cpp )
-
 
 
 
