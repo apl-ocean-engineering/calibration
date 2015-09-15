@@ -707,6 +707,7 @@ int main( int argc, char** argv )
   rect.R[1] = R[1];
   rect.P[0] = P[0];
   rect.P[1] = P[1];
+  rect.Q = disparity;
 
   saveStereoCalibration( opts.stereoPairPath( mkStereoPairFileName( opts.cameraName[0], opts.cameraName[1] ) ),
       cal, rect, cameraCalibrationFiles[0], cameraCalibrationFiles[1] );

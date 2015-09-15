@@ -10,17 +10,17 @@ set( SONAR_SRCS
 
 include_directories( "${CMAKE_SOURCE_DIR}/include"  )
 include_directories( ${aplcam_INCLUDE_DIR}
-	             ${tclap_INCLUDE_DIR} )
+	                   ${tclap_INCLUDE_DIR} )
 
-link_libraries(	${aplcam_LIBS}
+link_libraries( libaplcam
         ${CERES_LIBRARIES}
-	       ${KyotoCabinet_LIBRARIES}
-	${GSL_LIBRARIES}
-	${Boost_LIBRARIES}
+	      ${KyotoCabinet_LIBRARIES}
+      	${GSL_LIBRARIES}
+      	${Boost_LIBRARIES}
         cryptopp )
 
 if( USE_APRILTAGS )
-  link_libraries( ${APRILTAGS_LIBS} )
+  link_libraries( libapriltags )
 endif()
 
 link_libraries( ${OpenCV_LIBS} )

@@ -318,6 +318,7 @@ class DbStereoCalibration {
     if( true ) {
       hartleyMethod( flatUNData, cal );
     } else {
+      LOG(ERROR) << "Hmm, OpenCV method mot working at present.";
       //opencvMethod( calData, opencvCal );
     }
 
@@ -375,9 +376,55 @@ class DbStereoCalibration {
     cal.t *= meanScale;
     cal.dumpDecomp();
 
+    // == Attempt to rectify images
+
+    Mat R[2], P[2], disparity;
+    Rect validROI[2];
+    float alpha = -1;
+
+    // TODO:  Fix hardcoded value
+    const Size ImageSize( db_[0].imageSize() );
+    Distortion::stereoRectify( *cameras_[0], *cameras_[1], ImageSize, cal.R, cal.t,
+        R[0], R[1], P[0], P[1],  disparity, CALIB_ZERO_DISPARITY,
+        alpha, ImageSize, validROI[0], validROI[1] );
+
+    StereoRectification rect;
+    rect.R[0] = R[0];
+    rect.R[1] = R[1];
+    rect.P[0] = P[0];
+    rect.P[1] = P[1];
+    rect.Q = disparity;
+
     LOG(INFO) << "Saving to " <<  opts_.stereoCalOutput;
-    cal.save( opts_.stereoCalOutput );
+    saveStereoCalibration( opts_.stereoCalOutput, cal, rect,
+                           opts_.cameraCalibrationPath(0),
+                           opts_.cameraCalibrationPath(1) );
   }
+
+  void saveStereoCalibration( const string &filename,
+      const StereoCalibration &cal,
+      const StereoRectification &rect,
+      const string &cam0, const string &cam1 )
+  {
+
+    FileStorage fs( filename, FileStorage::WRITE );
+
+    time_t tt;
+    time( &tt );
+    struct tm *t2 = localtime( &tt );
+    char buf[1024];
+    strftime( buf, sizeof(buf)-1, "%c", t2 );
+
+    fs << "calibration_time" << buf;
+    fs << "calibration_0" << cam0;
+    fs << "calibration_1" << cam1;
+
+    cal.save( fs );
+    rect.save( fs );
+
+    cout << "Wrote stereo calibration to " << filename << endl;
+  }
+
 
 
   bool opencvMethod( StereoCalibrationData &data,
