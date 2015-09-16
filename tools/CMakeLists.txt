@@ -8,22 +8,8 @@ set( SONAR_SRCS
   ../lib/sonar_pose.cpp )
 
 
-include_directories( "${CMAKE_SOURCE_DIR}/include"  )
-include_directories( ${aplcam_INCLUDE_DIR}
-	                   ${tclap_INCLUDE_DIR} )
-
-link_libraries( libaplcam
-        ${CERES_LIBRARIES}
-	      ${KyotoCabinet_LIBRARIES}
-      	${GSL_LIBRARIES}
-      	${Boost_LIBRARIES}
-        cryptopp )
-
-if( USE_APRILTAGS )
-  link_libraries( libapriltags )
-endif()
-
-link_libraries( ${OpenCV_LIBS} )
+include_directories( ${camera_calibration_INCLUDE_DIRS} )
+link_libraries( ${camera_calibration_LIBS} )
 
 
 add_executable( extract extract.cpp )

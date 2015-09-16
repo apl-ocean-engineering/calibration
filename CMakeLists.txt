@@ -11,10 +11,8 @@ set(CMAKE_CXX_FLAGS "-ggdb -Wall")
 #set(CMAKE_C_FLAGS_RELEASE, "-Werror")
 #set(CMAKE_CXX_FLAGS_RELEASE, "-Werror")
 
-find_package( OpenCV REQUIRED )
+find_package( gtest )
 find_package( PCL 1.2 REQUIRED )
-find_package( Ceres REQUIRED )
-
 
 # Packages with by local Find*.cmake files
 set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
@@ -22,9 +20,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" "${AplCam_SOURCE_DIR}/
 find_package( AplCam REQUIRED )
 
 ## Get these from aplcam's cmake directory
-find_package( TCLAP REQUIRED )
-find_package( GSL REQUIRED )
-find_package( Eigen REQUIRED )
+#find_package( TCLAP REQUIRED )
+#find_package( Eigen REQUIRED )
 
 # KyotoCabinet stuff
 find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
@@ -36,27 +33,30 @@ find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
 set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
 set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
 
-find_package( Boost REQUIRED COMPONENTS thread system filesystem )
-set( Boost_USE_MULTITHREADED ON )
-
-include_directories( ${EIGEN_INCLUDE_DIR}
-            	       ${OpenCV_INCLUDE_DIRS}
-                     ${CERES_INCLUDE_DIRS}
-                     ${KyotoCabinet_INCLUDE_DIRS} )
-
-link_directories( ${PCL_LIBRARY_DIRS} )
-
 add_definitions( -std=c++11 )
 
 if( USE_APRILTAGS )
-  find_package( Apriltags REQUIRED )
- 	add_definitions( -DUSE_APRILTAGS )
- 	include_directories( "${apriltags_INCLUDE_DIR}" )
+  add_definitions( -DUSE_APRILTAGS )
+ 	#include_directories( "${apriltags_INCLUDE_DIR}" )
 endif()
 
 if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
+
+
+set( camera_calibration_INCLUDE_DIRS
+	${CMAKE_SOURCE_DIR}/include
+	${aplcam_INCLUDE_DIRS}
+  ${KyotoCabinet_INCLUDE_DIRS} )
+
+set( camera_calibration_LIBS
+	   ${aplcam_LIBS}
+     ${KyotoCabinet_LIBRARIES} )
+
+link_directories( ${PCL_LIBRARY_DIRS} )
+
+
 
 
 add_subdirectory (tools)
