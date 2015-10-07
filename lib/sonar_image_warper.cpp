@@ -6,8 +6,9 @@
 using namespace cv;
 using namespace std;
 using namespace Distortion;
+using namespace AplCam;
 
-SonarImageWarper::SonarImageWarper( DistortionModel *cam, SonarPose *pose )
+SonarImageWarper::SonarImageWarper( DistortionModel *cam, AplCam::SonarPose *pose )
 : _cam( cam ), _pose( pose )
 {;}
 

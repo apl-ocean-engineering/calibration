@@ -12,7 +12,7 @@ class SonarImageWarper {
 public:
 
   // Standard API, give it a camera model and a sonar pose
-  SonarImageWarper( Distortion::DistortionModel *, SonarPose * );
+  SonarImageWarper( Distortion::DistortionModel *, AplCam::SonarPose * );
 
   // Load camera model and pose from files
   SonarImageWarper( const std::string &cameraCalFile, const std::string &sonarPoseFile );
@@ -25,7 +25,7 @@ public:
 protected:
 
   Distortion::DistortionModel *_cam;
-  SonarPose *_pose;
+  AplCam::SonarPose *_pose;
 
 };
 

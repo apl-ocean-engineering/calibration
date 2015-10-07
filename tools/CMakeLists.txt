@@ -4,8 +4,7 @@ set( CALIBRATION_SRCS
   ../lib/calibration_opts.cpp )
 
 set( SONAR_SRCS
-  ../lib/sonar_calibration_solver.cpp
-  ../lib/sonar_pose.cpp )
+  ../lib/sonar_calibration_solver.cpp )
 
 
 include_directories( ${camera_calibration_INCLUDE_DIRS} )
