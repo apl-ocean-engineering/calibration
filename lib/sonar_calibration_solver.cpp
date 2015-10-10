@@ -96,6 +96,10 @@ return true;
       LOG(INFO) << "Using Huber loss function";
 
       result.pose = Vector6d::Zero();
+      for( int i = 0; i < 3; ++i )  {
+	result.pose[i] = _angleAxisHint[i];
+	result.pose[i+3] = _transHint[i];
+      }
 
       SonarCalibrationErrorFactory factory(  result.pose, lossFunc );
 
@@ -159,112 +163,3 @@ return true;
     }
 
 
-    #ifdef false
-
-    struct ReprojectionError {
-      ReprojectionError(double obs_x, double obs_y, double world_x, double world_y )
-      : observedX(obs_x), observedY(obs_y), worldX( world_x ), worldY( world_y ) {;}
-
-      template <typename T>
-      void txToCameraFrame( const T* const pose, T *p ) const
-      {
-        const T point[3] = { T( worldX ), T( worldY ), T( 0.0 ) };
-        ceres::AngleAxisRotatePoint(pose, point, p);
-        p[0] += pose[3];
-        p[1] += pose[4];
-        p[2] += pose[5];
-      }
-
-      template <typename T>
-      bool projectAndComputeError(const T* const camera,
-        const T* const alpha,
-        const T* const pp,
-        T* residuals) const
-        {
-          const T &fx = camera[0];
-          const T &fy = camera[1];
-          const T &cx = camera[2];
-          const T &cy = camera[3];
-          const T &xpp = pp[0],
-          &ypp = pp[1];
-
-          T predictedX = fx*(xpp + alpha[0]*ypp) + cx;
-          T predictedY = fy* ypp                 + cy;
-
-          // The error is the difference between the predicted and observed position.
-          residuals[0] = predictedX - T(observedX);
-          residuals[1] = predictedY - T(observedY);
-          return true;
-        }
-
-
-        double observedX, observedY;
-        double worldX, worldY;
-      };
-      bool CeresRadialPolynomial::doCalibrate(
-        const ObjectPointsVecVec &objectPoints,
-        const ImagePointsVecVec &imagePoints,
-        const Size& image_size,
-        CalibrationResult &result,
-        int flags,
-        cv::TermCriteria criteria)
-        {
-
-          // Check and see if the camera matrix has been initialized
-          if( norm( matx(), Mat::eye(3,3,CV_64F) ) < 1e-9 )
-          setCamera( Camera::InitialCameraEstimate( image_size ) );
-
-          int totalPoints = 0;
-          int goodImages = 0;
-
-          for( size_t i = 0; i < objectPoints.size(); ++i )  {
-            if( result.status[i] ) {
-              ImagePointsVec undistorted =  unwarp( normalize( imagePoints[i] ) );
-
-              // Found the approach provided by initExtrinsics to be more reliable (!)
-              // will need to investigate why that is.
-              bool pnpRes = solvePnP( objectPoints[i], undistorted, Mat::eye(3,3,CV_64F), Mat(),
-              result.rvecs[i], result.tvecs[i], false, CV_ITERATIVE );
-
-              //cout << "Pnp: " << (pnpRes ? "" : "FAIL") << endl << result.rvecs[i] << endl << result.tvecs[i] << endl;
-              //initExtrinsics( imagePoints[i], objectPoints[i], rvecs[i], tvecs[i] );
-              //cout << "initExtrinsics: " << endl << rvecs[i] << endl << tvecs[i] << endl;
-
-              if( !pnpRes ) {
-                result.status[i] = false;
-                continue;
-              }
-
-              ++goodImages;
-              totalPoints += objectPoints[i].size();
-            }
-          }
-
-          cout << "From " << objectPoints.size() << " images, using " << totalPoints << " from " << goodImages << " images" << endl;
-
-          double camera[4] = { _fx, _fy, _cx, _cy };
-          double alpha = _alpha;
-
-          // Inherently fragile.  Store coeffs in a double array instead?
-          //    double k12[2] = { _distCoeffs[0], _distCoeffs[1] },
-          //           p12[2] = { _distCoeffs[2], _distCoeffs[3] },
-          //           k3[1]  = { _distCoeffs[4] },
-          //           k456[3] = { _distCoeffs[5], _distCoeffs[6], _distCoeffs[7] };
-
-          if( ! (flags & CV_CALIB_RATIONAL_MODEL ) ) {
-            _distCoeffs[5] = 0.0;
-            _distCoeffs[6] = 0.0;
-            _distCoeffs[7] = 0.0;
-          } else {
-            cout << "Using rational model (with k4-k6)" << endl;
-          }
-
-          if( flags & CV_CALIB_ZERO_TANGENT_DIST ) {
-            _distCoeffs[2] = 0.0;
-            _distCoeffs[3] = 0.0;
-            cout << "Fixing tangential distortion to zero" << endl;
-          }
-        }
-
-
-        #endif

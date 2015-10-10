@@ -297,6 +297,7 @@ class DbStereoCalibration {
     int vidLength = min( db_[0].vidLength(), db_[1].vidLength() );
 
     for( int frame = 0; frame < vidLength; ++frame ) {
+if( frame % 100 == 0 ) LOG(INFO) << "Loaded frame: " << frame;
       Detection *det[2] = { db_[0].load( frame ), db_[1].load( frame ) };
 
       if( det[0] != NULL || det[1] != NULL ) calData.addPoints( *det[0], *det[1] );
@@ -305,7 +306,7 @@ class DbStereoCalibration {
       if( det[1] ) delete det[1];
     }
 
-    LOG(INFO) << "Have created set of " << calData.size() << " points." << endl;
+    LOG(INFO) << "Have created set of " << calData.size() << " points.";
 
     // unData is Unidistorted and Normalized
     calData.undistort( unData, *cameras_[0], *cameras_[1] );

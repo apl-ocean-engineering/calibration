@@ -41,7 +41,7 @@ float sonarScale;
       TCLAP::ValueArg<std::string> sonarFileArg("", "sonar-file", "Sonar file", true, "", "Sonar file", cmd );
       TCLAP::ValueArg<std::string> cameraFileArg("", "camera-file", "Sphere db", true, "", "Sphere db", cmd );
       TCLAP::ValueArg<std::string> cameraCalArg("", "camera-calibration", "Camera cal", true, "", "Camera calibration file", cmd );
-TCLAP::ValueArg<float> sonarScaleArg("", "sonar-scale", "Sonar scale", false, 1000, "Sonar point cloud scalar", cmd);
+TCLAP::ValueArg<float> sonarScaleArg("", "sonar-scale", "Sonar scale", false, 1, "Sonar point cloud scalar", cmd);
 
         TCLAP::SwitchArg imgAxesArg( "", "use-image-axes", "Image axes", cmd, false );
 
@@ -167,6 +167,10 @@ class SonarCalibration {
 
 
     SonarCalibrationSolver solver;
+
+    // There will generally be a shift from sonar axes to image axes
+    solver.angleAxisHint( Vector3f(M_PI/2, 0, 0) );
+
     SonarCalibrationSolver::Result result;
     solver.solve( data, result );
 
@@ -176,7 +180,7 @@ class SonarCalibration {
 
       LOG(INFO) << "Rotation vector: " << pose.rot();
       Vec3f euler( pose.euler() );
-      LOG(INFO) << euler;
+      //LOG(INFO) << euler;
       for( int i = 0; i < 3; ++i )
         euler[i] *= 180.0/M_PI;
 

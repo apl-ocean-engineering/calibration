@@ -59,12 +59,17 @@ class SonarCalibrationSolver {
 
 
 
-  SonarCalibrationSolver( void ) {;}
+  SonarCalibrationSolver( void )
+     : _angleAxisHint(0.0,0.0,0.0), _transHint(0.0,0.0,0.0) {;}
 
   bool solve( const SonarCalData &, Result & );
 
+  void angleAxisHint( const Vector3f &h ) { _angleAxisHint = h; }
+  void transHint( const Vector3f &h ) { _transHint = h; }
 
  protected:
+
+   Vector3f _angleAxisHint, _transHint;
 
 };
 
