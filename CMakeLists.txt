@@ -11,25 +11,28 @@ set(CMAKE_CXX_FLAGS "-ggdb -Wall")
 #set(CMAKE_C_FLAGS_RELEASE, "-Werror")
 #set(CMAKE_CXX_FLAGS_RELEASE, "-Werror")
 
+list(APPEND CMAKE_MODULE_PATH "${camera_calibration_SOURCE_DIR}/cmake")
+
 find_package( gtest )
 find_package( PCL 1.2 REQUIRED )
 
 option( USE_TBB "Use TBB" ON )
-if( USE_APRILTAGS )
-  add_definitions( -DUSE_APRILTAGS )
- 	#include_directories( "${apriltags_INCLUDE_DIR}" )
-endif()
-
-option( USE_APRILTAGS "Use AprilTags" ON )
 if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
+option( USE_APRILTAGS "Use AprilTags" ON )
+if( USE_APRILTAGS )
+  add_definitions( -DUSE_APRILTAGS )
+  find_package( apriltags REQUIRED )
+ 	#include_directories( "${apriltags_INCLUDE_DIR}" )
+endif()
 
 # Packages with by local Find*.cmake files
-set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" "${AplCam_SOURCE_DIR}/cmake")
+set( AplCam_SOURCE_DIR "/Users/aaron/workspace/vision_exp/aplcam")
 find_package( AplCam REQUIRED )
+
+
 
 ## Get these from aplcam's cmake directory
 #find_package( TCLAP REQUIRED )
