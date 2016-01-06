@@ -13,7 +13,7 @@ set(CMAKE_CXX_FLAGS "-ggdb -Wall")
 
 list(APPEND CMAKE_MODULE_PATH "${camera_calibration_SOURCE_DIR}/cmake")
 
-find_package( gtest )
+find_package( GTest )
 find_package( PCL 1.2 REQUIRED )
 
 option( USE_TBB "Use TBB" ON )
@@ -21,15 +21,17 @@ if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
+set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
+set( Apriltags_SOURCE_DIR "/home/aaron/workspace/vision_exp/apriltags")
+
 option( USE_APRILTAGS "Use AprilTags" ON )
 if( USE_APRILTAGS )
   add_definitions( -DUSE_APRILTAGS )
-  find_package( apriltags REQUIRED )
+  find_package( Apriltags REQUIRED )
  	#include_directories( "${apriltags_INCLUDE_DIR}" )
 endif()
 
 # Packages with by local Find*.cmake files
-set( AplCam_SOURCE_DIR "/Users/aaron/workspace/vision_exp/aplcam")
 find_package( AplCam REQUIRED )
 
 
@@ -53,7 +55,7 @@ add_definitions( -std=c++11 )
 set( camera_calibration_INCLUDE_DIRS
 	   ${CMAKE_SOURCE_DIR}/include
 	   ${aplcam_INCLUDE_DIRS}
-      ${KyotoCabinet_INCLUDE_DIRS} )
+    ${KyotoCabinet_INCLUDE_DIRS} )
 
 set( camera_calibration_LIBS
 	    ${aplcam_LIBS}

@@ -16,6 +16,7 @@ else()
   message( "To use local version set CMake variable Apriltags_SOURCE_DIR")
   ExternalProject_Add( apriltags
     GIT_REPOSITORY "https://github.com/amarburg/apriltags.git"
+    GIT_TAG subtag_detection
     PREFIX ${PROJECT_BINARY_DIR}/apriltags
     CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}"
     BUILD_COMMAND ${CMAKE_COMMAND} --build .
