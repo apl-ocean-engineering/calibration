@@ -21,8 +21,8 @@ if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
-set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
-set( Apriltags_SOURCE_DIR "/home/aaron/workspace/vision_exp/apriltags")
+# set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
+# set( Apriltags_SOURCE_DIR "/home/aaron/workspace/vision_exp/apriltags")
 
 option( USE_APRILTAGS "Use AprilTags" ON )
 if( USE_APRILTAGS )
