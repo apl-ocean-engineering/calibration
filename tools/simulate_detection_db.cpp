@@ -18,7 +18,7 @@
 #include <tclap/CmdLine.h>
 
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "detection_db.h"
 using namespace AplCam;
 

@@ -12,7 +12,7 @@
 #include <kchashdb.h>
 
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "detection_db.h"
 #include "file_utils.h"
 #include "distortion/camera_factory.h"

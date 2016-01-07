@@ -20,7 +20,7 @@ using namespace Distortion;
 
 #include "file_utils.h"
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "image.h"
 #include "calibration_serializer.h"
 

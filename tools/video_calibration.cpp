@@ -17,7 +17,7 @@
 
 #include "file_utils.h"
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "detection_db.h"
 #include "detection_set.h"
 #include "image.h"

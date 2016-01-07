@@ -10,7 +10,7 @@
 #endif
 
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "detection_db.h"
 
 #include "detector.h"
@@ -45,7 +45,6 @@ struct AprilTagDetectorFunctor {
   // modifies class members...
   void operator()( const tbb::blocked_range<size_t> &r ) const
   {
-
     size_t end = r.end();
     for( size_t i = r.begin(); i != end; ++i ) {
 #else

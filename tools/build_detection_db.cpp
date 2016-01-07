@@ -22,7 +22,7 @@
 #include <kchashdb.h>
 
 #include "board.h"
-#include "detection.h"
+#include "detection/detection.h"
 #include "detection_db.h"
 #include "file_utils.h"
 #include "trendnet_time_code.h"
