@@ -1,15 +1,11 @@
 
-set( CALIBRATION_SRCS
-  ../lib/calibrator.cpp
-  ../lib/calibration_opts.cpp )
+
 
 set( SONAR_SRCS
   ../lib/sonar_calibration_solver.cpp )
 
-
 include_directories( ${camera_calibration_INCLUDE_DIRS} )
 link_libraries( ${camera_calibration_LIBS} )
-
 
 add_executable( extract extract.cpp )
 
@@ -29,8 +25,15 @@ add_executable( align_streams align_streams.cpp )
 
 add_executable( test_video test_video.cpp )
 
+set( CALIBRATION_SRCS
+  ../lib/calibrator.cpp
+  ../lib/calibration_opts.cpp )
+
 add_executable( calibration calibration.cpp
   ${CALIBRATION_SRCS} )
+
+  add_executable( cal cal.cpp cal_impl.cpp
+    ${CALIBRATION_SRCS} )
 
 add_executable( video_calibration video_calibration.cpp  ${CALIBRATION_SRCS} )
 

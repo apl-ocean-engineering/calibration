@@ -55,7 +55,7 @@ add_definitions( -std=c++11 )
 set( camera_calibration_INCLUDE_DIRS
 	   ${CMAKE_SOURCE_DIR}/include
 	   ${aplcam_INCLUDE_DIRS}
-    ${KyotoCabinet_INCLUDE_DIRS} )
+     ${KyotoCabinet_INCLUDE_DIRS} )
 
 set( camera_calibration_LIBS
 	    ${aplcam_LIBS}
@@ -63,5 +63,20 @@ set( camera_calibration_LIBS
 
 link_directories( ${PCL_LIBRARY_DIRS} )
 
+# Location for test images used by unit and performance tests
+set( TEST_DATA_DIR ${CMAKE_SOURCE_DIR}/test/data )
+#add_definitions( -DTEST_DATA_DIR="${TEST_DATA_DIR}" )
 
 add_subdirectory (tools)
+
+list(APPEND CAL_TEST_CMD ${CMAKE_CURRENT_BINARY_DIR}/tools/cal --detect --board ${TEST_DATA_DIR}/boards/april_poster_45in.yml)
+list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom8.png)
+list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom6.png)
+
+add_custom_target( test_cal
+                    ${CAL_TEST_CMD}
+                    DEPENDS cal )
+
+add_custom_target( gdb_cal
+                    gdb --args ${CAL_TEST_CMD}
+                    DEPENDS cal )

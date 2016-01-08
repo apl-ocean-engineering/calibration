@@ -1,13 +1,20 @@
 
 include( ExternalProject )
 
+list(APPEND ARGS "-DCMAKE_INSTALL_PREFIX:FILEPATH=${INSTALL_DIR}")
+list(APPEND ARGS "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+list(APPEND ARGS "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}")
+list(APPEND ARGS "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
+list(APPEND ARGS "-DBUILD_DETECTOR_WITH_DEBUG=ON")
+
+
 if( Apriltags_SOURCE_DIR )
   message( "Using Apriltags from directory at ${Apriltags_SOURCE_DIR}" )
   ExternalProject_Add( apriltags
     DOWNLOAD_COMMAND ""
     SOURCE_DIR ${Apriltags_SOURCE_DIR}
     PREFIX ${PROJECT_BINARY_DIR}/apriltags
-    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}"
+    CMAKE_ARGS ${ARGS}
     BUILD_COMMAND ${CMAKE_COMMAND} --build . -- apriltags
     INSTALL_COMMAND ""
   )
@@ -18,7 +25,7 @@ else()
     GIT_REPOSITORY "https://github.com/amarburg/apriltags.git"
     GIT_TAG subtag_detection
     PREFIX ${PROJECT_BINARY_DIR}/apriltags
-    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}"
+    CMAKE_ARGS ${ARGS}
     BUILD_COMMAND ${CMAKE_COMMAND} --build .
     INSTALL_COMMAND ""
   )
