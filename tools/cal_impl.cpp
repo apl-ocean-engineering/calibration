@@ -100,7 +100,7 @@ void Cal::doDetect( void )
       continue;
     }
     if( detection->found ){
-      LOG(INFO) << "  Found calibration pattern." << endl;
+      LOG(INFO) << "  Found calibration pattern with " << detection->size() << " points";
     }
   }
 }
