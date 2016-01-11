@@ -25,14 +25,16 @@ link_libraries( ${camera_calibration_LIBS} )
 #
 # add_executable( test_video test_video.cpp )
 
-# set( CALIBRATION_SRCS
+ set( CALIBRATION_SRCS
+    ../lib/detection_io.cpp )
 #   ../lib/calibrator.cpp
 #   ../lib/calibration_opts.cpp )
 #
 # add_executable( calibration calibration.cpp
 #   ${CALIBRATION_SRCS} )
 
-  add_executable( cal cal.cpp cal_impl.cpp )
+  add_executable( cal cal.cpp cal_impl.cpp
+    ${CALIBRATION_SRCS} )
 
 # add_executable( video_calibration video_calibration.cpp  ${CALIBRATION_SRCS} )
 #

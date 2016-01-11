@@ -33,7 +33,7 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
   // TCLAP::SwitchArg retryUnregArg("r", "retry-unregistered", "Retry unregistered point", cmd, false );
   // TCLAP::SwitchArg ignoreCacheArg("i", "ignore-cache", "Ignore cached points", cmd, false );
   TCLAP::SwitchArg doDetectArg("", "detect", "Do detection", cmd, false );
-  TCLAP::ValueArg<string> detectOutputArg("", "detection-file", "", false, "", "Filename", cmd );
+  TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "", "Filename", cmd );
 
   TCLAP::ValueArg<string> boardPathArg("", "board", "", false, "", "Filename", cmd );
 
@@ -70,7 +70,8 @@ bool CalOpts::validateOpts()
 //===================================================================
 
 Cal::Cal( CalOpts &opts )
-  : _opts( opts ), _inputQueue( _opts.inFiles ), _board( NULL )
+  : _opts( opts ), _inputQueue( _opts.inFiles ),
+    _board( NULL ), _detectionIO( NULL )
 {;}
 
 Cal::~Cal()
@@ -89,19 +90,23 @@ void Cal::doDetect( void )
   Mat img, imgGray;
   Detection *detection;
 
+  detectionIO();
+
   while( !(img = _inputQueue.nextFrame()).empty() ) {
 
     cvtColor(img, imgGray, COLOR_BGR2GRAY);
 
     detection = board()->detectPattern( imgGray );
 
-    if( !detection ) {
+    if( !detection || !detection->good() ) {
       LOG(INFO) << "No detections for frame " << _inputQueue.frameName();
       continue;
     }
-    if( detection->good() ){
-      LOG(INFO) << "  Found calibration pattern with " << detection->size() << " points";
-    }
+
+    LOG(INFO) << "  Found calibration pattern with " << detection->size() << " points";
+
+    detectionIO()->save( _inputQueue.frameName(), detection );
+
   }
 }
 
@@ -118,6 +123,20 @@ Board *Cal::board( void )
   }
 
   return _board;
+}
+
+DetectionIO *Cal::detectionIO( void )
+{
+  if( _detectionIO != NULL ) return _detectionIO;
+
+  _detectionIO = DetectionIO::Create( _opts.detectionOutput );
+
+  if( _detectionIO == NULL ) {
+    LOG(FATAL) << "Unable to create detection I/O " << _opts.detectionOutput;
+  }
+
+  return _detectionIO;
+
 }
 
 //===================================================================
@@ -143,5 +162,5 @@ cv::Mat InputQueue::nextFrame( void )
 
 std::string InputQueue::frameName( void )
 {
-  return _files[_idx].string();
+  return _files[_idx].stem().string();
 }

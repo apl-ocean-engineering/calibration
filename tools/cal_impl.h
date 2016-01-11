@@ -13,9 +13,11 @@
 namespace fs = boost::filesystem;
 
 #include "board.h"
+#include "detection_io.h"
 
 using namespace std;
 using namespace AplCam;
+using namespace CameraCalibration;
 
 class CalOpts {
 public:
@@ -58,17 +60,23 @@ class Cal {
 
     int run( void );
 
-    // Sub-modules
+    // Sub-commands
     void doDetect( void );
+
+
+  protected:
 
     // Eager-load
     Board *board( void );
+    DetectionIO *detectionIO( void );
 
-  protected:
+
+  private:
 
    CalOpts _opts;
    InputQueue _inputQueue;
    Board *_board;
+   DetectionIO *_detectionIO;
 };
 
 
