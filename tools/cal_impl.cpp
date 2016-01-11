@@ -4,7 +4,7 @@
 
 #include "cal_impl.h"
 
-#include "detection/detection.h"
+#include "AplCam/detection/detection.h"
 
 using namespace cv;
 
@@ -38,6 +38,8 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
   TCLAP::SwitchArg doDetectArg("", "detect", "Do detection", cmd, false );
   TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "", "Filename", cmd );
   TCLAP::ValueArg<string> drawDetectionsArg("", "draw-detections", "", false, "", "Filename", cmd );
+
+  TCLAP::SwitchArg doCalibrateArg("", "calibrate", "Do calibrate", cmd, false );
 
   TCLAP::ValueArg<string> boardPathArg("", "board", "", false, "", "Filename", cmd );
 
@@ -92,8 +94,13 @@ Cal::~Cal()
 int Cal::run( void ) {
   if( _opts.doDetect ) doDetect();
 
+  if( _opts.doCalibrate ) doCalibrate();
+
   return 0;
 }
+
+//--------------------------------------------------------------
+// Detection functions
 
 void Cal::doDetect( void )
 {
@@ -135,8 +142,28 @@ void Cal::drawDetection( const cv::Mat &img, Detection *detection )
   imwrite( filename.c_str(), out );
 }
 
+//--------------------------------------------------------------
+// Calibration functions
+void Cal::doCalibrate( void )
+{
+  int flags =  opts.calibFlags();
 
-// Eager-load board if needed
+  DistortionModel *distModel = DistortionModel::MakeDistortionModel( opts.calibType );
+
+  if( !distModel ) {
+    cerr << "Something went wrong making a distortion model." << endl;
+    exit(-1);
+  }
+
+  CalibrationResult result;
+  distModel->calibrate( objectPoints, imagePoints,
+      imageSize, result, flags );
+}
+
+
+//--------------------------------------------------------------
+// Eager-load functions
+
 Board *Cal::board( void )
 {
   if( _board != NULL ) return _board;

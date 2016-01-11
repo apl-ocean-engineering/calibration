@@ -12,7 +12,7 @@
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
-#include "board.h"
+#include "AplCam/board/board.h"
 #include "detection_io.h"
 
 using namespace std;
@@ -26,7 +26,7 @@ public:
 
   vector< fs::path > inFiles;
   fs::path detectionOutput, drawDetectionPath, boardPath;
-  bool doDetect;
+  bool doDetect, doCalibrate;
 
   bool parseOpts( int argc, char **argv );
 
@@ -62,7 +62,7 @@ class Cal {
 
     // Sub-commands
     void doDetect( void );
-
+    void doCalibrate( void );
 
   protected:
 

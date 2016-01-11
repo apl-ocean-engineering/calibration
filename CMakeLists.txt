@@ -79,8 +79,7 @@ add_custom_target( cal_detection_dirs
 list(APPEND CAL_TEST_CMD ${CMAKE_CURRENT_BINARY_DIR}/tools/cal --detect --board ${TEST_DATA_DIR}/boards/april_poster_45in.yml)
 list(APPEND CAL_TEST_CMD --detections-io ${TEST_CAL_DETECTION_DIR} )
 list(APPEND CAL_TEST_CMD --draw-detections ${TEST_CAL_ANNOTATIONS_DIR} )
-list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom8.png)
-list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom6.png)
+list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom6_*.png)
 
 add_custom_target( test_cal
                     ${CAL_TEST_CMD}

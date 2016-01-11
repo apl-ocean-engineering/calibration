@@ -3,7 +3,7 @@
 
 #include "opencv2/core.hpp"
 
-#include "distortion/distortion_model.h"
+#include "AplCam/distortion/distortion_model.h"
 
 #include "sonar_pose.h"
 

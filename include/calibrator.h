@@ -3,14 +3,13 @@
 
 #include <opencv2/core/core.hpp>
 
-#include "detection_set.h"
-
-#include "calibration_db.h"
-#include "calibration_result.h"
-#include "board.h"
+#include "AplCam/detection_set.h"
+#include "AplCam/calibration_db.h"
+#include "AplCam/calibration_result.h"
+#include "AplCam/board.h"
 using namespace AplCam;
 
-#include "distortion/distortion_model.h"
+#include "AplCam/distortion/distortion_model.h"
 using Distortion::DistortionModel;
 
 

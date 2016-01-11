@@ -1,5 +1,3 @@
-
-
 #ifndef __APRILTAG_DETECTOR_H__
 #define __APRILTAG_DETECTOR_H__
 
@@ -9,9 +7,9 @@
 #include "tbb/tbb.h"
 #endif
 
-#include "board.h"
-#include "detection/detection.h"
-#include "detection_db.h"
+#include "AplCam/board.h"
+#include "AplCam/detection/detection.h"
+#include "AplCam/detection_db.h"
 
 #include "detector.h"
 
@@ -61,7 +59,7 @@ struct AprilTagDetectorFunctor {
 
           //              Mat grey;
           //              cvtColor( p.img, grey, CV_BGR2GRAY );
-          
+
           int64 before = cv::getTickCount();
           detection = _board.detectPattern( p.img );
           int64 elapsed = cv::getTickCount() - before;

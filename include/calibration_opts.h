@@ -7,12 +7,12 @@
 #include <glog/logging.h>
 
 
-#include "image.h"
-#include "calibration_db.h"
-#include "file_utils.h"
+#include "AplCam/image.h"
+#include "AplCam/calibration_db.h"
+#include "AplCam/file_utils.h"
 using namespace AplCam;
 
-#include "distortion/distortion_model.h"
+#include "AplCam/distortion/distortion_model.h"
 using namespace Distortion;
 
 class CalibrationOpts  {

@@ -1,5 +1,3 @@
-
-
 #ifndef __PERMUTATION_HELPERS_H__
 #define __PERMUTATION_HELPERS_H__
 
@@ -22,7 +20,7 @@ struct RandomKeyCounter {
 
 struct IntervalKeyFinder {
   // Ignore end
-  IntervalKeyFinder( int start, int interval ) 
+  IntervalKeyFinder( int start, int interval )
     : _start( start ), _interval( interval ) {;}
 
   int _start, _interval;
@@ -42,4 +40,3 @@ struct IntervalKeyFinder {
 
 
 #endif
-

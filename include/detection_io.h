@@ -3,7 +3,7 @@
 
 #include <string>
 
-#include "detection/detection.h"
+#include "AplCam/detection/detection.h"
 
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
