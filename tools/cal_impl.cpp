@@ -8,6 +8,9 @@
 
 using namespace cv;
 
+#define ANNOTATION_OUTPUT_EXT ".jpg"
+
+
 CalOpts::CalOpts()
   : inFiles(),
     detectionOutput(), boardPath()
@@ -34,6 +37,7 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
   // TCLAP::SwitchArg ignoreCacheArg("i", "ignore-cache", "Ignore cached points", cmd, false );
   TCLAP::SwitchArg doDetectArg("", "detect", "Do detection", cmd, false );
   TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "", "Filename", cmd );
+  TCLAP::ValueArg<string> drawDetectionsArg("", "draw-detections", "", false, "", "Filename", cmd );
 
   TCLAP::ValueArg<string> boardPathArg("", "board", "", false, "", "Filename", cmd );
 
@@ -43,6 +47,7 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
 
   doDetect = doDetectArg.getValue();
   detectionOutput = detectOutputArg.getValue();
+  drawDetectionPath = drawDetectionsArg.getValue();
 
   boardPath = boardPathArg.getValue();
 
@@ -54,8 +59,13 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
 
 bool CalOpts::validateOpts()
 {
+  if( !drawDetectionPath.empty() && !is_directory(drawDetectionPath) ) {
+    LOG(ERROR) << "Detection annotation directory \"" << drawDetectionPath.string() << "\" does not exist";
+    return false;
+  }
+
   if( !boardPath.empty() && !fs::exists(boardPath) ) {
-    LOG(ERROR) << "Specified board description file " << boardPath.string() << " does not exist";
+    LOG(ERROR) << "Specified board description file \"" << boardPath.string() << "\" does not exist";
     return false;
   }
 
@@ -107,7 +117,22 @@ void Cal::doDetect( void )
 
     detectionIO()->save( _inputQueue.frameName(), detection );
 
+
+    if( !_opts.drawDetectionPath.empty() )  drawDetection( img, detection );
+
   }
+}
+
+void Cal::drawDetection( const cv::Mat &img, Detection *detection )
+{
+  fs::path filename( _opts.drawDetectionPath );
+  filename /= _inputQueue.frameName();
+  filename.replace_extension( ANNOTATION_OUTPUT_EXT );
+
+  Mat out;
+  img.copyTo( out );
+  board()->draw( out, detection );
+  imwrite( filename.c_str(), out );
 }
 
 

@@ -72,18 +72,19 @@ add_subdirectory (tools)
 ## Custom Makefile targets for testing cal
 
 set( TEST_CAL_DETECTION_DIR ${CMAKE_CURRENT_BINARY_DIR}/tmp/detections )
-
-add_custom_target( cal_detection_dir
-                    mkdir -p ${TEST_CAL_DETECTION_DIR} )
+set( TEST_CAL_ANNOTATIONS_DIR ${CMAKE_CURRENT_BINARY_DIR}/tmp/annotated )
+add_custom_target( cal_detection_dirs
+                    mkdir -p ${TEST_CAL_DETECTION_DIR} ${TEST_CAL_ANNOTATIONS_DIR} )
 
 list(APPEND CAL_TEST_CMD ${CMAKE_CURRENT_BINARY_DIR}/tools/cal --detect --board ${TEST_DATA_DIR}/boards/april_poster_45in.yml)
 list(APPEND CAL_TEST_CMD --detections-io ${TEST_CAL_DETECTION_DIR} )
+list(APPEND CAL_TEST_CMD --draw-detections ${TEST_CAL_ANNOTATIONS_DIR} )
 list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom8.png)
 list(APPEND CAL_TEST_CMD ${TEST_DATA_DIR}/images/camhd_apriltags_zoom6.png)
 
 add_custom_target( test_cal
                     ${CAL_TEST_CMD}
-                    DEPENDS cal cal_detection_dir )
+                    DEPENDS cal cal_detection_dirs )
 
 add_custom_target( gdb_cal
                     gdb --args ${CAL_TEST_CMD}

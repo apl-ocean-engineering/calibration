@@ -50,8 +50,7 @@ bool DetectionIODir::save( const string &name, Detection *detection )
 
   LOG(INFO) << "Saving detections to \"" << filename.string() << "\"";
 
-  string data;
-  detection->serialize( data );
+  string data(detection->serialize());
 
   ofstream of( filename.string() );
   if( !of.is_open() ) {

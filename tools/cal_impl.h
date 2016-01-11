@@ -25,7 +25,7 @@ public:
   ~CalOpts() {;}
 
   vector< fs::path > inFiles;
-  fs::path detectionOutput, boardPath;
+  fs::path detectionOutput, drawDetectionPath, boardPath;
   bool doDetect;
 
   bool parseOpts( int argc, char **argv );
@@ -65,6 +65,8 @@ class Cal {
 
 
   protected:
+
+    void drawDetection( const cv::Mat &img, Detection *detection );
 
     // Eager-load
     Board *board( void );
