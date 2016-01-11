@@ -99,7 +99,7 @@ void Cal::doDetect( void )
       LOG(INFO) << "No detections for frame " << _inputQueue.frameName();
       continue;
     }
-    if( detection->found ){
+    if( detection->good() ){
       LOG(INFO) << "  Found calibration pattern with " << detection->size() << " points";
     }
   }
