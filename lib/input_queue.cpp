@@ -14,7 +14,7 @@ InputQueue::InputQueue( const vector<fs::path> &files )
 
 cv::Mat InputQueue::nextFrame( void )
 {
-  // For now, only handles images
+  // For now, only handles images.  Eventually will also handle video(s)
 
   do {
     ++_idx;

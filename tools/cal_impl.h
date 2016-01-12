@@ -64,6 +64,9 @@ class Cal {
 
   protected:
 
+    ImagePointsVec imagePoints() const;
+    ObjectPointsVec objectPoints() const;
+
     void drawDetection( const cv::Mat &img, Detection *detection );
 
     // Eager-load
@@ -78,6 +81,9 @@ class Cal {
     Board *_board;
     DetectionIO *_detectionIO;
     DistortionModel *_model;
+
+    //
+    std::vector< Detection * > _detections;
 };
 
 

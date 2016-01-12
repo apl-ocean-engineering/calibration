@@ -91,11 +91,20 @@ bool CalOpts::validateOpts()
 
 Cal::Cal( CalOpts &opts )
   : _opts( opts ), _inputQueue( _opts.inFiles ),
-    _board( NULL ), _detectionIO( NULL )
+    _board( NULL ), _detectionIO( NULL ),
+    _detections( NULL )
 {;}
 
 Cal::~Cal()
 {
+  // Delete any detections
+  for( unsigned int i = 0; i < _detections.size(); ++i ) {
+    if( _detections[i] != NULL ) {
+      delete _detections[i];
+      _detections[i] = NULL;
+    }
+  }
+
   if( _board != NULL ) delete _board;
 }
 
@@ -134,6 +143,8 @@ void Cal::doDetect( void )
 
     if( !_opts.drawDetectionPath.empty() )  drawDetection( img, detection );
 
+    _detections.push_back( detection );
+
   }
 }
 
@@ -154,10 +165,40 @@ void Cal::drawDetection( const cv::Mat &img, Detection *detection )
 void Cal::doCalibrate( void )
 {
   CalibrationResult result;
-  // model()->calibrate( objectPoints, imagePoints,
-  //     imageSize, result, flags );
+
+  model()->calibrate( objectPoints(), imagePoints(),
+                      imageSize, result, flags );
 }
 
+ImagePointsVec Cal::imagePoints() const
+{
+  ImagePointsVec out;
+
+  for( unsigned int i = 0; i < _detections.size(); ++i ) {
+    if( _detections[i] != NULL ) {
+      for( unsigned int j = 0; j < _detections[i].points.size(); ++j ) {
+        out.push_back( _detections[i].points[j] );
+      }
+    }
+  }
+
+  return out;
+}
+
+ObjectPointsVec Cal::objectPoints() const
+{
+  ObjectPointsVec out;
+
+  for( unsigned int i = 0; i < _detections.size(); ++i ) {
+    if( _detections[i] != NULL ) {
+      for( unsigned int j = 0; j < _detections[i].corners.size(); ++j ) {
+        out.push_back( _detections[i].corners[j] );
+      }
+    }
+  }
+
+  return out;
+}
 
 //--------------------------------------------------------------
 // Eager-load functions
