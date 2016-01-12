@@ -26,6 +26,7 @@ link_libraries( ${camera_calibration_LIBS} )
 # add_executable( test_video test_video.cpp )
 
  set( CALIBRATION_SRCS
+    ../lib/input_queue.cpp 
     ../lib/detection_io.cpp )
 #   ../lib/calibrator.cpp
 #   ../lib/calibration_opts.cpp )

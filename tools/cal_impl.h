@@ -13,11 +13,16 @@
 namespace fs = boost::filesystem;
 
 #include "AplCam/board/board.h"
+#include "AplCam/distortion/distortion_model.h"
+
 #include "detection_io.h"
+#include "input_queue.h"
 
 using namespace std;
 using namespace AplCam;
+using namespace Distortion;
 using namespace CameraCalibration;
+
 
 class CalOpts {
 public:
@@ -25,33 +30,26 @@ public:
   ~CalOpts() {;}
 
   vector< fs::path > inFiles;
-  fs::path detectionOutput, drawDetectionPath, boardPath;
-  bool doDetect, doCalibrate;
+
+  fs::path boardPath;
+
+  bool doDetect;
+  fs::path detectionOutput, drawDetectionPath;
+
+  bool doCalibrate;
+  DistortionModel::DistortionModelType_t distortionModel;
 
   bool parseOpts( int argc, char **argv );
 
 protected:
 
   void doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv );
-
   bool validateOpts();
 
 };
 
 
-class InputQueue {
-public:
-  InputQueue( const vector<fs::path> &files );
 
-  cv::Mat nextFrame( void );
-  std::string frameName( void );
-
-protected:
-
-  const vector<fs::path> &_files;
-  int _idx;
-
-};
 
 class Cal {
   public:
@@ -71,14 +69,15 @@ class Cal {
     // Eager-load
     Board *board( void );
     DetectionIO *detectionIO( void );
-
+    DistortionModel *model( void );
 
   private:
 
-   CalOpts _opts;
-   InputQueue _inputQueue;
-   Board *_board;
-   DetectionIO *_detectionIO;
+    CalOpts _opts;
+    InputQueue _inputQueue;
+    Board *_board;
+    DetectionIO *_detectionIO;
+    DistortionModel *_model;
 };
 
 

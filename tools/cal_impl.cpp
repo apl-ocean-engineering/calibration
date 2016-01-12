@@ -12,8 +12,7 @@ using namespace cv;
 
 
 CalOpts::CalOpts()
-  : inFiles(),
-    detectionOutput(), boardPath()
+  : inFiles()
 {;}
 
 
@@ -33,25 +32,29 @@ bool CalOpts::parseOpts( int argc, char **argv )
 
 void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
 {
-  // TCLAP::SwitchArg retryUnregArg("r", "retry-unregistered", "Retry unregistered point", cmd, false );
-  // TCLAP::SwitchArg ignoreCacheArg("i", "ignore-cache", "Ignore cached points", cmd, false );
+  TCLAP::ValueArg<string> boardPathArg("", "board", "", false, "", "Filename", cmd );
+
+  // Detection opts
   TCLAP::SwitchArg doDetectArg("", "detect", "Do detection", cmd, false );
   TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "", "Filename", cmd );
   TCLAP::ValueArg<string> drawDetectionsArg("", "draw-detections", "", false, "", "Filename", cmd );
 
+  // Calibration opts
   TCLAP::SwitchArg doCalibrateArg("", "calibrate", "Do calibrate", cmd, false );
-
-  TCLAP::ValueArg<string> boardPathArg("", "board", "", false, "", "Filename", cmd );
+  TCLAP::ValueArg<string> distortionModelArg("", "distortion-model", "", false, "", "{radial|angular}", cmd );
 
   TCLAP::UnlabeledMultiArg< std::string > inFilesArg( "in-files", "Input files", true, "File names", cmd );
 
   cmd.parse( argc, argv );
 
+  boardPath = boardPathArg.getValue();
+
   doDetect = doDetectArg.getValue();
   detectionOutput = detectOutputArg.getValue();
   drawDetectionPath = drawDetectionsArg.getValue();
 
-  boardPath = boardPathArg.getValue();
+  doCalibrate = doCalibrateArg.getValue();
+  distortionModel = DistortionModel::ParseDistortionModel( distortionModelArg.getValue() );
 
   vector< string > inputs = inFilesArg.getValue();
   for( vector<string>::const_iterator itr = inputs.begin(); itr != inputs.end(); ++itr )
@@ -61,13 +64,18 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
 
 bool CalOpts::validateOpts()
 {
+  if( !boardPath.empty() && !fs::exists(boardPath) ) {
+    LOG(ERROR) << "Specified board description file \"" << boardPath.string() << "\" does not exist";
+    return false;
+  }
+
   if( !drawDetectionPath.empty() && !is_directory(drawDetectionPath) ) {
     LOG(ERROR) << "Detection annotation directory \"" << drawDetectionPath.string() << "\" does not exist";
     return false;
   }
 
-  if( !boardPath.empty() && !fs::exists(boardPath) ) {
-    LOG(ERROR) << "Specified board description file \"" << boardPath.string() << "\" does not exist";
+  if( distortionModel == DistortionModel::CALIBRATION_NONE ) {
+    LOG(ERROR) << "Unknown distorion model";
     return false;
   }
 
@@ -78,7 +86,7 @@ bool CalOpts::validateOpts()
 
 
 //===================================================================
-// InputQueue
+// Cal
 //===================================================================
 
 Cal::Cal( CalOpts &opts )
@@ -124,7 +132,6 @@ void Cal::doDetect( void )
 
     detectionIO()->save( _inputQueue.frameName(), detection );
 
-
     if( !_opts.drawDetectionPath.empty() )  drawDetection( img, detection );
 
   }
@@ -146,18 +153,9 @@ void Cal::drawDetection( const cv::Mat &img, Detection *detection )
 // Calibration functions
 void Cal::doCalibrate( void )
 {
-  int flags =  opts.calibFlags();
-
-  DistortionModel *distModel = DistortionModel::MakeDistortionModel( opts.calibType );
-
-  if( !distModel ) {
-    cerr << "Something went wrong making a distortion model." << endl;
-    exit(-1);
-  }
-
   CalibrationResult result;
-  distModel->calibrate( objectPoints, imagePoints,
-      imageSize, result, flags );
+  // model()->calibrate( objectPoints, imagePoints,
+  //     imageSize, result, flags );
 }
 
 
@@ -183,36 +181,18 @@ DetectionIO *Cal::detectionIO( void )
 
   _detectionIO = DetectionIO::Create( _opts.detectionOutput );
 
-  if( _detectionIO == NULL ) {
-    LOG(FATAL) << "Unable to create detection I/O " << _opts.detectionOutput;
-  }
+  if( _detectionIO == NULL ) LOG(FATAL) << "Unable to create detection I/O " << _opts.detectionOutput;
 
   return _detectionIO;
-
 }
 
-//===================================================================
-// InputQueue
-//===================================================================
-
-
-InputQueue::InputQueue( const vector<fs::path> &files )
-  : _files( files ), _idx(-1)
-{;}
-
-cv::Mat InputQueue::nextFrame( void )
+DistortionModel *Cal::model( void )
 {
-  // For now, only handles images
+  if( _model != NULL ) return _model;
 
-  do {
-    ++_idx;
-    if( (unsigned int)_idx >= _files.size() ) return Mat();
-  } while( !fs::exists(_files[_idx]) );
+  _model = DistortionModel::MakeDistortionModel( _opts.distortionModel );
 
-  return cv::imread( _files[_idx].string() );
-}
+  if( _model == NULL ) LOG(FATAL) << "Unable to create distortion model " << _opts.detectionOutput;
 
-std::string InputQueue::frameName( void )
-{
-  return _files[_idx].stem().string();
+  return _model;
 }
