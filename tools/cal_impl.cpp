@@ -1,6 +1,7 @@
 
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+// #include <opencv2/imgcodecs.hpp>
 
 #include "cal_impl.h"
 
@@ -92,7 +93,7 @@ bool CalOpts::validateOpts()
 Cal::Cal( CalOpts &opts )
   : _opts( opts ), _inputQueue( _opts.inFiles ),
     _board( NULL ), _detectionIO( NULL ),
-    _detections( NULL )
+    _detections( )
 {;}
 
 Cal::~Cal()
@@ -166,8 +167,9 @@ void Cal::doCalibrate( void )
 {
   CalibrationResult result;
 
-  model()->calibrate( objectPoints(), imagePoints(),
-                      imageSize, result, flags );
+  // TODO.   Uh, need this...
+  // model()->calibrate( objectPoints(), imagePoints(),
+  //                     imageSize, result, flags );
 }
 
 ImagePointsVec Cal::imagePoints() const
@@ -176,8 +178,8 @@ ImagePointsVec Cal::imagePoints() const
 
   for( unsigned int i = 0; i < _detections.size(); ++i ) {
     if( _detections[i] != NULL ) {
-      for( unsigned int j = 0; j < _detections[i].points.size(); ++j ) {
-        out.push_back( _detections[i].points[j] );
+      for( unsigned int j = 0; j < _detections[i]->points.size(); ++j ) {
+        out.push_back( _detections[i]->points[j] );
       }
     }
   }
@@ -191,8 +193,8 @@ ObjectPointsVec Cal::objectPoints() const
 
   for( unsigned int i = 0; i < _detections.size(); ++i ) {
     if( _detections[i] != NULL ) {
-      for( unsigned int j = 0; j < _detections[i].corners.size(); ++j ) {
-        out.push_back( _detections[i].corners[j] );
+      for( unsigned int j = 0; j < _detections[i]->corners.size(); ++j ) {
+        out.push_back( _detections[i]->corners[j] );
       }
     }
   }

@@ -1,7 +1,7 @@
 
-#include "input_queue.h"
+#include <opencv2/highgui/highgui.hpp>
 
-#include <opencv2/imgcodecs.hpp>
+#include "input_queue.h"
 
 using namespace std;
 using namespace cv;

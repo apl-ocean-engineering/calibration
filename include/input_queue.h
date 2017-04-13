@@ -7,7 +7,7 @@ namespace fs = boost::filesystem;
 #include <vector>
 #include <string>
 
-#include <opencv2/core.hpp>
+#include <opencv2/core/core.hpp>
 
 namespace CameraCalibration {
 

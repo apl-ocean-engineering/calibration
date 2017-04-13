@@ -1,18 +1,10 @@
 cmake_minimum_required (VERSION 2.8)
 project (camera_calibration)
 
-set(CMAKE_C_FLAGS "-ggdb -Wall")
-set(CMAKE_CXX_FLAGS "-ggdb -Wall")
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup()
 
-#set(CMAKE_BUILD_TYPE Debug )
-#set(CMAKE_C_FLAGS_DEBUG, "-Wall -ggdb")
-#set(CMAKE_CXX_FLAGS_DEBUG, "-Wall -ggdb")
-#
-#set(CMAKE_C_FLAGS_RELEASE, "-Werror")
-#set(CMAKE_CXX_FLAGS_RELEASE, "-Werror")
-
-list(APPEND CMAKE_MODULE_PATH "${camera_calibration_SOURCE_DIR}/cmake")
-
+find_package( OpenCV 2.4 REQUIRED core highgui imgproc )
 find_package( GTest )
 find_package( PCL 1.2 REQUIRED )
 
@@ -21,24 +13,10 @@ if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
-# set( AplCam_SOURCE_DIR "/home/aaron/workspace/vision_exp/aplcam")
-# set( Apriltags_SOURCE_DIR "/home/aaron/workspace/vision_exp/apriltags")
 
-option( USE_APRILTAGS "Use AprilTags" ON )
-if( USE_APRILTAGS )
-  add_definitions( -DUSE_APRILTAGS )
-  find_package( Apriltags REQUIRED )
- 	#include_directories( "${apriltags_INCLUDE_DIR}" )
-endif()
-
-# Packages with by local Find*.cmake files
-find_package( AplCam REQUIRED )
-
-
-
-## Get these from aplcam's cmake directory
-#find_package( TCLAP REQUIRED )
-#find_package( Eigen REQUIRED )
+find_package( GSL REQUIRED )
+find_package( Boost REQUIRED COMPONENTS thread system filesystem )
+set( Boost_USE_MULTITHREADED ON )
 
 # KyotoCabinet stuff
 find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
@@ -54,12 +32,18 @@ add_definitions( -std=c++11 )
 
 set( camera_calibration_INCLUDE_DIRS
 	   ${CMAKE_SOURCE_DIR}/include
-	   ${aplcam_INCLUDE_DIRS}
+	   ${CONAN_INCLUDE_DIRS}
      ${KyotoCabinet_INCLUDE_DIRS} )
 
 set( camera_calibration_LIBS
-	    ${aplcam_LIBS}
-      ${KyotoCabinet_LIBRARIES} )
+	    ${CONAN_LIBS}
+      ${OpenCV_LIBS}
+      ${Boost_LIBRARIES}
+  		${CERES_LIBRARY}
+  		${GSL_LIBRARIES}
+      ${KyotoCabinet_LIBRARIES}
+    glog
+  cryptopp )
 
 link_directories( ${PCL_LIBRARY_DIRS} )
 
