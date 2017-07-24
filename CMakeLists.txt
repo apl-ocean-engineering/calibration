@@ -4,7 +4,9 @@ project (camera_calibration)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
+set( CUDA_USE_STATIC_CUDA_RUNTIME OFF )
 find_package( OpenCV 2.4 REQUIRED core highgui imgproc )
+
 find_package( GTest )
 find_package( PCL 1.2 REQUIRED )
 
