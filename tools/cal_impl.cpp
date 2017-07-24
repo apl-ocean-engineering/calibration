@@ -37,12 +37,12 @@ void CalOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv )
 
   // Detection opts
   TCLAP::SwitchArg doDetectArg("", "detect", "Do detection", cmd, false );
-  TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "", "Filename", cmd );
+  TCLAP::ValueArg<string> detectOutputArg("", "detections-io", "", false, "detections/", "Directory", cmd );
   TCLAP::ValueArg<string> drawDetectionsArg("", "draw-detections", "", false, "", "Filename", cmd );
 
   // Calibration opts
   TCLAP::SwitchArg doCalibrateArg("", "calibrate", "Do calibrate", cmd, false );
-  TCLAP::ValueArg<string> distortionModelArg("", "distortion-model", "", false, "", "{radial|angular}", cmd );
+  TCLAP::ValueArg<string> distortionModelArg("", "distortion-model", "", false, "radial", "{radial|angular}", cmd );
 
   TCLAP::UnlabeledMultiArg< std::string > inFilesArg( "in-files", "Input files", true, "File names", cmd );
 
@@ -128,6 +128,9 @@ void Cal::doDetect( void )
   detectionIO();
 
   while( !(img = _inputQueue.nextFrame()).empty() ) {
+
+    cv::imshow("foo",img);
+    cv::waitKey(0);
 
     cvtColor(img, imgGray, COLOR_BGR2GRAY);
 

@@ -1,4 +1,6 @@
 
+#include <iostream>
+
 #include <opencv2/highgui/highgui.hpp>
 
 #include "input_queue.h"
@@ -20,6 +22,8 @@ cv::Mat InputQueue::nextFrame( void )
     ++_idx;
     if( (unsigned int)_idx >= _files.size() ) return Mat();
   } while( !fs::exists(_files[_idx]) );
+
+  cout << "Reading " << _files[_idx].string() << endl;
 
   return cv::imread( _files[_idx].string() );
 }
