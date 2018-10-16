@@ -1,11 +1,27 @@
 
 
 
-set( SONAR_SRCS
-  ../lib/sonar_calibration_solver.cpp )
+# set( SONAR_SRCS
+#   ../lib/sonar_calibration_solver.cpp )
 
-include_directories( ${camera_calibration_INCLUDE_DIRS} )
-link_libraries( ${camera_calibration_LIBS} )
+
+#fips_include_directories( ${camera_calibration_INCLUDE_DIRS} )
+
+set( CALIBRATION_SRCS
+    ../lib/input_queue.cpp
+    ../lib/detection_io.cpp )
+#   ../lib/calibrator.cpp
+#   ../lib/calibration_opts.cpp )
+#
+# add_executable( calibration calibration.cpp
+#   ${CALIBRATION_SRCS} )
+
+fips_begin_app( cal cmdline )
+  fips_files( cal.cpp cal_impl.cpp
+            ${CALIBRATION_SRCS} )
+
+  fips_deps( camera_calibration )
+fips_end_app()
 
 # add_executable( extract extract.cpp )
 #
@@ -25,17 +41,6 @@ link_libraries( ${camera_calibration_LIBS} )
 #
 # add_executable( test_video test_video.cpp )
 
- set( CALIBRATION_SRCS
-    ../lib/input_queue.cpp 
-    ../lib/detection_io.cpp )
-#   ../lib/calibrator.cpp
-#   ../lib/calibration_opts.cpp )
-#
-# add_executable( calibration calibration.cpp
-#   ${CALIBRATION_SRCS} )
-
-  add_executable( cal cal.cpp cal_impl.cpp
-    ${CALIBRATION_SRCS} )
 
 # add_executable( video_calibration video_calibration.cpp  ${CALIBRATION_SRCS} )
 #

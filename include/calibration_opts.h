@@ -29,7 +29,7 @@ class CalibrationOpts  {
     string boardName;
     string cameraName;
 
-    DistortionModel::CalibrationType_t calibType;
+    DistortionModel::DistortionModelType_t calibType;
 
     bool overwriteDb;
     bool huberLoss, fixSkew;

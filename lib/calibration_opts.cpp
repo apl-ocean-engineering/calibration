@@ -58,7 +58,7 @@ void CalibrationOpts::doParseCmdLine( TCLAP::CmdLine &cmd, int argc, char **argv
   doValidate = doValidateArg.getValue();
   huberLoss  = huberLossArg.getValue();
 
-  calibType = DistortionModel::ParseCalibrationType( calibTypeArg.getValue() );
+  calibType = DistortionModel::ParseDistortionModel( calibTypeArg.getValue() );
 }
 
 

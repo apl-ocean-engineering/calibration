@@ -1,0 +1,20 @@
+imports:
+    fips-googletest:
+        git: https://github.com/amarburg/fips-googletest.git
+    apriltags:
+      git: https://github.com/amarburg/apriltags.git
+      branch: fips
+    aplcam:
+      git: https://github.com//amarburg/aplcam.git
+      branch:
+
+exports:
+   header-dirs:
+     - include/
+   modules:
+     camera_calibration: .
+
+defines:
+  FIPS_UNITTESTS_RUN_AFTER_BUILD: ON
+  FIPS_RTTI: ON
+  FIPS_EXCEPTIONS: ON

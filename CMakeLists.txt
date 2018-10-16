@@ -1,20 +1,23 @@
-cmake_minimum_required (VERSION 2.8)
-project (camera_calibration)
+if (NOT FIPS_IMPORT)
+  cmake_minimum_required(VERSION 3.5.0)
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+  get_filename_component(FIPS_ROOT_DIR "../fips" ABSOLUTE)
+  include("${FIPS_ROOT_DIR}/cmake/fips.cmake")
+
+  fips_setup(PROJECT camera_calibration)
+endif()
 
 set( CUDA_USE_STATIC_CUDA_RUNTIME OFF )
-find_package( OpenCV 2.4 REQUIRED core highgui imgproc )
+find_package( OpenCV REQUIRED core highgui imgproc )
 
-find_package( GTest )
-find_package( PCL 1.2 REQUIRED )
+#find_package( PCL 1.2 REQUIRED )
 
 option( USE_TBB "Use TBB" ON )
 if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
+find_package( Ceres REQUIRED )
 
 find_package( GSL REQUIRED )
 find_package( Boost REQUIRED COMPONENTS thread system filesystem )
@@ -32,28 +35,24 @@ set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
 
 add_definitions( -std=c++11 )
 
-set( camera_calibration_INCLUDE_DIRS
-	   ${CMAKE_SOURCE_DIR}/include
-	   ${CONAN_INCLUDE_DIRS}
-     ${KyotoCabinet_INCLUDE_DIRS} )
+# set( camera_calibration_INCLUDE_DIRS
+# 	   ${CMAKE_SOURCE_DIR}/include
+#      ${KyotoCabinet_INCLUDE_DIRS} )
 
-set( camera_calibration_LIBS
-	    ${CONAN_LIBS}
-      ${OpenCV_LIBS}
-      ${Boost_LIBRARIES}
-  		${CERES_LIBRARY}
-  		${GSL_LIBRARIES}
-      ${KyotoCabinet_LIBRARIES}
-    glog
-  cryptopp )
+# set( camera_calibration_LIBS
+#       ${OpenCV_LIBS}
+#       ${Boost_LIBRARIES}
+#   		${CERES_LIBRARY}
+#   		${GSL_LIBRARIES}
+#       ${KyotoCabinet_LIBRARIES}
+#     glog
+#   cryptopp )
 
-link_directories( ${PCL_LIBRARY_DIRS} )
+# link_directories( ${PCL_LIBRARY_DIRS} )
 
 # Location for test images used by unit and performance tests
 set( TEST_DATA_DIR ${CMAKE_SOURCE_DIR}/test/data )
 #add_definitions( -DTEST_DATA_DIR="${TEST_DATA_DIR}" )
-
-add_subdirectory (tools)
 
 ## Custom Makefile targets for testing cal
 
@@ -73,4 +72,19 @@ add_custom_target( test_cal
 
 add_custom_target( gdb_cal
                     gdb --args ${CAL_TEST_CMD}
-                    DEPENDS cal cal_detection_dir )
+                  DEPENDS cal cal_detection_dir )
+
+fips_include_directories( include/ )
+
+fips_add_subdirectory( lib/ )
+
+if( NOT FIPS_IMPORT )
+  fips_add_subdirectory( tools/ )
+
+  # if( FIPS_UNITTESTS )
+  #   ## Build a local copy of gtest (as per the GTest FAQ)
+  #   fips_add_subdirectory( test/unit/ )
+  # endif()
+
+  fips_finish()
+endif()

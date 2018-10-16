@@ -7,8 +7,6 @@
 
 #include <tclap/CmdLine.h>
 
-#include <glog/logging.h>
-
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 

@@ -6,7 +6,7 @@
 #include "AplCam/detection_set.h"
 #include "AplCam/calibration_db.h"
 #include "AplCam/calibration_result.h"
-#include "AplCam/board.h"
+#include "AplCam/board/board.h"
 using namespace AplCam;
 
 #include "AplCam/distortion/distortion_model.h"
