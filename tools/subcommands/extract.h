@@ -10,9 +10,9 @@
 namespace calibration {
 
   struct ExtractOptions {
-
     std::vector< std::string > inFiles;
-
+    std::string boardName;
+    std::string databaseName;
   };
 
 

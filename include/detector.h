@@ -5,7 +5,7 @@
 
 #include <opencv2/core/core.hpp>
 
-namespace CameraCalibration {
+namespace camera_calibration {
 
   using cv::Mat;
 

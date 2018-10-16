@@ -1,5 +1,10 @@
 
+#include <opencv2/core.hpp>
+
 #include "extract.h"
+
+#include "input_queue.h"
+
 
 namespace calibration {
 
@@ -9,12 +14,10 @@ namespace calibration {
     auto sub = app.add_subcommand("extract", "extract fiducial marks");
 
     sub->add_option("infiles", opt->inFiles, "Input files (movies or images)");
+    sub->add_option("-b,--board", opt->boardName, "Name of calibration board");
+    sub->add_option("-d,--database", opt->databaseName, "Name of database");
 
-    // Add options to sub, binding them to opt.
-    // sub->add_option("-f,--file", opt->file, "File name")->required();
-    // sub->add_flag("--with-foo", opt->with_foo, "Counter");
 
-    // Set the run function as callback to be called when this subcommand is issued.
     sub->set_callback([opt]() { Extract::Run(*opt); });
   }
 
@@ -30,8 +33,21 @@ namespace calibration {
     {;}
 
   void Extract::run() {
-
     LOG(WARNING) << "In Extract::run";
+
+    camera_calibration::InputQueue queue( _opts.inFiles );
+
+    cv::Mat img;
+    while( queue.nextFrame(img) ) {
+      LOG(WARNING) << "Loading " << queue.frameName();
+      if( img.empty() ) {
+        LOG(WARNING) << "Read empty mat";
+        continue;
+      }
+
+
+
+    }
 
   }
 

@@ -1,5 +1,4 @@
-#ifndef __INPUT_QUEUE_H__
-#define __INPUT_QUEUE_H__
+#pragma once
 
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
@@ -9,23 +8,22 @@ namespace fs = boost::filesystem;
 
 #include <opencv2/core/core.hpp>
 
-namespace CameraCalibration {
+namespace camera_calibration {
 
 class InputQueue {
 public:
   InputQueue( const std::vector<fs::path> &files );
+  InputQueue( const std::vector<std::string> &files );
 
-  cv::Mat nextFrame( void );
+
+  bool nextFrame( cv::Mat &mat );
   std::string frameName( void );
 
 protected:
 
-  const std::vector<fs::path> &_files;
+  std::vector<fs::path> _files;
   int _idx;
 
 };
 
 }
-
-
-#endif

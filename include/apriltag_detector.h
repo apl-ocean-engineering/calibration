@@ -13,7 +13,7 @@
 
 #include "detector.h"
 
-namespace CameraCalibration {
+namespace camera_calibration {
 
 using cv::Mat;
 using cv::Point2f;

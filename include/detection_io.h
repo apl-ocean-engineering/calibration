@@ -8,7 +8,7 @@
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
-namespace CameraCalibration {
+namespace camera_calibration {
 
   using AplCam::Detection;
 

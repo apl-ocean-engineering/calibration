@@ -272,7 +272,8 @@ Mat GuidedFilterDarkChannelPrior::calculateDehazed(const Mat &source, const Mat 
   const int radius = 5;
   const double eps = 0.1;
 
-  ximgproc::guidedFilter( source, t, Priord, radius, eps );
+  LOG(WARNING) << "Skipping call to ximgproc::guidedFilter!";
+//  ximgproc::guidedFilter( source, t, Priord, radius, eps );
 
   return Priord;
 }

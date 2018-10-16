@@ -5,7 +5,7 @@
 #include "detection_io.h"
 
 
-namespace CameraCalibration {
+namespace camera_calibration {
 
 using namespace std;
 using namespace cv;

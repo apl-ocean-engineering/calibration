@@ -26,6 +26,7 @@ public:
 
   void processGlobalOpts( GlobalOpts const &opts ) {
 
+    LOG_IF( WARNING, opts.verbosity > 0) << "Setting verbosity to " << opts.verbosity;
     switch(opts.verbosity) {
     case 1:
       _logger.stderrHandle->call( &ColorStderrSink::setThreshold, INFO );
@@ -53,7 +54,7 @@ int main( int argc, char** argv )
   GlobalOpts opts;
   app.add_flag("-v", opts.verbosity, "Additional output (use -vv for even more!)");
 
-  app.set_callback( std::bind( &TopLevelApp::processGlobalOpts, &cal, opts ) );
+  app.set_callback( std::bind( &TopLevelApp::processGlobalOpts, &cal, std::ref(opts) ) );
 
   // Add subcommands
   Extract::SetupSubcommand( app );
