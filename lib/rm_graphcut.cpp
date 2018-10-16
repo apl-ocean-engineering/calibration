@@ -40,6 +40,7 @@
 //M*/
 
 #include <glog/logging.h>
+#include <math.h>
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
@@ -311,7 +312,7 @@ bool RMGraphCut::initGMMs( void )
 
 
   Point p;
-  for( p.y = 0; p.y < _csImage.rows; p.y++ )
+  for( p.y = 0; p.y < _csImage.rows; p.y++ ) {
     for( p.x = 0; p.x < _csImage.cols; p.x++ ) {
       // Does ignore always get its own GMM?
       if( labelAt(p) & G_IGNORE ) {
@@ -322,7 +323,7 @@ bool RMGraphCut::initGMMs( void )
         bgdSamples.push_back( (Vec3f)_csImage.at<Vec3b>(p) );
       }
     }
-
+  }
 
     Mat fgdIndices, bgdIndices, ignIndices;
   //Mat _bgdSamples( (int)bgdSamples.size(), 3, CV_32FC1, &bgdSamples[0][0] );

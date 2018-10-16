@@ -1,11 +1,11 @@
-#ifndef __SONAR_IMAGE_WARPER_H__
-#define __SONAR_IMAGE_WARPER_H__
+#pragma once
 
-#include "opencv2/core.hpp"
+#include <opencv2/core.hpp>
 
 #include "AplCam/distortion/distortion_model.h"
+#include "AplCam/sonar_pose.h"
 
-#include "sonar_pose.h"
+namespace camera_calibration {
 
 // Puts the relevant math in one place.
 class SonarImageWarper {
@@ -29,4 +29,4 @@ protected:
 
 };
 
-#endif
+}

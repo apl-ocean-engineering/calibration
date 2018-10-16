@@ -7,20 +7,20 @@
 
 #fips_include_directories( ${camera_calibration_INCLUDE_DIRS} )
 
-set( CALIBRATION_SRCS
-    ../lib/input_queue.cpp
-    ../lib/detection_io.cpp )
-#   ../lib/calibrator.cpp
-#   ../lib/calibration_opts.cpp )
-#
-# add_executable( calibration calibration.cpp
-#   ${CALIBRATION_SRCS} )
+# set( CALIBRATION_SRCS
+#     ../lib/input_queue.cpp
+#     ../lib/detection_io.cpp )
+# #   ../lib/calibrator.cpp
+# #   ../lib/calibration_opts.cpp )
+# #
+# # add_executable( calibration calibration.cpp
+# #   ${CALIBRATION_SRCS} )
 
 fips_begin_app( cal cmdline )
-  fips_files( cal.cpp cal_impl.cpp
-            ${CALIBRATION_SRCS} )
+  fips_files( cal.cpp ) #cal_impl.cpp ${CALIBRATION_SRCS} )
+  fips_src( subcommands/ )
 
-  fips_deps( camera_calibration )
+  fips_deps( camera_calibration g3logger )
 fips_end_app()
 
 # add_executable( extract extract.cpp )

@@ -17,8 +17,6 @@ using Distortion::DistortionModel;
 
 using cv::Size;
 
-
-
 class Calibrator {
   public:
 

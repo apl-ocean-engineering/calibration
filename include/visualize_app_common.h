@@ -1,10 +1,8 @@
+#pragma once
+
 // Blatantly ``borrowed'' from  PCL visualization demo
 //
 /* \author Geoffrey Biggs */
-
-#ifndef __VISUALIZE_APP_COMMON_H__
-#define __VISUALIZE_APP_COMMON_H__
-
 
 #include <iostream>
 #include <fstream>
@@ -29,10 +27,11 @@
 
 #include "background_segmenter.h"
 
+namespace camera_calibration {
+
 using namespace std;
 using namespace cv;
 using namespace Distortion;
-
 
 class VisualizerOpts {
 public:
@@ -316,4 +315,4 @@ protected:
   boost::shared_ptr< pcl::PointCloud<pcl::PointXYZRGB> > inliers, outliers;
 };
 
-#endif
+}

@@ -1,50 +1,87 @@
-// #include "opencv2/core/core.hpp"
-// #include "opencv2/imgproc/imgproc.hpp"
-// #include "opencv2/calib3d/calib3d.hpp"
-// #include "opencv2/highgui/highgui.hpp"
 
-// #include <cctype>
+#include <CLI/CLI.hpp>
 
-#include <stdio.h>
-// #include <string.h>
-// #include <time.h>
-// #include <getopt.h>
-//
-// #include <iostream>
-//
-// #include "my_undistort.h"
-//
-// #include "distortion/distortion_model.h"
-// #include "distortion/angular_polynomial.h"
-// #include "distortion/radial_polynomial.h"
-// using namespace Distortion;
-//
-// #include "file_utils.h"
-// #include "board.h"
-// #include "detection/detection.h"
-// #include "image.h"
-// #include "calibration_serializer.h"
-//
-// #include "calibration_opts.h"
+#include "libg3logger/g3logger.h"
 
-// using namespace cv;
-// using namespace AplCam;
+#include "subcommands/extract.h"
 
-#include "cal_impl.h"
+using namespace calibration;
+
+
+struct GlobalOpts {
+  GlobalOpts()
+    : verbosity(0)
+    {;}
+
+  int verbosity;
+
+};
+
+class TopLevelApp {
+public:
+  TopLevelApp()
+    : _logger("cal")
+  {;}
+
+
+  void processGlobalOpts( GlobalOpts const &opts ) {
+
+    switch(opts.verbosity) {
+    case 1:
+      _logger.stderrHandle->call( &ColorStderrSink::setThreshold, INFO );
+      break;
+    case 2:
+      _logger.stderrHandle->call( &ColorStderrSink::setThreshold, DEBUG );
+      break;
+    }
+  }
+
+private:
+
+  libg3logger::G3Logger _logger;
+};
 
 
 
 int main( int argc, char** argv )
 {
-  google::InitGoogleLogging(argv[0]);
-  FLAGS_logtostderr = true;
+  TopLevelApp cal;
+//  libg3logger::G3Logger logger("serdp_recorder");
+  CLI::App app{"Image calibration toolbox"};
 
-  CalOpts opts;
+  //=== Global options ===
+  GlobalOpts opts;
+  app.add_flag("-v", opts.verbosity, "Additional output (use -vv for even more!)");
 
-  opts.parseOpts( argc, argv );
+  app.set_callback( std::bind( &TopLevelApp::processGlobalOpts, &cal, opts ) );
 
-  Cal cal( opts );
-  exit( cal.run() );
+  // Add subcommands
+  Extract::SetupSubcommand( app );
+
+  CLI11_PARSE(app, argc, argv);
+
+
+
+
+  // switch(verbosity) {
+  //   case 1:
+  //     logger.stderrHandle->call( &ColorStderrSink::setThreshold, INFO );
+  //     break;
+  //   case 2:
+  //     logger.stderrHandle->call( &ColorStderrSink::setThreshold, DEBUG );
+  //     break;
+  // }
+
+  // CalOpts opts;
+  // opts.parseOpts( argc, argv );
+  //
+  //
+  //
+  //
+  // Cal cal( opts );
+
+
+  //exit( cal.run() );
 
   //
   // Size imageSize;

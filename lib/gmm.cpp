@@ -1,5 +1,5 @@
 
-
+#include <math.h>
 #include <gsl/gsl_cdf.h>
 
 #include "gmm.h"

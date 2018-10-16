@@ -10,27 +10,27 @@ using namespace cv;
 
 namespace CameraCalibration {
 
-InputQueue::InputQueue( const vector<fs::path> &files )
-  : _files( files ), _idx(-1)
-{;}
+  InputQueue::InputQueue( const vector<fs::path> &files )
+    : _files( files ), _idx(-1)
+  {;}
 
-cv::Mat InputQueue::nextFrame( void )
-{
-  // For now, only handles images.  Eventually will also handle video(s)
+  cv::Mat InputQueue::nextFrame( void )
+  {
+    // For now, only handles images.  Eventually will also handle video(s)
 
-  do {
-    ++_idx;
-    if( (unsigned int)_idx >= _files.size() ) return Mat();
-  } while( !fs::exists(_files[_idx]) );
+    do {
+      ++_idx;
+      if( (unsigned int)_idx >= _files.size() ) return Mat();
+    } while( !fs::exists(_files[_idx]) );
 
-  cout << "Reading " << _files[_idx].string() << endl;
+    cout << "Reading " << _files[_idx].string() << endl;
 
-  return cv::imread( _files[_idx].string() );
-}
+    return cv::imread( _files[_idx].string() );
+  }
 
-std::string InputQueue::frameName( void )
-{
-  return _files[_idx].stem().string();
-}
+  std::string InputQueue::frameName( void )
+  {
+    return _files[_idx].stem().string();
+  }
 
 }

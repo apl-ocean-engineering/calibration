@@ -3,13 +3,13 @@
 
 #include "calibrator.h"
 
-#include "distortion/distortion_model.h"
-#include "distortion/angular_polynomial.h"
-#include "distortion/radial_polynomial.h"
+#include "AplCam/distortion/distortion_model.h"
+#include "AplCam/distortion/angular_polynomial.h"
+#include "AplCam/distortion/radial_polynomial.h"
 using namespace Distortion;
 
-#include "calibration_serializer.h"
-#include "calibration_db.h"
+#include "AplCam/calibration_serializer.h"
+#include "AplCam/calibration_db.h"
 
 using namespace std;
 
@@ -97,13 +97,13 @@ void Calibrator::saveFile( const string &file ) {
 void Calibrator::updateDetectionPoses( DetectionSet &dets )
 {
   // Try to assure they're the same DetectionSets...
-  assert( dets.size() == _detSet.size() );
+  // assert( dets.size() == _detSet.size() );
+  //
+  // cout << "Writing estimate board poses back to database." << endl;
+  // for( size_t i = 0; i < dets.size(); ++i ) {
+  //   Detection &det( dets[i] );
+  //   det.rot = result.rvecs[i];
+  //   det.trans = result.tvecs[i];
+  // }
 
-  cout << "Writing estimate board poses back to database." << endl;
-  for( size_t i = 0; i < dets.size(); ++i ) {
-    Detection &det( dets[i] );
-    det.rot = result.rvecs[i];
-    det.trans = result.tvecs[i];
-
-  }
 }

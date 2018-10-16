@@ -7,16 +7,21 @@ if (NOT FIPS_IMPORT)
   fips_setup(PROJECT camera_calibration)
 endif()
 
+## Import local CMakeFiles
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+
 set( CUDA_USE_STATIC_CUDA_RUNTIME OFF )
 find_package( OpenCV REQUIRED core highgui imgproc )
 
-#find_package( PCL 1.2 REQUIRED )
+find_package( PCL REQUIRED )
 
 option( USE_TBB "Use TBB" ON )
 if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
+find_packagE( Eigen REQUIRED )
 find_package( Ceres REQUIRED )
 
 find_package( GSL REQUIRED )
@@ -55,7 +60,6 @@ set( TEST_DATA_DIR ${CMAKE_SOURCE_DIR}/test/data )
 #add_definitions( -DTEST_DATA_DIR="${TEST_DATA_DIR}" )
 
 ## Custom Makefile targets for testing cal
-
 set( TEST_CAL_DETECTION_DIR ${CMAKE_CURRENT_BINARY_DIR}/tmp/detections )
 set( TEST_CAL_ANNOTATIONS_DIR ${CMAKE_CURRENT_BINARY_DIR}/tmp/annotated )
 add_custom_target( cal_detection_dirs
@@ -74,7 +78,9 @@ add_custom_target( gdb_cal
                     gdb --args ${CAL_TEST_CMD}
                   DEPENDS cal cal_detection_dir )
 
-fips_include_directories( include/ )
+fips_include_directories( include/
+                          ${EIGEN_INCLUDE_DIRS}
+                          ${PCL_COMMON_INCLUDE_DIR} )
 
 fips_add_subdirectory( lib/ )
 

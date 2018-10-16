@@ -7,7 +7,7 @@
 #include <Eigen/Core>
 #include <Eigen/StdVector>
 
-#include "sonar_types.h"
+#include "AplCam/sonar_types.h"
 
 using Eigen::Vector2f;
 using Eigen::Vector3f;
@@ -35,15 +35,14 @@ class SonarCalibrationSolver {
     string name;
   };
 
-  typedef vector<SonarCalDatum,
-          Eigen::aligned_allocator< SonarCalDatum > > SonarCalData;
+  typedef vector<SonarCalDatum, Eigen::aligned_allocator< SonarCalDatum > > SonarCalData;
 
   struct Result {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     Result( void )
     {;}
-    
+
     Vector6d pose;
 
     void scale( float scale )
