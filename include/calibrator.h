@@ -32,8 +32,8 @@ class Calibrator {
 
     void run( void );
 
-    void saveDb( const string &dbFile, bool overwriteDb = false );
-    void saveDb( CalibrationDb &dbFile, bool overwriteDb = false );
+    // void saveDb( const string &dbFile, bool overwriteDb = false );
+    // void saveDb( CalibrationDb &dbFile, bool overwriteDb = false );
 
     void saveFile( const string &file );
 
@@ -75,13 +75,13 @@ struct CalibrateFunctor {
         cal.run();
 
         //  Want to measure failure rate, Save it regardless of whether it's good.
-        cal.saveDb( _db );
+        //cal.saveDb( _db );
 
         // If it's the "all" set, consider saving the board posees
         if( _opts.saveBoardPoses.length() > 0 && detSet.name().compare("all") == 0 ) {
-          DetectionDb savedPoses( _opts.saveBoardPoses, true );
-          cal.updateDetectionPoses( detSet );
-          savedPoses.save( detSet );
+          // DetectionDb savedPoses( _opts.saveBoardPoses, true );
+          // cal.updateDetectionPoses( detSet );
+          // savedPoses.save( detSet );
         }
       }
     }

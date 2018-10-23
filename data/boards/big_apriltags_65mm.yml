@@ -2,7 +2,7 @@
 type: apriltags_36h11
 width: 7
 height: 5
-squareSize: 38.1
+squareSize: 65
 ids: !!opencv-matrix
    rows: 5
    cols: 7

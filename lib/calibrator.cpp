@@ -55,26 +55,26 @@ void Calibrator::run( void )
 }
 
 
-void Calibrator::saveDb( CalibrationDb &db, bool overwriteDb ) {
-
-  CalibrationSerializer ser;
-
-  ser.setCamera( _distModel )
-    .setResult( &result )
-    .setBoard( _board );
-
-  if( db.has( _detSet.name() ) && !overwriteDb ) {
-    cerr << "Already have result in db with key " << _detSet.name() << endl;
-  } else {
-    db.save( _detSet.name(), ser );
-  }
-}
-
-void Calibrator::saveDb( const string &dbFile, bool overwriteDb ) {
-  cout << "Writing to calibration db " << dbFile << endl;
-  CalibrationDb db( dbFile );
-  saveDb( db, overwriteDb );
-}
+// void Calibrator::saveDb( CalibrationDb &db, bool overwriteDb ) {
+//
+//   CalibrationSerializer ser;
+//
+//   ser.setCamera( _distModel )
+//     .setResult( &result )
+//     .setBoard( _board );
+//
+//   if( db.has( _detSet.name() ) && !overwriteDb ) {
+//     cerr << "Already have result in db with key " << _detSet.name() << endl;
+//   } else {
+//     db.save( _detSet.name(), ser );
+//   }
+// }
+//
+// void Calibrator::saveDb( const string &dbFile, bool overwriteDb ) {
+//   cout << "Writing to calibration db " << dbFile << endl;
+//   CalibrationDb db( dbFile );
+//   saveDb( db, overwriteDb );
+// }
 
 
 
