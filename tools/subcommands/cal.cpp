@@ -1,4 +1,6 @@
 
+#include <fstream>
+
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 
@@ -11,6 +13,7 @@
 
 
 namespace calibration {
+  using namespace std;
   using namespace AplCam;
   using namespace Distortion;
 
@@ -72,7 +75,25 @@ namespace calibration {
     cv::Size imageSize( 1920,1080 );
     int flags = 0;
 
-    model->calibrate( objectPoints, imagePoints, imageSize, result, flags );
+    if( model->calibrate( objectPoints, imagePoints, imageSize, result, flags ) ) {
+
+      if( !result.good ) {
+        LOG(WARNING) << "Calibration did not converge, not saving";
+        return;
+      }
+
+      if( !_opts.outputPath.empty() ) {
+        json j;
+
+        j["result"] = result;
+        model->to_json( j["model"] );
+
+
+        ofstream out( _opts.outputPath );
+
+        out << std::setw(4) << j;
+      }
+    }
 
   }
 
