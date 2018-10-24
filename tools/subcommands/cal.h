@@ -16,35 +16,33 @@ namespace calibration {
 
   namespace fs = boost::filesystem;
 
-  struct ExtractOptions {
-    std::vector< std::string > inFiles;
-    std::string boardFile;
+  struct CalOptions {
     std::string databaseName;
-
-    std::string annotationDir;
+    std::string outputPath;
+    std::string distortionModel;
   };
 
 
-  class Extract {
+  class Cal {
   public:
 
     static CLI::App *SetupSubcommand( CLI::App &app );
-    static void Run( ExtractOptions const &opts );
+    static void Run( CalOptions const &opts );
 
-    Extract( ExtractOptions const &opts );
-    ~Extract();
+    Cal( CalOptions const &opts );
+    ~Cal();
 
     void run( void );
 
   private:
 
-    AplCam::Board *loadBoard( const std::string &board );
+    // AplCam::Board *loadBoard( const std::string &board );
+    //
+    // void processFrame( const cv::Mat &img, const std::string &tag );
 
-    void processFrame( const cv::Mat &img, const std::string &tag );
+    CalOptions const &_opts;
 
-    ExtractOptions const &_opts;
-
-    std::unique_ptr< AplCam::Board > _board;
+    // std::unique_ptr< AplCam::Board > _board;
     std::unique_ptr< AplCam::InMemoryDetectionDb > _db;
 
   };

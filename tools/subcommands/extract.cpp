@@ -12,22 +12,22 @@
 namespace calibration {
   using namespace AplCam;
 
-  void Extract::SetupSubcommand( CLI::App &app ) {
+  CLI::App *Extract::SetupSubcommand( CLI::App &app ) {
     // Create the option and subcommand objects.
     auto opt = std::make_shared<ExtractOptions>();
     auto sub = app.add_subcommand("extract", "extract fiducial marks");
 
-    sub->add_option("infiles", opt->inFiles, "Input files (movies or images)");
-    sub->add_option("-b,--board", opt->boardFile, "Name of calibration board");
+    sub->add_option("infiles", opt->inFiles, "Input files (movies or images)")->required();
+    sub->add_option("-b,--board", opt->boardFile, "Name of calibration board")->required();
     sub->add_option("-d,--database", opt->databaseName, "Name of database");
     sub->add_option("--annotate", opt->annotationDir, "Directory for annotated images");
 
     sub->set_callback([opt]() { Extract::Run(*opt); });
+
+    return sub;
   }
 
   void Extract::Run( ExtractOptions const &opts ) {
-
-
     Extract extract(opts);
     extract.run();
   }
@@ -65,7 +65,7 @@ namespace calibration {
       processFrame( img, queue.frameName() );
     }
 
-    _db->sync();
+    _db->save();
   }
 
 
