@@ -9,7 +9,7 @@ imports:
       git: https://github.com/amarburg/apriltags.git
       branch: fips
     aplcam:
-      git: https://github.com//amarburg/aplcam.git
+      git: https://github.com/amarburg/aplcam.git
       branch: fips
 
 exports:
