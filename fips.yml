@@ -10,7 +10,6 @@ imports:
       branch: fips
     aplcam:
       git: https://github.com/apl-ocean-engineering/aplcam.git
-      branch: fips
 
 exports:
    header-dirs:
