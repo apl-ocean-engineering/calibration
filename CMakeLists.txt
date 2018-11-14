@@ -10,7 +10,6 @@ endif()
 ## Import local CMakeFiles
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-
 set( CUDA_USE_STATIC_CUDA_RUNTIME OFF )
 find_package( OpenCV REQUIRED core highgui imgproc )
 
@@ -29,14 +28,14 @@ find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 set( Boost_USE_MULTITHREADED ON )
 
 # KyotoCabinet stuff
-find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
-  HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
-
-find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
-  HINTS ${PC_KyotoCabinet_LIBDIR} ${PC_KyotoCabinet_LIBRARY_DIRS})
-
-set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
-set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
+# find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
+#   HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
+#
+# find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
+#   HINTS ${PC_KyotoCabinet_LIBDIR} ${PC_KyotoCabinet_LIBRARY_DIRS})
+#
+# set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
+# set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
 
 add_definitions( -std=c++11 )
 
