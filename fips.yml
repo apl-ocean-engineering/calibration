@@ -1,4 +1,6 @@
 imports:
+    libactiveobject:
+      git: https://github.com/apl-ocean-engineering/libactiveobject.git
     fips-googletest:
       git: https://github.com/amarburg/fips-googletest.git
     libg3logger:
