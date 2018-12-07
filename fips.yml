@@ -1,22 +1,23 @@
 imports:
+    libactiveobject:
+      git: https://github.com/apl-ocean-engineering/libactiveobject.git
     fips-googletest:
       git: https://github.com/amarburg/fips-googletest.git
     libg3logger:
       git: https://github.com/apl-ocean-engineering/libg3logger.git
-    fips-CLI11:
-      git: https://github.com/amarburg/fips-CLI11.git
+    CLI11-fips:
+      git: https://github.com/apl-ocean-engineering/CLI11-fips.git
     apriltags:
       git: https://github.com/apl-ocean-engineering/apriltags.git
       branch: fips
     aplcam:
       git: https://github.com/apl-ocean-engineering/aplcam.git
-      branch: fips
 
 exports:
    header-dirs:
      - include/
    modules:
-     camera_calibration: .
+     calibration: .
 
 defines:
   FIPS_UNITTESTS_RUN_AFTER_BUILD: ON

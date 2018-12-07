@@ -20,7 +20,7 @@ fips_begin_app( cal cmdline )
   fips_files( cal.cpp ) #cal_impl.cpp ${CALIBRATION_SRCS} )
   fips_src( subcommands/ )
 
-  fips_deps( camera_calibration g3logger )
+  fips_deps( camera_calibration g3logger activeobject )
 fips_end_app()
 
 # add_executable( extract extract.cpp )

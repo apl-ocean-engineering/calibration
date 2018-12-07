@@ -1,5 +1,5 @@
 if (NOT FIPS_IMPORT)
-  cmake_minimum_required(VERSION 3.5.0)
+  cmake_minimum_required(VERSION 3.9)
 
   get_filename_component(FIPS_ROOT_DIR "../fips" ABSOLUTE)
   include("${FIPS_ROOT_DIR}/cmake/fips.cmake")
@@ -9,7 +9,6 @@ endif()
 
 ## Import local CMakeFiles
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-
 
 set( CUDA_USE_STATIC_CUDA_RUNTIME OFF )
 find_package( OpenCV REQUIRED core highgui imgproc )
@@ -21,7 +20,25 @@ if( USE_TBB )
   add_definitions( -DUSE_TBB -DTBB_USE_DEBUG )
 endif()
 
-find_packagE( Eigen REQUIRED )
+## Configurable options
+option( USE_OPENMP "Use OpenMP" ON )
+if( USE_OPENMP )
+
+  if(APPLE)
+    ## These are the required "hints" for libomp installed from Homebrew
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY /usr/local/opt/libomp/lib/libomp.dylib)
+  endif()
+
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    add_definitions( -DUSE_OPENMP )
+    message( STATUS "Found OpenMP, enabling" )
+  endif()
+endif()
+
+find_package( Eigen REQUIRED )
 find_package( Ceres REQUIRED )
 
 find_package( GSL REQUIRED )
@@ -29,14 +46,14 @@ find_package( Boost REQUIRED COMPONENTS thread system filesystem )
 set( Boost_USE_MULTITHREADED ON )
 
 # KyotoCabinet stuff
-find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
-  HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
-
-find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
-  HINTS ${PC_KyotoCabinet_LIBDIR} ${PC_KyotoCabinet_LIBRARY_DIRS})
-
-set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
-set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
+# find_path(KyotoCabinet_INCLUDE_DIR kcdb.h
+#   HINTS ${PC_KyotoCabinet_INCLUDEDIR} ${PC_KyotoCabinet_INCLUDE_DIRS})
+#
+# find_library(KyotoCabinet_LIBRARY NAMES libkyotocabinet kyotocabinet
+#   HINTS ${PC_KyotoCabinet_LIBDIR} ${PC_KyotoCabinet_LIBRARY_DIRS})
+#
+# set(KyotoCabinet_LIBRARIES ${KyotoCabinet_LIBRARY})
+# set(KyotoCabinet_INCLUDE_DIRS ${KyotoCabinet_INCLUDE_DIR})
 
 add_definitions( -std=c++11 )
 
