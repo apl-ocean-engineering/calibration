@@ -43,7 +43,7 @@ namespace calibration {
     CalOptions const &_opts;
 
     // std::unique_ptr< AplCam::Board > _board;
-    std::unique_ptr< AplCam::InMemoryDetectionDb > _db;
+    std::unique_ptr< AplCam::JsonDetectionDb > _db;
 
   };
 

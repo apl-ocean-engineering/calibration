@@ -26,7 +26,7 @@ namespace calibration {
     sub->add_option("-o,--output", opt->outputPath, "Name of JSON file for calibration");
     sub->add_option("-m,--model", opt->distortionModel, "Name of distortion model")->required()->check( DistortionModel::ValidateModelName );
 
-    sub->set_callback([opt]() { Cal::Run(*opt); });
+    sub->callback([opt]() { Cal::Run(*opt); });
 
     return sub;
   }
@@ -40,7 +40,7 @@ namespace calibration {
 
   Cal::Cal( CalOptions const &opts )
     : _opts(opts),
-      _db( new InMemoryDetectionDb( _opts.databaseName ) )
+      _db( new JsonDetectionDb( _opts.databaseName ) )
     {
       CHECK( _db != nullptr ) << "Unable to open database \"" << opts.databaseName << "\"";
     }
@@ -51,10 +51,13 @@ namespace calibration {
     }
 
   void Cal::run() {
-    LOG(WARNING) << "In Cal::run";
 
     std::shared_ptr<DistortionModel> model( DistortionModel::MakeDistortionModel( _opts.distortionModel ) );
     CHECK( (bool)model ) << "Unable to create distortion model " << _opts.distortionModel;
+
+    cv::Size imgSize;
+    if( _db->imageSize( imgSize ) )    model->imageSizeHint( imgSize );
+
 
     ImagePointsVecVec imagePoints;
     ObjectPointsVecVec objectPoints;

@@ -24,7 +24,7 @@ namespace calibration {
 
     sub->add_option("-j,--jobs", opt->parallelism, "Number of threads (specify 0 for number of cores)");
 
-    sub->set_callback([opt]() { Extract::Run(*opt); });
+    sub->callback([opt]() { Extract::Run(*opt); });
 
     return sub;
   }
@@ -41,7 +41,7 @@ namespace calibration {
   Extract::Extract( const ExtractOptions &opts )
     : _opts(opts),
       _board( loadBoard( opts.boardFile ) ),
-      _db( new InMemoryDetectionDb( opts.databaseName ) )
+      _db( new JsonDetectionDb( opts.databaseName ) )
   {
     CHECK( _board != nullptr ) << "Unable to load board from " << opts.boardFile;
     CHECK( _db != nullptr ) << "Unable to open database \"" << opts.databaseName << "\"";
@@ -63,11 +63,17 @@ namespace calibration {
     LOG(DEBUG) << "In Extract::run";
 
     camera_calibration::InputQueue queue( _opts.inFiles );
+    int imgWidth = 0, imgHeight = 0;
 
     cv::Mat img;
 
     if( _opts.parallelism == 1 ) {
       while( queue.nextFrame(img) ) {
+        if( imgWidth == 0 ) {
+          imgWidth = img.size().width;
+          imgHeight = img.size().height;
+        }
+
         LOG(WARNING) << "Loading " << queue.frameName();
         if( img.empty() ) {
           LOG(WARNING) << "Read empty mat";
@@ -90,6 +96,11 @@ namespace calibration {
       const size_t prequeue = 2 * parallelism;
       size_t pq = 0;
       while( queue.nextFrame(img) && pq < prequeue ) {
+        if( imgWidth == 0 ) {
+          imgWidth = img.size().width;
+          imgHeight = img.size().height;
+        }
+
         _workqueue.push( QueueWork( img, queue.frameName() ) );
         ++pq;
       }
@@ -98,7 +109,7 @@ namespace calibration {
       std::vector< std::thread > threads(parallelism);
       _threadDone = false;
 
-      LOG(INFO) << "Spwaning " << parallelism << " extraction threads";
+      LOG(INFO) << "Spawning " << parallelism << " extraction threads";
       //std::fill( threads.begin(), threads.end(), std::thread( std::bind( &Extract::processFramesInQueue, this ) ) );
       for( size_t i = 0; i < threads.size(); ++i ) {
         threads[i] = std::thread( std::bind( &Extract::processFramesInQueue, this ) );
@@ -123,6 +134,9 @@ namespace calibration {
 
 
     }
+
+    // Set db meta
+    _db->setMeta( cv::Size(imgWidth, imgHeight) );
 
     if( !_db->filename().empty() ) _db->save();
   }

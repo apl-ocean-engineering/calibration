@@ -54,7 +54,7 @@ namespace calibration {
     const ExtractOptions &_opts;
 
     std::shared_ptr< AplCam::Board > _board;
-    std::shared_ptr< AplCam::InMemoryDetectionDb > _db;
+    std::shared_ptr< AplCam::JsonDetectionDb > _db;
 
 
     //== Member variables for handling parallel processing ==
