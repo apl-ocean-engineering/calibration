@@ -26,6 +26,10 @@ namespace calibration {
     sub->add_option("-o,--output", opt->outputPath, "Name of JSON file for calibration");
     sub->add_option("-m,--model", opt->distortionModel, "Name of distortion model")->required()->check( DistortionModel::ValidateModelName );
 
+    sub->add_option("-f,--focal-length", opt->focalLengthHint, "Focal length hint");
+
+    sub->add_flag("--huber", opt->huberLoss, "Use Huber robust loss function");
+
     sub->callback([opt]() { Cal::Run(*opt); });
 
     return sub;
@@ -55,6 +59,11 @@ namespace calibration {
     std::shared_ptr<DistortionModel> model( DistortionModel::MakeDistortionModel( _opts.distortionModel ) );
     CHECK( (bool)model ) << "Unable to create distortion model " << _opts.distortionModel;
 
+    if( _opts.focalLengthHint > 0 ) {
+      LOG(INFO) << "Supplying focal length hint of " << _opts.focalLengthHint;
+      model->focalLengthHint( _opts.focalLengthHint );
+    }
+
     cv::Size imgSize;
     if( _db->imageSize( imgSize ) )    model->imageSizeHint( imgSize );
 
@@ -77,6 +86,8 @@ namespace calibration {
     // Need to get this from database meta
     cv::Size imageSize( 1920,1080 );
     int flags = 0;
+
+    if( _opts.huberLoss ) flags |= CALIB_HUBER_LOSS;
 
     if( model->calibrate( objectPoints, imagePoints, imageSize, result, flags ) ) {
 

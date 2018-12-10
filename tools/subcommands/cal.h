@@ -17,9 +17,16 @@ namespace calibration {
   namespace fs = boost::filesystem;
 
   struct CalOptions {
+    CalOptions()
+      : focalLengthHint( -1.0 ) {;}
+
     std::string databaseName;
     std::string outputPath;
     std::string distortionModel;
+
+    float focalLengthHint;
+
+    bool huberLoss;
   };
 
 
